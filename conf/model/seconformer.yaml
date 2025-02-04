@@ -1,0 +1,20 @@
+model_name: seconformer
+input_type: tm
+
+param:
+  chin: 1
+  chout: 1
+  hidden: 64
+  depth: 4
+  conformer_dim: 512
+  conformer_ffn_dim: 64
+  conformer_num_attention_heads: 4
+  conformer_depth: 4
+  depthwise_conv_kernel_size: 15
+  kernel_size: 8
+  stride: 4
+  resample: 4
+  growth: 2
+  dropout: 0.1
+  rescale: 0.1
+  normalize: true

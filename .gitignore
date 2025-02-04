@@ -1,0 +1,8 @@
+dataset
+outputs
+transcripts
+checkpoint
+conf/api/
+
+*pycache*
+*.pyc
