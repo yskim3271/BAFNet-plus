@@ -84,7 +84,7 @@ ddp:
 
 checkpoint: true
 checkpoint_file: checkpoint.th
-continue_from: /home/user114/yunsik/mmtmse/outputs/dccrn_200ep
+continue_from: /home/user114/yunsik/mmtmse/checkpoint/dccrn
 samples_dir: samples
 log_dir: tensorbd
 

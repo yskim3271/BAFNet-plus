@@ -53,7 +53,7 @@ batch_size_valid: 1
 epochs: 200
 
 # Evaluation only
-eval_only: 
+eval_only: true
 eval_every: 200  # compute test metrics every so epochs
 eval_stt: true
 
@@ -85,7 +85,7 @@ ddp:
 
 checkpoint: true
 checkpoint_file: checkpoint.th
-continue_from: /home/user114/yunsik/mmtmse/outputs/2025-02-05_07-25-03
+continue_from: /home/user114/yunsik/mmtmse/checkpoint/bafnet
 samples_dir: samples
 log_dir: tensorbd
 

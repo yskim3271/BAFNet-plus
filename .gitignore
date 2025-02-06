@@ -3,6 +3,7 @@ outputs
 transcripts
 checkpoint
 conf/api/
+run.sh
 
 *pycache*
 *.pyc
