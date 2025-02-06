@@ -7,28 +7,22 @@ import torchaudio
 from matplotlib import pyplot as plt
 from utils import LogProgress, mel_spectrogram
 
-
-def save_wavs(noisy_y, clean_y, clean_y_hat, fileidx, out_dir, epoch, sampling_rate=16000):
-    filename = os.path.join(out_dir, fileidx + f"_epoch{epoch+1}")
-    write(noisy_y, filename + "_noisy.wav", sr=sampling_rate)
-    write(clean_y, filename + "_clean.wav", sr=sampling_rate)
-    write(clean_y_hat, filename + "_clean_hat.wav", sr=sampling_rate)
-
-def save_mels(noisy_y_mel, clean_y_mel, clean_y_hat_mel, fileidx, out_dir, epoch):
-    filename = os.path.join(out_dir, fileidx + f"_epoch{epoch}")
-    figure, axes = plt.subplots(3, 1, figsize=(10, 10))
+def save_wavs(wavs_dict, filepath, sr=16_000):
+    for i, (key, wav) in enumerate(wavs_dict.items()):
+        torchaudio.save(filepath + f"_{key}.wav", wav, sr)
+        
+def save_mels(wavs_dict, filepath):
+    num_mels = len(wavs_dict)
+    figure, axes = plt.subplots(num_mels, 1, figsize=(10, 10))
     figure.set_tight_layout(True)
-    figure.suptitle(fileidx)
+    figure.suptitle(filepath)
     
-    axes[0].imshow(noisy_y_mel.squeeze().numpy(), aspect='auto', origin='lower')
-    axes[1].imshow(clean_y_mel.squeeze().numpy(), aspect='auto', origin='lower')
-    axes[2].imshow(clean_y_hat_mel.squeeze().numpy(), aspect='auto', origin='lower')
+    for i, (key, wav) in enumerate(wavs_dict.items()):
+        mel = mel_spectrogram(wav, device='cpu', sampling_rate=16_000)
+        axes[i].imshow(mel.squeeze().numpy(), aspect='auto', origin='lower')
+        axes[i].set_title(key)
     
-    axes[0].set_title('noisy')
-    axes[1].set_title('clean')
-    axes[2].set_title('clean_hat')
-
-    figure.savefig(filename + "_mel.png")
+    figure.savefig(filepath)
     plt.close(figure)
 
 def write(wav, filename, sr=16_000):
@@ -37,42 +31,50 @@ def write(wav, filename, sr=16_000):
     torchaudio.save(filename, wav.cpu(), sr)
 
 
-def enhance(args, model, data_loader, epoch, logger, local_out_dir= None):
+def enhance(args, model, data_loader_list, epoch, logger, local_out_dir= None):
     model.eval()
+    
     if local_out_dir:
         out_dir = local_out_dir
     else:
         out_dir = args.out_dir
+    
+    for snr, data_loader in data_loader_list.items():
+        iterator = LogProgress(logger, data_loader, name=f"Enhance on {snr}dB")
+        outdir_mels= os.path.join(out_dir, f"mels_epoch{epoch+1}_{snr}dB")
+        outdir_wavs= os.path.join(out_dir, f"wavs_epoch{epoch+1}_{snr}dB")
+        os.makedirs(outdir_mels, exist_ok=True)
+        os.makedirs(outdir_wavs, exist_ok=True)
         
-    outdir_mels= os.path.join(out_dir, f"mels_epoch{epoch+1}")
-    outdir_wavs= os.path.join(out_dir, f"wavs_epoch{epoch+1}")
-    os.makedirs(outdir_mels, exist_ok=True)
-    os.makedirs(outdir_wavs, exist_ok=True)
-
-    with torch.no_grad():
-        iterator = LogProgress(logger, data_loader, name="Generate enhanced files")
-        for data in iterator:
-            # Get batch data (batch, channel, time)
-            x, noisy_y, clean_y, _, fileidx = data
-                        
-            fileidx = fileidx[0]
-            x = x.to(args.device)
-            noisy_y = noisy_y.to(args.device)
-            clean_y = clean_y.to(args.device)
-
-            clean_y_hat = model(x, noisy_y)
-            
-            noisy_y = noisy_y.squeeze(1).cpu()
-            clean_y = clean_y.squeeze(1).cpu()
-            clean_y_hat = clean_y_hat.squeeze(1).cpu()
-                        
-            noisy_y_mel = mel_spectrogram(noisy_y, device='cpu', sampling_rate=args.sampling_rate)
-            clean_y_mel = mel_spectrogram(clean_y, device='cpu', sampling_rate=args.sampling_rate)
-            clean_y_hat_mel = mel_spectrogram(clean_y_hat, device='cpu', sampling_rate=args.sampling_rate)
-
-            save_wavs(noisy_y, clean_y, clean_y_hat, fileidx, outdir_wavs, epoch, sampling_rate=args.sampling_rate)
-            save_mels(noisy_y_mel, clean_y_mel, clean_y_hat_mel, fileidx, outdir_mels, epoch)
-            
+        with torch.no_grad():
+            iterator = LogProgress(logger, data_loader, name="Generate enhanced files")
+            for data in iterator:
+                # Get batch data (batch, channel, time)
+                tm, noisy_am, clean_am, id, text = data
+                            
+                if args.model.input_type == "am":
+                    clean_am_hat = model(noisy_am.to(args.device))
+                elif args.model.input_type == "tm":
+                    clean_am_hat = model(tm.to(args.device))
+                elif args.model.input_type == "am+tm":
+                    clean_am_hat = model(tm.to(args.device), noisy_am.to(args.device))
+                else:
+                    raise ValueError("Invalid model input type argument")
+                
+                tm = tm.squeeze().cpu()
+                clean_am = clean_am.squeeze().cpu()
+                noisy_am = noisy_am.squeeze().cpu()
+                clean_am_hat = clean_am_hat.squeeze().cpu()
+                            
+                wavs_dict = {
+                    "tm": tm,
+                    "noisy_am": noisy_am,
+                    "clean_am": clean_am,
+                    "clean_am_hat": clean_am_hat,
+                }
+                
+                save_wavs(wavs_dict, os.path.join(outdir_wavs, id))
+                save_mels(wavs_dict, os.path.join(outdir_mels, id))
             
             
             

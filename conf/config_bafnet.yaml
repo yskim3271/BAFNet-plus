@@ -1,7 +1,6 @@
 defaults:
   - _self_
-  - model: tamenet
-  - api: clova_api
+  - model: bafnet
   - override hydra/job_logging: colorlog
   - override hydra/hydra_logging: colorlog
 
@@ -41,12 +40,13 @@ valid_noise:
 
 # noise augmentation for test
 test_noise:
-  snr_range: [-15, 10]
+  snr_step: [-20, -10, 0, 10, 15]
   reverb_proportion: 0.5
   target_dB_FS: -25
   target_dB_FS_floating_value: 0
   silence_length: 0.2
   deterministic: true
+
 
 batch_size: 32
 batch_size_valid: 1
@@ -85,7 +85,7 @@ ddp:
 
 checkpoint: true
 checkpoint_file: checkpoint.th
-continue_from:
+continue_from: /home/user114/yunsik/mmtmse/outputs/2025-02-05_07-25-03
 samples_dir: samples
 log_dir: tensorbd
 

@@ -58,7 +58,8 @@ def run(rank, world_size, args):
     logger = setup_logger("train", rank)
 
     # Set up distributed training environment
-    setup_distributed(rank, world_size, args)
+    if world_size > 1:
+        setup_distributed(rank, world_size, args)
     
     if rank == 0:
         logger.info(f"Training with {world_size} GPUs")
@@ -88,7 +89,8 @@ def run(rank, world_size, args):
     # Load dataset
     if rank == 0:
         taps_dataset = load_dataset("yskim3271/Throat_and_Acoustic_Pairing_Speech_Dataset")
-    dist.barrier()
+    if world_size > 1:
+        dist.barrier()
     if rank != 0:
         taps_dataset = load_dataset("yskim3271/Throat_and_Acoustic_Pairing_Speech_Dataset")
     
@@ -155,41 +157,48 @@ def run(rank, world_size, args):
         pin_memory=True
     )
     
-    ev_dataset = TAPSnoisytdataset(
-        datapair_list= testset,
-        noise_list= noise_test_list,
-        rir_list= rir_test_list,
-        snr_range=args.test_noise.snr_range,
-        reverb_proportion=args.test_noise.reverb_proportion,
-        target_dB_FS=args.test_noise.target_dB_FS,
-        target_dB_FS_floating_value=args.test_noise.target_dB_FS_floating_value,
-        silence_length=args.test_noise.silence_length,
-        deterministic=args.test_noise.deterministic,
-        sampling_rate=args.sampling_rate,
-        with_id=True,
-        with_text=True
-    )
+    ev_loader_list = {}
+    tt_loader_list = {}
     
-    ev_loader = DataLoader(
-        dataset=ev_dataset, 
-        batch_size=1,
-        num_workers=args.num_workers,
-        pin_memory=True
-    )
+    for fixed_snr in args.test_noise.snr_step:
+        ev_dataset = TAPSnoisytdataset(
+            datapair_list= testset,
+            noise_list= noise_test_list,
+            rir_list= rir_test_list,
+            snr_range= [fixed_snr, fixed_snr],
+            reverb_proportion=args.test_noise.reverb_proportion,
+            target_dB_FS=args.test_noise.target_dB_FS,
+            target_dB_FS_floating_value=args.test_noise.target_dB_FS_floating_value,
+            silence_length=args.test_noise.silence_length,
+            deterministic=args.test_noise.deterministic,
+            sampling_rate=args.sampling_rate,
+            with_id=True,
+            with_text=True
+        )
     
-    tt_loader = DataLoader(
-        dataset=ev_dataset, 
-        batch_size=1,
-        sampler=StepSampler(len(ev_dataset), 100),
-        num_workers=args.num_workers,
-        pin_memory=True
-    )
+        ev_loader = DataLoader(
+            dataset=ev_dataset, 
+            batch_size=1,
+            num_workers=args.num_workers,
+            pin_memory=True
+        )
+    
+        tt_loader = DataLoader(
+            dataset=ev_dataset, 
+            batch_size=1,
+            sampler=StepSampler(len(ev_dataset), 100),
+            num_workers=args.num_workers,
+            pin_memory=True
+        )
+        
+        ev_loader_list[f"{fixed_snr}"] = ev_loader
+        tt_loader_list[f"{fixed_snr}"] = tt_loader
     
     dataloader = {
         "tr_loader": tr_loader,
         "va_loader": va_loader,
-        "ev_loader": ev_loader,
-        "tt_loader": tt_loader,
+        "ev_loader_list": ev_loader_list,
+        "tt_loader_list": tt_loader_list,
         "tr_sampler": tr_sampler,
     }
     

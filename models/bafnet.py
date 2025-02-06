@@ -4,7 +4,7 @@ from models.module_dccrn import ConvSTFT, ConviSTFT, normal_energy
 from models.seconformer import seconformer
 from models.dccrn import dccrn
 
-class tamenet(torch.nn.Module):
+class bafnet(torch.nn.Module):
     def __init__(self, 
                  depth, 
                  channels, 
@@ -14,13 +14,13 @@ class tamenet(torch.nn.Module):
                  checkpoint_seconformer=None,
                  checkpoint_dccrn=None,
                  ):
-        super(tamenet, self).__init__()
+        super(bafnet, self).__init__()
         
         self.depth = depth
         self.channels = channels
         self.kernel_size = kernel_size
         self.padding = kernel_size // 2
-        
+                
         self.seconformer = seconformer(
             **args_seconformer
         )
@@ -28,11 +28,11 @@ class tamenet(torch.nn.Module):
             **args_dccrn
         )
         
-        if checkpoint_seconformer is not None:
-            self.dccrn.load_state_dict(torch.load(checkpoint_seconformer)['model'])
-        
         if checkpoint_dccrn is not None:
-            self.seconformer.load_state_dict(torch.load(checkpoint_dccrn)['model'])            
+            self.dccrn.load_state_dict(torch.load(checkpoint_dccrn)['model'])
+        
+        if checkpoint_seconformer is not None:
+            self.seconformer.load_state_dict(torch.load(checkpoint_seconformer)['model'])            
         
         self.stft = ConvSTFT(
             args_dccrn.win_len,

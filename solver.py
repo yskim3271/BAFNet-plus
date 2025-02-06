@@ -29,8 +29,8 @@ class Solver(object):
         # Dataloaders and samplers
         self.tr_loader = data['tr_loader']      # Training DataLoader
         self.va_loader = data['va_loader']      # Validation DataLoader
-        self.tt_loader = data['tt_loader']      # Test DataLoader for checking result samples
-        self.ev_loader = data['ev_loader']      # Evaluation DataLoader
+        self.tt_loader_list = data['tt_loader_list']      # Test DataLoader for checking result samples
+        self.ev_loader_list = data['ev_loader_list']      # Evaluation DataLoader
         self.tr_sampler = data['tr_sampler']    # Distributed sampler for training
         
         self.model = model
@@ -106,6 +106,8 @@ class Solver(object):
         if self.continue_from is not None:
             if self.rank == 0:
                 self.logger.info(f'Loading checkpoint model: {self.continue_from}')
+                if not os.path.exists(self.continue_from):
+                    raise FileNotFoundError(f"Checkpoint directory {self.continue_from} not found.")
                 
                 # Attempt to copy the 'tensorbd' directory (TensorBoard logs) if it exists
                 src_tb_dir = os.path.join(self.continue_from, 'tensorbd')
@@ -127,6 +129,9 @@ class Solver(object):
             # Rank 0 loads the checkpoint file from disk
             if self.rank == 0:
                 ckpt_path = os.path.join(self.continue_from, 'checkpoint.th')
+                if not os.path.exists(ckpt_path):
+                    raise FileNotFoundError(f"Checkpoint file {ckpt_path} not found.")
+                self.logger.info(f"Loading checkpoint from {ckpt_path}")
                 package = torch.load(ckpt_path, map_location='cpu')
 
             if self.is_distributed:
@@ -155,7 +160,9 @@ class Solver(object):
             # Now attempt to load the best checkpoint if it exists
             best_path = os.path.join(self.continue_from, 'best.th')
             if os.path.exists(best_path):
+                self.logger.info(f"Loading best model from {best_path}")
                 self.best_state = torch.load(best_path, 'cpu')
+                
             else:
                 # If best.th does not exist, create a fallback best_state from the current model
                 self.best_state = {
@@ -174,9 +181,22 @@ class Solver(object):
 
     def train(self):
         """Main training loop, including optional evaluation phases."""
-        # If eval_only is True, and we have a test loader (tt_loader), do evaluation only
-        if self.eval_only and self.tt_loader and self.rank == 0: 
-            metric = evaluate(self.args, self.model, self.tt_loader)
+        if self.eval_only:
+            if self.rank == 0:
+                if self.best_state is None:
+                    self.logger.info("No best model found in checkpoint. Use latest model for evaluation...")
+                    if self.is_distributed:
+                        self.model.module.load_state_dict(self.model.module.state_dict())
+                    else:
+                        self.model.load_state_dict(self.model.state_dict())
+                else:
+                    self.logger.info("Use best model for evaluation...")
+                    if self.is_distributed:
+                        self.model.module.load_state_dict(self.best_state['model'])
+                    else:
+                        self.model.load_state_dict(self.best_state['model'])
+                evaluate(self.args, self.model, self.ev_loader_list, 0, self.logger)            
+            
             return
 
         # If there's a history from the checkpoint, replay metrics
@@ -212,22 +232,20 @@ class Solver(object):
                          f'Time {time.time() - start:.2f}s | Train Loss {train_loss:.5f}'))
             
             # Optionally run validation if va_loader is present
-            if self.va_loader:
-                self.model.eval()
-                
-                if self.rank == 0:
-                    self.logger.info('-' * 70)
-                    self.logger.info('Validation...')
-                
-                with torch.no_grad():
-                    valid_loss = self._run_one_epoch(epoch, valid=True)
-                
-                if self.rank == 0:
-                    self.logger.info(
-                        bold(f'Valid Summary | End of Epoch {epoch + 1} | '
-                            f'Time {time.time() - start:.2f}s | Valid Loss {valid_loss:.5f}'))
-            else:
-                valid_loss = 0
+            self.model.eval()
+            
+            if self.rank == 0:
+                self.logger.info('-' * 70)
+                self.logger.info('Validation...')
+            
+            with torch.no_grad():
+                valid_loss = self._run_one_epoch(epoch, valid=True)
+            
+            if self.rank == 0:
+                self.logger.info(
+                    bold(f'Valid Summary | End of Epoch {epoch + 1} | '
+                        f'Time {time.time() - start:.2f}s | Valid Loss {valid_loss:.5f}'))
+
             
             # If distributed, we can synchronize here so that next epoch starts together
             if self.is_distributed:
@@ -245,13 +263,13 @@ class Solver(object):
 
                 # Evaluate on ev_loader (test set) every eval_every epochs (or last epoch)
                 if self.eval_every is not None:
-                    if ((epoch + 1) % self.eval_every == 0 or epoch == self.epochs - 1) and self.ev_loader:
+                    if ((epoch + 1) % self.eval_every == 0 or epoch == self.epochs - 1):
                         self.logger.info('-' * 70)
                         self.logger.info('Evaluating on the test set...')
                         
                         # Temporarily swap model weights with best_state for evaluation
                         with swap_state(self.model.module if self.is_distributed else self.model, self.best_state['model']):
-                            metric = evaluate(self.args, self.model, self.ev_loader, epoch, self.logger)
+                            metric = evaluate(self.args, self.model, self.ev_loader_list, epoch, self.logger)
                             metrics.update(metric)
                             
                             # Log test metrics to TensorBoard
@@ -259,7 +277,7 @@ class Solver(object):
                                 self.writer.add_scalar(f"Test/{k.capitalize()}", v, epoch)
 
                             self.logger.info('Enhance and save samples...')
-                            enhance(self.args, self.model, self.tt_loader, epoch, self.logger, self.samples_dir)
+                            enhance(self.args, self.model, self.tt_loader_list, epoch, self.logger, self.samples_dir)
                 
                 # Append metrics to history and print summary
                 self.history.append(metrics)
@@ -366,13 +384,6 @@ class Solver(object):
                         else:
                             logprog.append(**{key.capitalize(): format(value, "4.5f")})
                     self.writer.add_scalar("valid/Loss", loss_all.item(), epoch * len(data_loader) + i)
-
-                    # Optionally log audio every 100 items
-                    if self.eval_every:
-                        if i % 100 == 0 and epoch % self.eval_every == 0:
-                            if epoch == 0:
-                                self.writer.add_audio('gt/y_{}'.format(i), am[0], epoch, self.args.sampling_rate)
-                            self.writer.add_audio('enhanced/y_hat_{}'.format(i), clean_am_hat[0], epoch, self.args.sampling_rate)
         
         # Return the average loss over the entire epoch
         return total_loss / len(data_loader)

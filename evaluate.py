@@ -4,61 +4,40 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 # author: yunsik
-import io
-import os
-import logging
 import torch
-import requests
 import nlptutti as sarmetric
 import numpy as np
-
-from scipy.io.wavfile import write
-from concurrent.futures import ThreadPoolExecutor
 from pesq import pesq
 from pystoi import stoi
 from metric_helper import wss, llr, SSNR, trim_mos
 from utils import bold, LogProgress
+from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor
 
-def _numpy_to_wavobject(ndarr, sample_rate=16000):
-    bytes_wav = bytes()
-    byte_io = io.BytesIO(bytes_wav)
-    assert ndarr.ndim == 1
-    ndarr = ndarr / max(ndarr.max(), 1)
-    ndarr = ndarr * 32767
-    ndarr = ndarr.astype('int16')
+def get_stts(args, logger, enhanced):
+
+    processor = Wav2Vec2Processor.from_pretrained("kresnik/wav2vec2-large-xlsr-korean")
+    model = Wav2Vec2ForCTC.from_pretrained("kresnik/wav2vec2-large-xlsr-korean").to(args.device)
     
-    write(byte_io, sample_rate, ndarr)
-    result_bytes = byte_io.read()
-    return result_bytes
+    cer, wer = 0, 0
+    iterator = LogProgress(logger, enhanced, name="STT Evaluation")
+    for wav, text in iterator:
+        inputs = processor(wav.squeeze(), sampling_rate=16000, return_tensors="pt", padding="longest")
+        input_values = inputs.input_values.to("cuda")
+        
+        with torch.no_grad():
+            logits = model(input_values).logits
+        
+        predicted_ids = torch.argmax(logits, dim=-1)
+        transcription = processor.batch_decode(predicted_ids)[0]
+        cer += sarmetric.get_cer(text, transcription, rm_punctuation=True)['cer']
+        wer += sarmetric.get_wer(text, transcription, rm_punctuation=True)['wer']
+    
+    cer /= len(enhanced)
+    wer /= len(enhanced)
+    
+    return cer, wer
 
-def request_transcript(data, url, headers):
-    response = requests.post(url,  data=data, headers=headers)
-    rescode = response.status_code
-    if(rescode == 200):
-        # clova stt api returns json format, so we need to remove the first 9 characters and the last 2 characters
-        return response.text[9:-2]     
-    else:
-        logging.error("Error : " + response.text)
-        return None
-
-def parse_transcripts(filepath):
-    with open(filepath, "r") as f:
-        lines = f.read().splitlines()
-    return {l.split('|')[0]: l.split('|')[1] for l in lines}
-
-def get_stts(args, data):
-    transcripts = {}
-    with ThreadPoolExecutor(max_workers=30) as executor:
-        futures = {}
-        for filename, d in data.items():
-            d = _numpy_to_wavobject(d)
-            future = executor.submit(request_transcript, d, args.url, args.headers)
-            futures[filename] = future
-        for filename, future in futures.items():
-            transcript = future.result()
-            transcripts[filename] = transcript
-    return transcripts
-
+    
 ## Code modified from https://github.com/wooseok-shin/MetricGAN-plus-pytorch/tree/main
 def compute_metrics(target_wav, pred_wav, fs=16000):
     
@@ -98,61 +77,55 @@ def compute_metrics(target_wav, pred_wav, fs=16000):
 
 
 
-def evaluate(args, model, data_loader, epoch, logger, local_out_dir=None):
+def evaluate(args, model, data_loader_list, epoch, logger):
         
     metrics = {}
-    enhanced = {}
     model.eval()
-    result = []
-    with torch.no_grad():
-        iterator = LogProgress(logger, data_loader, name="Evaluate enhanced files")
-        for i, data in enumerate(iterator):
-            # Get batch data
-            x, noisy_y, clean_y, _, fileidx = data
-            x = x.to(args.device)
-            noisy_y = noisy_y.to(args.device)
-            
-            clean_y_hat = model(x, noisy_y)
-            clean_y_hat = clean_y_hat.unsqueeze(1)
-                        
-            clean_y, clean_y_hat = clean_y.squeeze().cpu().numpy(), clean_y_hat.squeeze().cpu().numpy()
-            
-            enhanced[fileidx[0]] = clean_y_hat
-            result.append(compute_metrics(clean_y, clean_y_hat))
-            
-    results = np.array(result)
-    pesq, stoi, csig, cbak, covl = np.mean(results, axis=0)
-    metrics = {'pesq': pesq, 'stoi': stoi, 'csig': csig, 'cbak': cbak, 'covl': covl}
-    
-    logger.info(bold(f'Test set performance:PESQ={pesq:.4f}, STOI={stoi:.4f}, CSIG={csig:.4f}, CBAK={cbak:.4f}, COVL={covl:.4f}'))
-    
-    if local_out_dir:
-        out_dir = local_out_dir
-        os.makedirs(out_dir, exist_ok=True)
-    
-    if args.eval_stt:
-        cer = 0
-        wer = 0
-        transcripts_ref = parse_transcripts(args.transcripts)
-        transcripts_gen = get_stts(args, enhanced)
-        if local_out_dir:
-            transcripts_file = os.path.join(out_dir, f'transcripts_{epoch}.txt')
-        else:
-            transcripts_file = f'transcripts_{epoch}.txt'
-        with open(transcripts_file, 'w') as f:
-            for fileidx, transcript in transcripts_gen.items():
-                f.write(f'{fileidx}|{transcript}\n')
-        for fileidx, transcript in transcripts_gen.items():
-            if transcript is None:
-                continue
-            ref = transcripts_ref[fileidx]
-            cer += sarmetric.get_cer(ref, transcript)['cer']
-            wer += sarmetric.get_wer(ref, transcript)['wer']
-        cer = cer / len(transcripts_gen)
-        wer = wer / len(transcripts_gen)
-        logger.info(bold(f'Test set performance:CER={cer:.4f}, WER={wer:.4f}.'))
-        metrics['cer'] = cer
-        metrics['wer'] = wer
+    for snr, data_loader in data_loader_list.items():
+        iterator = LogProgress(logger, data_loader, name=f"Evaluate on {snr}dB")
+        enhanced = []
+        results  = []
+        with torch.no_grad():
+            for data in iterator:
+                tm, noisy_am, clean_am, id, text = data
+                
+                if args.model.input_type == "am":
+                    clean_am_hat = model(noisy_am.to(args.device))
+                elif args.model.input_type == "tm":
+                    clean_am_hat = model(tm.to(args.device))
+                elif args.model.input_type == "am+tm":
+                    clean_am_hat = model(tm.to(args.device), noisy_am.to(args.device))
+                else:
+                    raise ValueError("Invalid model input type argument")
+
+                clean_am_hat = clean_am_hat.squeeze().cpu().numpy()
+                clean_am = clean_am.squeeze().cpu().numpy()
+                
+                if clean_am_hat.shape[0] > clean_am.shape[0]:
+                    leftover = clean_am_hat.shape[0] - clean_am.shape[0]
+                    clean_am_hat = clean_am_hat[leftover//2:-leftover//2]
+                elif clean_am_hat.shape[0] < clean_am.shape[0]:
+                    raise ValueError("Enhanced signal is shorter than clean signal")
+
+                enhanced.append((clean_am_hat, text[0]))
+                results.append(compute_metrics(clean_am, clean_am_hat))
+        
+        results = np.array(results)
+        pesq, stoi, csig, cbak, covl = np.mean(results, axis=0)
+        metrics[f'{snr}dB'] = {
+            "pesq": pesq,
+            "stoi": stoi,
+            "csig": csig,
+            "cbak": cbak,
+            "covl": covl
+        }
+        logger.info(bold(f"Epoch {epoch+1}, Performance on {snr}dB: PESQ={pesq:.4f}, STOI={stoi:.4f}, CSIG={csig:.4f}, CBAK={cbak:.4f}, COVL={covl:.4f}"))
+        
+        if args.eval_stt:
+            cer, wer = get_stts(args, logger, enhanced)
+            metrics[f'{snr}dB']['cer'] = cer
+            metrics[f'{snr}dB']['wer'] = wer
+            logger.info(bold(f"Epoch {epoch+1}, Performance on {snr}dB: CER={cer:.4f}, WER={wer:.4f}"))
    
     return metrics
 
