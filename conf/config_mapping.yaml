@@ -1,6 +1,6 @@
 defaults:
   - _self_
-  - model: seconformer_am
+  - model: mapping
   - override hydra/job_logging: colorlog
   - override hydra/hydra_logging: colorlog
 
@@ -13,7 +13,7 @@ dset:
   rir_train: dataset/rir_train.txt 
   rir_valid: dataset/rir_dev.txt
   rir_test: dataset/rir_test.txt
-  test_augment_numb: 2
+  test_augment_numb: 1
 
 # Dataset related
 sampling_rate: 16000
@@ -23,7 +23,7 @@ shift: 32000
 
 # noise augmentation for train
 train_noise:
-  snr_range: [-15, 20]
+  snr_range: [-5, 20]
   reverb_proportion: 0.75
   target_dB_FS: -25
   target_dB_FS_floating_value: 10
@@ -31,7 +31,7 @@ train_noise:
 
 # noise augmentation for valid
 valid_noise:
-  snr_range: [-15, 10]
+  snr_range: [-5, 10]
   reverb_proportion: 0.5
   target_dB_FS: -25
   target_dB_FS_floating_value: 0
@@ -40,34 +40,40 @@ valid_noise:
 
 # noise augmentation for test
 test_noise:
-  snr_step: [-20, -10, 0, 10, 15]
+  snr_step: [0]
   reverb_proportion: 0.5
   target_dB_FS: -25
   target_dB_FS_floating_value: 0
   silence_length: 0.2
   deterministic: true
 
-batch_size: 32
+batch_size: 16
 batch_size_valid: 1
-epochs: 200
+epochs: 100
 
-eval_every: 200  # compute test metrics every so epochs
+eval_every: 100  # compute test metrics every so epochs
 eval_stt: true
 eval_only:
-
 enhance_only:
 
 # Loss related
 loss:
-  l1_loss: 1.0
-  multistftloss:
-    weight: 1.0
-    factor_mag: 0.5
-    factor_sc: 0.5
-    fft_sizes: [1024, 2048, 512]
-    hop_sizes: [120, 240, 50]
-    win_lengths: [600, 1200, 240]
-    window: hann_window
+  # l1_loss: 1.0
+  l2_loss: 1.0
+  # multistftloss:
+  #   weight: 1.0
+  #   factor_mag: 0.5
+  #   factor_sc: 0.5
+  #   fft_sizes: [1024, 2048, 512]
+  #   hop_sizes: [120, 240, 50]
+  #   win_lengths: [600, 1200, 240]
+  #   window: hann_window
+  # pesqloss:
+  #   weight: 1.0
+  #   nbarks: 49
+  #   win_length: 512
+  #   hop_length: 256
+  #   n_fft: 512
 
 # Optimization related
 lr: 3e-4

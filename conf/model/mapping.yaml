@@ -1,0 +1,9 @@
+model_name: mapping
+input_type: tm
+
+param:
+  hidden: [64, 128, 256, 256, 256]
+  kernel_size: 8
+  stride: [2, 2, 4, 4, 4]
+  normalize: true
+  rnn_layers: 2

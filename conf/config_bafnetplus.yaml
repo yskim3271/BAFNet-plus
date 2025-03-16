@@ -1,6 +1,6 @@
 defaults:
   - _self_
-  - model: seconformer_am
+  - model: bafnetplus
   - override hydra/job_logging: colorlog
   - override hydra/hydra_logging: colorlog
 
@@ -13,7 +13,7 @@ dset:
   rir_train: dataset/rir_train.txt 
   rir_valid: dataset/rir_dev.txt
   rir_test: dataset/rir_test.txt
-  test_augment_numb: 2
+  test_augment_numb: 1
 
 # Dataset related
 sampling_rate: 16000
@@ -40,21 +40,21 @@ valid_noise:
 
 # noise augmentation for test
 test_noise:
-  snr_step: [-20, -10, 0, 10, 15]
+  snr_step: [-10, 0, 10]
   reverb_proportion: 0.5
   target_dB_FS: -25
   target_dB_FS_floating_value: 0
   silence_length: 0.2
   deterministic: true
 
+
 batch_size: 32
 batch_size_valid: 1
-epochs: 200
+epochs: 100
 
-eval_every: 200  # compute test metrics every so epochs
+eval_every: 100  # compute test metrics every so epochs
 eval_stt: true
 eval_only:
-
 enhance_only:
 
 # Loss related
@@ -85,7 +85,7 @@ ddp:
 
 checkpoint: true
 checkpoint_file: checkpoint.th
-continue_from: 
+continue_from:
 samples_dir: samples
 log_dir: tensorbd
 
