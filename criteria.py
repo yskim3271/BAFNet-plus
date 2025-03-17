@@ -3,74 +3,82 @@ import torch.nn.functional as F
 from torch_pesq import PesqLoss
 from models.discriminator import Discriminator, batch_pesq
 
-def masking_and_split(x, y, mask):
-    B, C, T = x.shape
+def masking_and_split(preds, target, mask):
+    B, C, T = preds.shape
     lengths = mask.sum(dim=[1, 2]).int()  # (B,)
 
-    x_list = []
-    y_list = []
+    preds_list = []
+    target_list = []
 
     for i in range(B):
         L = lengths[i]
-        x_i = x[i, :, :L]
-        y_i = y[i, :, :L]
-        x_list.append(x_i)
-        y_list.append(y_i)
+        preds_i = preds[i, :, :L]
+        target_i = target[i, :, :L]
+        preds_list.append(preds_i)
+        target_list.append(target_i)
 
-    return x_list, y_list
+    return preds_list, target_list
 
-def l2_loss(x, y, mask=None):
-    """Calculate L2 loss.
-    Args:
-        x (Tensor): Input tensor.
-        y (Tensor): Target tensor.
-        mask (Tensor): Mask tensor.
-    Returns:
-        Tensor: L2 loss value.
-    """
+def l2_loss(preds, target, mask=None):
     if mask is not None:
-        return F.mse_loss(x * mask, y * mask)
-    return F.mse_loss(x, y)
+        return F.mse_loss(preds * mask, target * mask)
+    return F.mse_loss(preds, target)
 
-def l1_loss(x, y, mask=None):
-    """Calculate L1 loss.
-    Args:
-        x (Tensor): Input tensor.
-        y (Tensor): Target tensor.
-        mask (Tensor): Mask tensor.
-    Returns:
-        Tensor: L1 loss value.
-    """
+def l1_loss(preds, target, mask=None):
     if mask is not None:
-        return F.l1_loss(x * mask, y * mask)
-    return F.l1_loss(x, y)
+        return F.l1_loss(preds * mask, target * mask)
+    return F.l1_loss(preds, target)
 
-def si_snr_loss(x, y, mask=None):
+def si_snr_loss(preds, target, mask=None):
     if mask is not None:
-        x = x * mask
-        y = y * mask
+        preds = preds * mask
+        target = target * mask
     
-    if x.dim() == 3:
-        x = x.squeeze(1)
-        y = y.squeeze(1)
+    if preds.dim() == 3:
+        preds = preds.squeeze(1)
+        target = target.squeeze(1)
     
-    x_y_norm = torch.sum(x * y, dim=-1, keepdim=True)
-    y_y_norm = torch.sum(y ** 2, dim=-1, keepdim=True)
+    # # mean centering
+    # preds = preds - torch.mean(preds, dim=-1, keepdim=True)
+    # target = target - torch.mean(target, dim=-1, keepdim=True)
     
-    target = x_y_norm / (y_y_norm + 1e-9) * y
-    noise = x - target
+    target_norm = target / (torch.norm(target, dim=-1, keepdim=True) + 1e-8)
+    preds_norm = preds / (torch.norm(preds, dim=-1, keepdim=True) + 1e-8)
     
-    target_norm = torch.sum(target ** 2, dim=-1, keepdim=True)
-    noise_norm = torch.sum(noise ** 2, dim=-1, keepdim=True)
+    s_target = torch.sum(target_norm * preds_norm, dim=-1, keepdim=True) * target_norm
     
-    snr = 10 * torch.log10(target_norm / (noise_norm + 1e-9) + 1e-9)
+    e_noise = preds - s_target
     
-    batch_size = x.size(0)
+    signal_power = torch.sum(s_target ** 2, dim=-1)
+    noise_power = torch.sum(e_noise ** 2, dim=-1)
+    si_snr = 10 * torch.log10(signal_power / (noise_power + 1e-8))
     
+    return -torch.mean(si_snr)
+
+def si_sdr_loss(preds, target, mask=None):
     if mask is not None:
-        return -torch.sum(snr) / batch_size
-    return -torch.mean(snr)
+        preds = preds * mask
+        target = target * mask
     
+    if preds.dim() == 3:
+        preds = preds.squeeze(1)
+        target = target.squeeze(1)
+    
+    # preds = preds - torch.mean(preds, dim=-1, keepdim=True)
+    # target = target - torch.mean(target, dim=-1, keepdim=True)
+    
+    alpha = torch.sum(target * preds, dim=-1, keepdim=True) / (torch.sum(target ** 2, dim=-1, keepdim=True) + 1e-8)
+    
+    s_target = alpha * target
+    
+    e_noise = preds - s_target
+    
+    signal_power = torch.sum(s_target ** 2, dim=-1)
+    noise_power = torch.sum(e_noise ** 2, dim=-1)
+    si_sdr = 10 * torch.log10(signal_power / (noise_power + 1e-8))
+    
+    return -torch.mean(si_sdr)
+
 def squeeze_to_2d(x):
     """Squeeze tensor to 2D.
     Args:
@@ -303,6 +311,10 @@ class CompositeLoss(torch.nn.Module):
         if 'sisnrloss' in args:
             self.loss_dict['sisnr_loss'] = si_snr_loss         
             self.loss_weight['sisnr_loss'] = args.sisnrloss
+            
+        if 'sisdrloss' in args:
+            self.loss_dict['sisdr_loss'] = si_sdr_loss
+            self.loss_weight['sisdr_loss'] = args.sisdrloss
 
             
     def forward(self, x, y, mask=None):
