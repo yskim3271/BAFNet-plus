@@ -6,7 +6,7 @@ param:
   rnn_units: 256
   use_clstm: true
   kernel_size: 5
-  kernel_num: [32, 64, 128, 256, 256, 256]
+  kernel_num: [32, 64, 128, 256, 256]
   win_type: hann
   win_len: 400
   win_inc: 100

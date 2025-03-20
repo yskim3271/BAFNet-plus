@@ -58,7 +58,7 @@ enhance_only:
 
 # Loss related
 loss:
-  # l1_loss: 1.0
+  l1_loss: 1.0
   # l2_loss: 1.0
   # multistftloss:
   #   weight: 1.0

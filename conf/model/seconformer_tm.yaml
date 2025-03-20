@@ -18,3 +18,4 @@ param:
   dropout: 0.1
   rescale: 0.1
   normalize: true
+  causal: true

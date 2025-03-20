@@ -4,6 +4,7 @@ transcripts
 checkpoint
 run.sh
 sandbox.py
+backup
 
 *pycache*
 *.pyc

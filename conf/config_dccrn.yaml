@@ -47,7 +47,7 @@ test_noise:
   silence_length: 0.2
   deterministic: true
 
-batch_size: 32
+batch_size: 16
 batch_size_valid: 1
 epochs: 100
 
@@ -60,14 +60,17 @@ enhance_only:
 # Loss related
 loss:
   l1_loss: 1.0
-  multistftloss:
-    weight: 1.0
-    factor_mag: 0.5
-    factor_sc: 0.5
-    fft_sizes: [1024, 2048, 512]
-    hop_sizes: [120, 240, 50]
-    win_lengths: [600, 1200, 240]
-    window: hann_window
+  # l2_loss: 1.0
+  # multistftloss:
+  #   weight: 1.0
+  #   factor_mag: 0.5
+  #   factor_sc: 0.5
+  #   fft_sizes: [1024, 2048, 512]
+  #   hop_sizes: [120, 240, 50]
+  #   win_lengths: [600, 1200, 240]
+  #   window: hann_window
+  # sisnrloss: 1.0
+  sisdrloss: 1.0
 
 # Optimization related
 lr: 3e-4
