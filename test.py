@@ -14,7 +14,7 @@ def test_seconformer_implementations():
     sample_rate = 16000
     batch_size = 2
     channels = 1
-    length = 500  # 1초 오디오
+    length = 16000  # 1초 오디오
     
     # 동일한 랜덤 시드 설정
     torch.manual_seed(42)
@@ -45,40 +45,40 @@ def test_seconformer_implementations():
     }
     
     # 원본 모델
-    # model_orig = seconformer_orig(**common_params)
+    model_orig = seconformer_orig(**common_params)
     
-    # 새 모델 (causal=False로 비인과적 설정)
-    model_new = seconformer_new(**common_params, causal=False)
+    # # 새 모델 (causal=False로 비인과적 설정)
+    # model_new = seconformer_new(**common_params, causal=False)
     
-    # 새 모델 (causal=True로 인과적 설정)
-    model_new_causal = seconformer_new(**common_params, causal=True)
+    # # 새 모델 (causal=True로 인과적 설정)
+    # model_new_causal = seconformer_new(**common_params, causal=True)
     
     # 평가 모드로 설정
-    # model_orig.eval()
-    model_new.eval()
-    model_new_causal.eval()
+    model_orig.eval()
+    # model_new.eval()
+    # model_new_causal.eval()
     
     # 추론 시간 및 결과 비교
     with torch.no_grad():
         # 원본 모델
-        start_time = time.time()
-        # output_orig = model_orig(input_signal)
-        orig_time = time.time() - start_time
+        # start_time = time.time()
+        output_orig = model_orig(input_signal)
+        # orig_time = time.time() - start_time
         
         # 새 모델 (비인과적)
-        start_time = time.time()
-        output_new = model_new(input_signal)
-        new_time = time.time() - start_time
+        # start_time = time.time()
+        # output_new = model_new(input_signal)
+        # new_time = time.time() - start_time
         
         # 새 모델 (인과적)
-        start_time = time.time()
-        output_new_causal = model_new_causal(input_signal)
-        new_causal_time = time.time() - start_time
+        # start_time = time.time()
+        # output_new_causal = model_new_causal(input_signal)
+        # new_causal_time = time.time() - start_time
     
     # 결과 출력
-    # print(f"원본 모델 출력 크기: {output_orig.shape}")
-    print(f"새 모델 출력 크기 (비인과적): {output_new.shape}")
-    print(f"새 모델 출력 크기 (인과적): {output_new_causal.shape}")
+    print(f"원본 모델 출력 크기: {output_orig.shape}")
+    # print(f"새 모델 출력 크기 (비인과적): {output_new.shape}")
+    # print(f"새 모델 출력 크기 (인과적): {output_new_causal.shape}")
     
     # print(f"\n원본 모델 처리 시간: {orig_time:.4f}초")
     # print(f"새 모델 처리 시간 (비인과적): {new_time:.4f}초")

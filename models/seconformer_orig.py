@@ -203,6 +203,8 @@ class seconformer(nn.Module):
         for encode in self.encoder:
             x = encode(x)
             skips.append(x)
+            
+        print("input shape :", x.shape)
         x = x.permute(2, 0, 1)
         
         for conformer in self.conformers:

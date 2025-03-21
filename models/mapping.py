@@ -2,8 +2,64 @@ import torch
 import math
 from torch import nn
 from torch.nn import functional as F
-from torchaudio.models.conformer import ConformerLayer
+from torchaudio.models.conformer import _FeedForwardModule, _ConvolutionModule
 
+
+
+class Conmer(nn.Module):
+    def __init__(
+        self,
+        input_dim: int,
+        ffn_dim: int,
+        depthwise_conv_kernel_size: int,
+        dropout: float = 0.0,
+        use_group_norm: bool = False,
+        convolution_first: bool = True,
+    ) -> None:
+        super().__init__()
+
+        self.ffn1 = _FeedForwardModule(input_dim, ffn_dim, dropout=dropout)
+
+        self.conv_module = _ConvolutionModule(
+            input_dim=input_dim,
+            num_channels=input_dim,
+            depthwise_kernel_size=depthwise_conv_kernel_size,
+            dropout=dropout,
+            bias=True,
+            use_group_norm=use_group_norm,
+        )
+
+        self.ffn2 = _FeedForwardModule(input_dim, ffn_dim, dropout=dropout)
+        self.final_layer_norm = torch.nn.LayerNorm(input_dim)
+        self.convolution_first = convolution_first
+
+    def _apply_convolution(self, input: torch.Tensor) -> torch.Tensor:
+        residual = input
+        input = input.transpose(0, 1)
+        input = self.conv_module(input)
+        input = input.transpose(0, 1)
+        input = residual + input
+        return input
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            input (torch.Tensor): input, with shape `(T, B, D)`.
+            key_padding_mask (torch.Tensor or None): key padding mask to use in self attention layer.
+
+        Returns:
+            torch.Tensor: output with shape `(T, B, D)`.
+        """
+        residual = input
+        x = self.ffn1(input)
+        x = x * 0.5 + residual
+        x = self._apply_convolution(x)
+        residual = x
+        x = self.ffn2(x)
+        x = x * 0.5 + residual
+        
+        x = self.final_layer_norm(x)
+        return x
 
 
 class mapping(nn.Module):
@@ -11,8 +67,10 @@ class mapping(nn.Module):
                  hidden=[64, 128, 256, 256, 256],
                  kernel_size=8,
                  stride=[2, 2, 4, 4, 4],
+                 depthwise_conv_kernel_size=31,
+                 seq_module_depth=4,
+                 dropout=0.1,
                  normalize=True,
-                 rnn_layers=2
                  ):
 
         super().__init__()
@@ -20,8 +78,9 @@ class mapping(nn.Module):
         self.hidden = [1] + hidden
         self.kernel_size = kernel_size
         self.stride = stride
+        self.depthwise_conv_kernel_size = depthwise_conv_kernel_size
+        self.dropout = dropout
         self.normalize = normalize
-        self.rnn_layers = rnn_layers
 
         self.encoder = nn.ModuleList()
         self.decoder = nn.ModuleList()
@@ -30,9 +89,13 @@ class mapping(nn.Module):
         for index in range(len(self.hidden) - 1):
             encode = []
             encode += [
-                nn.Conv1d(self.hidden[index], self.hidden[index + 1], kernel_size, self.stride[index]),
-                nn.ReLU(),
-                nn.Conv1d(self.hidden[index + 1], self.hidden[index + 1]* 2, 1), nn.GLU(1),
+                nn.Conv1d(self.hidden[index], self.hidden[index + 1] *2, kernel_size, self.stride[index]),
+                nn.GLU(1),
+                nn.Conv1d(self.hidden[index + 1], self.hidden[index + 1], 9, 1, 4, groups=self.hidden[index + 1]),
+                nn.BatchNorm1d(self.hidden[index + 1]),
+                nn.SiLU(),
+                nn.Conv1d(self.hidden[index + 1], self.hidden[index + 1], 1),
+                nn.Dropout(dropout),
             ]
             self.encoder.append(nn.Sequential(*encode))
             
@@ -45,7 +108,20 @@ class mapping(nn.Module):
                 decode.append(nn.ReLU())
             self.decoder.insert(0, nn.Sequential(*decode))
         
-        self.seq_encoder = nn.LSTM(self.hidden[-1], self.hidden[-1], self.rnn_layers, batch_first=True, bidirectional=False)
+        seq_dim = self.hidden[-1]
+        
+        self.seq_modules = nn.ModuleList()
+        
+        for index in range(seq_module_depth):
+            self.seq_modules.append(
+                Conmer(
+                    input_dim=seq_dim,
+                    ffn_dim=seq_dim,
+                    depthwise_conv_kernel_size=depthwise_conv_kernel_size,
+                    dropout=dropout,
+                )
+            )
+
 
 
     def valid_length(self, length):
@@ -75,9 +151,12 @@ class mapping(nn.Module):
             x = encode(x)
             skips.append(x)
                 
-        x = x.permute(0, 2, 1)
-        x, _ = self.seq_encoder(x)
-        x = x.permute(0, 2, 1)    
+        x = x.permute(2, 0, 1)
+        
+        for seq_module in self.seq_modules:
+            x = seq_module(x)
+        
+        x = x.permute(1, 2, 0)
         
         for decode in self.decoder:
             skip = skips.pop(-1)

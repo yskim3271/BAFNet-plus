@@ -184,7 +184,8 @@ class CausalSelfAttention(nn.Module):
 
         block_size =  block_size
         # to hide future words
-        subsequent_mask = torch.tril(torch.ones(block_size,block_size)).view(1,1,block_size,block_size)
+        subsequent_mask = torch.tril(torch.ones(block_size,block_size)).view(1,1,block_size,block_size) # original
+        # subsequent_mask = torch.triu(torch.ones(block_size,block_size)).view(1,1,block_size,block_size)
         self.register_buffer("mask",subsequent_mask) # to make sure it is stored in states dict while saving model
 
       
@@ -212,26 +213,33 @@ class CustomConformerLayer(nn.Module):
         depthwise_conv_kernel_size: int,
         dropout: float = 0.0,
         use_group_norm: bool = False,
-        convolution_first: bool = False,
+        convolution_first: bool = True,
         is_causal: bool = False,
     ) -> None:
         super().__init__()
 
         self.ffn1 = _FeedForwardModule(input_dim, ffn_dim, dropout=dropout)
 
-        self.self_attn_layer_norm = torch.nn.LayerNorm(input_dim)
-        if is_causal:
-            self.self_attn = CausalSelfAttention(
-                n_embd=input_dim,
-                n_head=num_attention_heads,
-                attn_pdrop=dropout,
-                resid_pdrop=dropout,
-                block_size=256,
-            )
-        else:
-            self.self_attn = torch.nn.MultiheadAttention(input_dim, num_attention_heads, dropout=dropout)
-        self.self_attn_dropout = torch.nn.Dropout(dropout)
-        self.is_causal = is_causal
+        # self.self_attn_layer_norm = torch.nn.LayerNorm(input_dim)
+        # if is_causal:
+        #     self.self_attn = CausalSelfAttention(
+        #         n_embd=input_dim,
+        #         n_head=num_attention_heads,
+        #         attn_pdrop=dropout,
+        #         resid_pdrop=dropout,
+        #         block_size=256,
+        #     )
+        #     # self.self_attn = SynthesizerAttention(
+        #     #     n_embd=input_dim,
+        #     #     n_head=num_attention_heads,
+        #     #     block_size=256,
+        #     #     attn_pdrop=dropout,
+        #     #     resid_pdrop=dropout,
+        #     # )
+        # else:
+        #     self.self_attn = torch.nn.MultiheadAttention(input_dim, num_attention_heads, dropout=dropout)
+        # self.self_attn_dropout = torch.nn.Dropout(dropout)
+        # self.is_causal = is_causal
 
         self.conv_module = _ConvolutionModule(
             input_dim=input_dim,
@@ -270,17 +278,17 @@ class CustomConformerLayer(nn.Module):
         if self.convolution_first:
             x = self._apply_convolution(x)
         
-        residual = x
-        x = self.self_attn_layer_norm(x)
+        # residual = x
+        # x = self.self_attn_layer_norm(x)
         
         
-        if self.is_causal:
-            x = self.self_attn(x)
-        else:
-            x, _ = self.self_attn(x, x, x)
+        # if self.is_causal:
+        #     x = self.self_attn(x)
+        # else:
+        #     x, _ = self.self_attn(x, x, x)
         
-        x = self.self_attn_dropout(x)
-        x = x + residual
+        # x = self.self_attn_dropout(x)
+        # x = x + residual
         
         if not self.convolution_first:
             x = self._apply_convolution(x)

@@ -60,14 +60,14 @@ enhance_only:
 loss:
   l1_loss: 1.0
   # l2_loss: 1.0
-  # multistftloss:
-  #   weight: 1.0
-  #   factor_mag: 0.5
-  #   factor_sc: 0.5
-  #   fft_sizes: [1024, 2048, 512]
-  #   hop_sizes: [120, 240, 50]
-  #   win_lengths: [600, 1200, 240]
-  #   window: hann_window
+  multistftloss:
+    weight: 1.0
+    factor_mag: 0.5
+    factor_sc: 0.5
+    fft_sizes: [1024, 2048, 512]
+    hop_sizes: [120, 240, 50]
+    win_lengths: [600, 1200, 240]
+    window: hann_window
   # pesqloss:
   #   weight: 1.0
   #   nbarks: 49
@@ -75,7 +75,7 @@ loss:
   #   hop_length: 256
   #   n_fft: 512
   # sisnrloss: 1.0
-  sisdrloss: 1.0
+  # sisdrloss: 1.0
 
 # Optimization related
 lr: 3e-4

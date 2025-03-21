@@ -5,5 +5,7 @@ param:
   hidden: [64, 128, 256, 256, 256]
   kernel_size: 8
   stride: [2, 2, 4, 4, 4]
+  depthwise_conv_kernel_size: 31
+  seq_module_depth: 4
+  dropout: 0.1
   normalize: true
-  rnn_layers: 2
