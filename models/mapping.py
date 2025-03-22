@@ -5,6 +5,15 @@ from torch.nn import functional as F
 from torchaudio.models.conformer import _FeedForwardModule, _ConvolutionModule
 
 
+# class ConvModule(nn.Module):
+#     def __init__(self,
+#                  input_dim: int,
+#                  output_dim: int,
+#                  ffn_dim: int,
+#                  kernel_size: int,
+                 
+#                  )
+
 
 class Conmer(nn.Module):
     def __init__(
@@ -89,9 +98,9 @@ class mapping(nn.Module):
         for index in range(len(self.hidden) - 1):
             encode = []
             encode += [
-                nn.Conv1d(self.hidden[index], self.hidden[index + 1] *2, kernel_size, self.stride[index]),
+                nn.Conv1d(self.hidden[index], self.hidden[index + 1] *2, kernel_size=kernel_size, stride=stride[index]),
                 nn.GLU(1),
-                nn.Conv1d(self.hidden[index + 1], self.hidden[index + 1], 9, 1, 4, groups=self.hidden[index + 1]),
+                nn.Conv1d(self.hidden[index + 1], self.hidden[index + 1], kernel_size=9, stride=1, padding=4, groups=self.hidden[index + 1]),
                 nn.BatchNorm1d(self.hidden[index + 1]),
                 nn.SiLU(),
                 nn.Conv1d(self.hidden[index + 1], self.hidden[index + 1], 1),
@@ -101,11 +110,15 @@ class mapping(nn.Module):
             
             decode = []
             decode += [
-                nn.Conv1d(self.hidden[index + 1], self.hidden[index + 1]* 2, 1), nn.GLU(1), nn.ReLU(),
+                nn.Conv1d(self.hidden[index + 1], self.hidden[index + 1], 1),
+                nn.Dropout(dropout),
+                nn.Conv1d(self.hidden[index + 1], self.hidden[index + 1]* 2, 1), 
+                nn.GLU(1),
                 nn.ConvTranspose1d(self.hidden[index + 1], self.hidden[index], kernel_size, self.stride[index]),
+                nn.BatchNorm1d(self.hidden[index]),
             ]
             if index > 0:
-                decode.append(nn.ReLU())
+                decode.append(nn.SiLU())
             self.decoder.insert(0, nn.Sequential(*decode))
         
         seq_dim = self.hidden[-1]
@@ -149,6 +162,7 @@ class mapping(nn.Module):
         skips = []
         for encode in self.encoder:
             x = encode(x)
+            # print(x.shape)
             skips.append(x)
                 
         x = x.permute(2, 0, 1)
@@ -160,6 +174,7 @@ class mapping(nn.Module):
         
         for decode in self.decoder:
             skip = skips.pop(-1)
+            # print(x.shape, skip.shape)
             x = x + skip[..., :x.shape[-1]]
             x = decode(x)
 
