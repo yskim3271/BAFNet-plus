@@ -8,3 +8,7 @@ backup
 
 *pycache*
 *.pyc
+
+# Git filter scripts
+clean_config_paths.sh
+smudge_config_paths.sh

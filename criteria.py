@@ -1,7 +1,6 @@
 import torch
 import torch.nn.functional as F
 from torch_pesq import PesqLoss
-from models.discriminator import Discriminator, batch_pesq
 
 def masking_and_split(preds, target, mask):
     B, C, T = preds.shape
@@ -235,46 +234,6 @@ class MultiResolutionSTFTLoss(torch.nn.Module):
 
         loss = self.factor_sc * sc_loss + self.factor_mag * mag_loss
         return loss
-
-class pesq_loss(torch.nn.Module):
-    def __init__(self,
-                 factor: float = 1.0,
-                 sample_rate: int = 16000,
-                 nbarks: int = 49,
-                 win_length: int = 512,
-                 n_fft: int = 512,
-                 hop_length: int = 256,
-                 ):
-        super(pesq_loss, self).__init__()
-        self.factor = factor
-        self.sample_rate = sample_rate
-        self.nbarks = nbarks
-        self.win_length = win_length
-        self.n_fft = n_fft
-        self.hop_length = hop_length
-        
-        self.pesq = PesqLoss(
-            factor=self.factor,
-            sample_rate=self.sample_rate,
-            nbarks=self.nbarks,
-            win_length=self.win_length,
-            n_fft=self.n_fft,
-            hop_length=self.hop_length,
-        )
-        
-        
-    def forward(self, x, y, mask=None):
-        if mask is not None:
-            x = x * mask
-            y = y * mask
-        
-        if x.dim() == 3:
-            x = x.squeeze(1)
-            y = y.squeeze(1)
-        
-        loss = self.pesq(y, x)
-        
-        return self.factor * loss
     
 
 class CompositeLoss(torch.nn.Module):
@@ -298,14 +257,6 @@ class CompositeLoss(torch.nn.Module):
             
             self.loss_dict['multistft_loss'] = MultiResolutionSTFTLoss(
                 **args.multistftloss
-            )
-            
-        if 'pesqloss' in args:
-            self.loss_dict['pesq_loss'] = args.pesqloss.weight
-            del args.pesqloss.weight
-            
-            self.loss_dict['pesq_loss'] = pesq_loss(
-                **args.pesqloss
             )
 
         if 'sisnrloss' in args:

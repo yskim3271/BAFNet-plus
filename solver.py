@@ -51,8 +51,6 @@ class Solver(object):
         self.loss = CompositeLoss(args.loss).to(self.device)
 
         self.eval_every = args.eval_every   # interval for evaluation
-        self.eval_only = args.eval_only     # if True, only evaluate, no training
-        self.enhance_only = args.enhance_only # if True, only enhance, no training
             
         # Checkpoint settings
         self.checkpoint = args.checkpoint
@@ -181,42 +179,6 @@ class Solver(object):
             self.writer = SummaryWriter(log_dir=self.log_dir)
 
     def train(self):
-        """Main training loop, including optional evaluation phases."""
-        if self.eval_only:
-            if self.rank == 0:
-                if self.best_state is None:
-                    self.logger.info("No best model found in checkpoint. Use latest model for evaluation...")
-                    if self.is_distributed:
-                        self.model.module.load_state_dict(self.model.module.state_dict())
-                    else:
-                        self.model.load_state_dict(self.model.state_dict())
-                else:
-                    self.logger.info("Use best model for evaluation...")
-                    if self.is_distributed:
-                        self.model.module.load_state_dict(self.best_state['model'])
-                    else:
-                        self.model.load_state_dict(self.best_state['model'])
-                evaluate(self.args, self.model, self.ev_loader_list, 0, self.logger)            
-            
-            return
-
-        if self.enhance_only:
-            if self.rank == 0:
-                if self.best_state is None:
-                    self.logger.info("No best model found in checkpoint. Use latest model for enhancement...")
-                    if self.is_distributed:
-                        self.model.module.load_state_dict(self.model.module.state_dict())
-                    else:
-                        self.model.load_state_dict(self.model.state_dict())
-                else:
-                    self.logger.info("Use best model for enhancement...")
-                    if self.is_distributed:
-                        self.model.module.load_state_dict(self.best_state['model'])
-                    else:
-                        self.model.load_state_dict(self.best_state['model'])
-                enhance(self.args, self.model, self.tt_loader_list, 0, self.logger, self.samples_dir)
-            
-            return
 
         # If there's a history from the checkpoint, replay metrics
         if self.history and self.rank == 0:  

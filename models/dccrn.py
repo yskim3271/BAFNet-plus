@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from models.module_dccrn import ConvSTFT, ConviSTFT, \
-    ComplexConv2d, ComplexConvTranspose2d, NavieComplexLSTM, complex_cat, ComplexBatchNorm
+    ComplexConv2d, ComplexConvTranspose2d, NavieComplexLSTM, complex_cat
 
 
 class dccrn(nn.Module):

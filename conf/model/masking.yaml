@@ -1,0 +1,13 @@
+model_name: masking
+input_type: am
+
+param:
+  window_length: 400
+  hop_length: 100
+  fft_len: 512
+  hidden: [32, 64, 128, 256]
+  kernel_size: [1, 5]
+  stride: [1, 2]
+  depthwise_conv_kernel_size: 7
+  seq_module_depth: 4
+  dropout: 0.1

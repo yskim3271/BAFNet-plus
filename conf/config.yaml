@@ -1,19 +1,18 @@
 defaults:
   - _self_
-  - model: mapping
   - override hydra/job_logging: colorlog
   - override hydra/hydra_logging: colorlog
 
 dset:
-  noise_dir: /home/user114/yunsik/dataset/datasets_fullband/noise_fullband_resampled 
+  noise_dir: /placeholder/for/noise
   noise_train: dataset/noise_train.txt 
   noise_valid: dataset/noise_dev.txt 
   noise_test: dataset/noise_test.txt
-  rir_dir: /home/user114/yunsik/dataset/datasets_fullband/impulse_responses
+  rir_dir: /placeholder/for/rir
   rir_train: dataset/rir_train.txt 
   rir_valid: dataset/rir_dev.txt
   rir_test: dataset/rir_test.txt
-  test_augment_numb: 1
+  test_augment_numb: 2
 
 # Dataset related
 sampling_rate: 16000
@@ -23,7 +22,7 @@ shift: 32000
 
 # noise augmentation for train
 train_noise:
-  snr_range: [-5, 20]
+  snr_range: [-15, 20]
   reverb_proportion: 0.75
   target_dB_FS: -25
   target_dB_FS_floating_value: 10
@@ -31,7 +30,7 @@ train_noise:
 
 # noise augmentation for valid
 valid_noise:
-  snr_range: [-5, 10]
+  snr_range: [-15, 10]
   reverb_proportion: 0.5
   target_dB_FS: -25
   target_dB_FS_floating_value: 0
@@ -39,6 +38,7 @@ valid_noise:
   deterministic: true
 
 # noise augmentation for test
+# Caution! To many SNR steps will cause OOM error
 test_noise:
   snr_step: [0]
   reverb_proportion: 0.5
@@ -53,13 +53,10 @@ epochs: 100
 
 eval_every: 100  # compute test metrics every so epochs
 eval_stt: true
-eval_only:
-enhance_only:
 
 # Loss related
 loss:
   l1_loss: 1.0
-  # l2_loss: 1.0
   multistftloss:
     weight: 1.0
     factor_mag: 0.5
@@ -68,14 +65,6 @@ loss:
     hop_sizes: [120, 240, 50]
     win_lengths: [600, 1200, 240]
     window: hann_window
-  # pesqloss:
-  #   weight: 1.0
-  #   nbarks: 49
-  #   win_length: 512
-  #   hop_length: 256
-  #   n_fft: 512
-  # sisnrloss: 1.0
-  # sisdrloss: 1.0
 
 # Optimization related
 lr: 3e-4
@@ -104,9 +93,6 @@ seed: 2039
 hydra:
   run:
     dir: ./outputs/${now:%Y-%m-%d_%H-%M-%S}
-  sweep:
-    dir: ./outputs
-    subdir: ${hydra.job.override_dirname}
 
   job:
     chdir: true
