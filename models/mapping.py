@@ -4,8 +4,6 @@ from torch import nn
 from torch.nn import functional as F
 from torchaudio.models.conformer import _FeedForwardModule, _ConvolutionModule
 
-
-
 class Conmer(nn.Module):
     def __init__(
         self,
@@ -66,6 +64,7 @@ class mapping(nn.Module):
     def __init__(self,
                  hidden=[64, 128, 256, 256, 256],
                  kernel_size=8,
+                 kernel_size_2=9,
                  stride=[2, 2, 4, 4, 4],
                  depthwise_conv_kernel_size=15,
                  seq_module_depth=4,
@@ -77,6 +76,7 @@ class mapping(nn.Module):
 
         self.hidden = [1] + hidden
         self.kernel_size = kernel_size
+        self.kernel_size_2 = kernel_size_2
         self.stride = stride
         self.depthwise_conv_kernel_size = depthwise_conv_kernel_size
         self.dropout = dropout
@@ -84,20 +84,21 @@ class mapping(nn.Module):
 
         self.encoder = nn.ModuleList()
         self.decoder = nn.ModuleList()
+        self.skip = nn.ModuleList()
         
         for index in range(len(self.hidden) - 1):
             encode = []
             encode += [
                 nn.Conv1d(self.hidden[index], self.hidden[index + 1] *2, kernel_size=kernel_size, stride=stride[index]),
                 nn.GLU(1),
-                nn.Conv1d(self.hidden[index + 1], self.hidden[index + 1], kernel_size=9, stride=1, padding=4, groups=self.hidden[index + 1]),
+                nn.Conv1d(self.hidden[index + 1], self.hidden[index + 1], kernel_size=self.kernel_size_2, stride=1, padding=(self.kernel_size_2 // 2), groups=self.hidden[index + 1]),
                 nn.BatchNorm1d(self.hidden[index + 1]),
                 nn.SiLU(),
                 nn.Conv1d(self.hidden[index + 1], self.hidden[index + 1], 1),
                 nn.Dropout(dropout),
             ]
             self.encoder.append(nn.Sequential(*encode))
-                        
+            
             decode = []
             decode += [
                 nn.Conv1d(self.hidden[index + 1], self.hidden[index + 1]* 2, 1), 
@@ -150,7 +151,7 @@ class mapping(nn.Module):
         for encode in self.encoder:
             x = encode(x)
             skips.append(x)
-    
+                
         x = x.permute(2, 0, 1)
                 
         for seq_module in self.seq_modules:
@@ -171,4 +172,3 @@ if __name__ == "__main__":
     model = mapping()
     x = torch.randn(2, 16000)
     y = model(x)
-    print(y.shape)

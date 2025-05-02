@@ -2,8 +2,9 @@ model_name: mapping
 input_type: tm
 
 param:
-  hidden: [64, 128, 256, 256, 256]
+  hidden: [256, 512, 1024, 1024, 1024]
   kernel_size: 8
+  kernel_size_2: 9
   stride: [2, 2, 4, 4, 4]
   depthwise_conv_kernel_size: 15
   seq_module_depth: 4
