@@ -250,7 +250,7 @@ class Solver(object):
                         
                         # Temporarily swap model weights with best_state for evaluation
                         with swap_state(self.model.module if self.is_distributed else self.model, self.best_state['model']):
-                            ev_metric = evaluate(self.args, self.model, self.ev_loader_list, epoch, self.logger)
+                            ev_metric = evaluate(self.args, self.model, self.ev_loader_list, self.logger, epoch)
 
                             self.logger.info('Enhance and save samples...')
                             enhance_multiple_snr(self.args, self.model, self.tt_loader_list, self.logger, epoch, self.samples_dir)

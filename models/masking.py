@@ -3,7 +3,7 @@ import math
 from torch import nn
 from torch.nn import functional as F
 from torchaudio.models.conformer import _FeedForwardModule, _ConvolutionModule
-from models.module_dccrn import ConviSTFT, ConvSTFT
+from models.stft import ConviSTFT, ConvSTFT
 
 class ComplexConv2d(nn.Module):
     def __init__(
@@ -110,6 +110,50 @@ class ComplexConvTranspose2d(nn.Module):
         out = torch.cat([real, imag], dim=1)
         return out
 
+
+class NavieComplexLSTM(nn.Module):
+    def __init__(self, input_size, hidden_size, projection_dim=None, bidirectional=False, batch_first=False):
+        super(NavieComplexLSTM, self).__init__()
+
+        self.input_dim = input_size // 2
+        self.rnn_units = hidden_size // 2
+        self.real_lstm = nn.LSTM(self.input_dim, self.rnn_units, num_layers=1, bidirectional=bidirectional,
+                                 batch_first=False)
+        self.imag_lstm = nn.LSTM(self.input_dim, self.rnn_units, num_layers=1, bidirectional=bidirectional,
+                                 batch_first=False)
+        if bidirectional:
+            bidirectional = 2
+        else:
+            bidirectional = 1
+        if projection_dim is not None:
+            self.projection_dim = projection_dim // 2
+            self.r_trans = nn.Linear(self.rnn_units * bidirectional, self.projection_dim)
+            self.i_trans = nn.Linear(self.rnn_units * bidirectional, self.projection_dim)
+        else:
+            self.projection_dim = None
+
+    def forward(self, inputs):
+        if isinstance(inputs, list):
+            real, imag = inputs
+        elif isinstance(inputs, torch.Tensor):
+            real, imag = torch.chunk(inputs, -1)
+        r2r_out = self.real_lstm(real)[0]
+        r2i_out = self.imag_lstm(real)[0]
+        i2r_out = self.real_lstm(imag)[0]
+        i2i_out = self.imag_lstm(imag)[0]
+        real_out = r2r_out - i2i_out
+        imag_out = i2r_out + r2i_out
+        if self.projection_dim is not None:
+            real_out = self.r_trans(real_out)
+            imag_out = self.i_trans(imag_out)
+        # print(real_out.shape,imag_out.shape)
+        return [real_out, imag_out]
+
+    def flatten_parameters(self):
+        self.imag_lstm.flatten_parameters()
+        self.real_lstm.flatten_parameters()
+
+
 class Conmer(nn.Module):
     def __init__(
         self,
@@ -194,9 +238,9 @@ class EncoderLayer(nn.Module):
             ComplexConv2d(
                 in_channels=out_channels,
                 out_channels=out_channels,
-                kernel_size=(7, 1),
+                kernel_size=(1, 5),
                 stride=(1, 1),
-                padding=(3, 0),
+                padding=(0, 2),
             ),
             nn.BatchNorm2d(out_channels * 2),
             nn.SiLU(),
@@ -260,11 +304,12 @@ class masking(nn.Module):
                  window_length=400,
                  hop_length=100,
                  fft_len=512,
-                 hidden=[64, 128, 256, 512],
-                 kernel_size=(1, 4),
-                 stride=(1, 2),
-                 depthwise_conv_kernel_size=7,
-                 seq_module_depth=4,
+                 hidden=[16, 32, 64, 128, 256],
+                 kernel_size=(4, 1),
+                 stride=(2, 1),
+                 padding=(1, 0),
+                 rnn_layers=2,
+                 rnn_units=256,
                  dropout=0.1,
                  ):
 
@@ -277,8 +322,10 @@ class masking(nn.Module):
         self.hidden = [1] + hidden
         self.kernel_size = kernel_size
         self.stride = stride
-        self.depthwise_conv_kernel_size = depthwise_conv_kernel_size
+        self.padding = padding
         self.dropout = dropout
+        self.rnn_layers = rnn_layers
+        self.rnn_units = rnn_units
         
         self.stft = ConvSTFT(
             win_len=window_length,
@@ -305,6 +352,7 @@ class masking(nn.Module):
                     out_channels=self.hidden[index + 1],
                     kernel_size=kernel_size,
                     stride=stride,
+                    padding=padding,
                     dropout=dropout,
                 )
             )
@@ -314,22 +362,30 @@ class masking(nn.Module):
                     out_channels=self.hidden[index],
                     kernel_size=kernel_size,
                     stride=stride,
+                    padding=padding,
                     activation=True if index > 0 else False,
                 )
             )        
-        seq_dim = self.hidden[-1] * 2
-        self.seq_modules = nn.ModuleList()
+        hidden_dim = self.fft_len // (2 ** (len(self.hidden) - 1))
         
-        for index in range(seq_module_depth):
-            self.seq_modules.append(
-                Conmer(
-                    input_dim=seq_dim,
-                    ffn_dim=seq_dim,
-                    depthwise_conv_kernel_size=depthwise_conv_kernel_size,
-                    dropout=dropout,
+        rnns = []
+        for idx in range(rnn_layers):
+            rnns.append(
+                NavieComplexLSTM(
+                    input_size=hidden_dim * self.hidden[-1] if idx == 0 else rnn_units,
+                    hidden_size=rnn_units,
+                    bidirectional=False,
+                    batch_first=False,
+                    projection_dim=hidden_dim * self.hidden[-1] if idx == rnn_layers - 1 else None,
                 )
             )
         
+        self.seq_modules = nn.Sequential(*rnns)
+        
+        if isinstance(self.seq_modules, nn.LSTM):
+            self.seq_modules.flatten_parameters()
+
+
             
     def valid_length(self, length):
         """
@@ -401,17 +457,19 @@ class masking(nn.Module):
             skips.append(out)
 
         
-        b, c, t, f = out.shape
-        out = out.view(b, c, t * f)
-                
-        out = out.permute(2, 0, 1)
-        
-        for seq_module in self.seq_modules:
-            out = seq_module(out)
-        
-        out = out.permute(1, 2, 0)
+        batch_size, channels, dims, lengths = out.size()
+        out = out.permute(3, 0, 1, 2)
+        r_rnn_in = out[:, :, :channels // 2]
+        i_rnn_in = out[:, :, channels // 2:]
+        r_rnn_in = torch.reshape(r_rnn_in, [lengths, batch_size, channels // 2 * dims])
+        i_rnn_in = torch.reshape(i_rnn_in, [lengths, batch_size, channels // 2 * dims])
 
-        out = out.view(b, c, t, f)
+        r_rnn_in, i_rnn_in = self.seq_modules([r_rnn_in, i_rnn_in])
+
+        r_rnn_in = torch.reshape(r_rnn_in, [lengths, batch_size, channels // 2, dims])
+        i_rnn_in = torch.reshape(i_rnn_in, [lengths, batch_size, channels // 2, dims])
+        out = torch.cat([r_rnn_in, i_rnn_in], 2)
+        out = out.permute(1, 2, 3, 0)
 
         for decode in self.decoder:
             skip = skips.pop(-1)

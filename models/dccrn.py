@@ -4,8 +4,198 @@ dccrn: Deep complex convolution recurrent network
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from models.module_dccrn import ConvSTFT, ConviSTFT, \
-    ComplexConv2d, ComplexConvTranspose2d, NavieComplexLSTM, complex_cat
+from models.stft import ConvSTFT, ConviSTFT
+
+def complex_cat(inputs, axis):
+    real, imag = [], []
+    for idx, data in enumerate(inputs):
+        r, i = torch.chunk(data, 2, axis)
+        real.append(r)
+        imag.append(i)
+    real = torch.cat(real, axis)
+    imag = torch.cat(imag, axis)
+    outputs = torch.cat([real, imag], axis)
+    return outputs
+
+class ComplexConv2d(nn.Module):
+
+    def __init__(
+            self,
+            in_channels,
+            out_channels,
+            kernel_size=(1, 1),
+            stride=(1, 1),
+            padding=(0, 0),
+            dilation=1,
+            groups=1,
+            causal=True,
+            complex_axis=1,
+    ):
+        '''
+            in_channels: real+imag
+            out_channels: real+imag
+            kernel_size : input [B,C,D,T] kernel size in [D,T]
+            padding : input [B,C,D,T] padding in [D,T]
+            causal: if causal, will padding time dimension's left side,
+                    otherwise both
+
+        '''
+        super(ComplexConv2d, self).__init__()
+        self.in_channels = in_channels // 2
+        self.out_channels = out_channels // 2
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.padding = padding
+        self.causal = causal
+        self.groups = groups
+        self.dilation = dilation
+        self.complex_axis = complex_axis
+        self.real_conv = nn.Conv2d(self.in_channels, self.out_channels, kernel_size, self.stride,
+                                   padding=[self.padding[0], 0], dilation=self.dilation, groups=self.groups)
+        self.imag_conv = nn.Conv2d(self.in_channels, self.out_channels, kernel_size, self.stride,
+                                   padding=[self.padding[0], 0], dilation=self.dilation, groups=self.groups)
+
+        nn.init.normal_(self.real_conv.weight.data, std=0.05)
+        nn.init.normal_(self.imag_conv.weight.data, std=0.05)
+        nn.init.constant_(self.real_conv.bias, 0.)
+        nn.init.constant_(self.imag_conv.bias, 0.)
+
+    def forward(self, inputs):
+        if self.padding[1] != 0 and self.causal:
+            inputs = F.pad(inputs, [self.padding[1], 0, 0, 0])
+        else:
+            inputs = F.pad(inputs, [self.padding[1], self.padding[1], 0, 0])
+
+        if self.complex_axis == 0:
+            real = self.real_conv(inputs)
+            imag = self.imag_conv(inputs)
+            real2real, imag2real = torch.chunk(real, 2, self.complex_axis)
+            real2imag, imag2imag = torch.chunk(imag, 2, self.complex_axis)
+
+        else:
+            if isinstance(inputs, torch.Tensor):
+                real, imag = torch.chunk(inputs, 2, self.complex_axis)
+
+            real2real = self.real_conv(real, )
+            imag2imag = self.imag_conv(imag, )
+
+            real2imag = self.imag_conv(real)
+            imag2real = self.real_conv(imag)
+
+        real = real2real - imag2imag
+        imag = real2imag + imag2real
+        out = torch.cat([real, imag], self.complex_axis)
+
+        return out
+
+class ComplexConvTranspose2d(nn.Module):
+
+    def __init__(
+            self,
+            in_channels,
+            out_channels,
+            kernel_size=(1, 1),
+            stride=(1, 1),
+            padding=(0, 0),
+            output_padding=(0, 0),
+            causal=False,
+            complex_axis=1,
+            groups=1
+    ):
+        '''
+            in_channels: real+imag
+            out_channels: real+imag
+        '''
+        super(ComplexConvTranspose2d, self).__init__()
+        self.in_channels = in_channels // 2
+        self.out_channels = out_channels // 2
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.padding = padding
+        self.output_padding = output_padding
+        self.groups = groups
+
+        self.real_conv = nn.ConvTranspose2d(self.in_channels, self.out_channels, kernel_size, self.stride,
+                                            padding=self.padding, output_padding=output_padding, groups=self.groups)
+        self.imag_conv = nn.ConvTranspose2d(self.in_channels, self.out_channels, kernel_size, self.stride,
+                                            padding=self.padding, output_padding=output_padding, groups=self.groups)
+        self.complex_axis = complex_axis
+
+        nn.init.normal_(self.real_conv.weight, std=0.05)
+        nn.init.normal_(self.imag_conv.weight, std=0.05)
+        nn.init.constant_(self.real_conv.bias, 0.)
+        nn.init.constant_(self.imag_conv.bias, 0.)
+
+    def forward(self, inputs):
+
+        if isinstance(inputs, torch.Tensor):
+            real, imag = torch.chunk(inputs, 2, self.complex_axis)
+        elif isinstance(inputs, tuple) or isinstance(inputs, list):
+            real = inputs[0]
+            imag = inputs[1]
+        if self.complex_axis == 0:
+            real = self.real_conv(inputs)
+            imag = self.imag_conv(inputs)
+            real2real, imag2real = torch.chunk(real, 2, self.complex_axis)
+            real2imag, imag2imag = torch.chunk(imag, 2, self.complex_axis)
+
+        else:
+            if isinstance(inputs, torch.Tensor):
+                real, imag = torch.chunk(inputs, 2, self.complex_axis)
+
+            real2real = self.real_conv(real, )
+            imag2imag = self.imag_conv(imag, )
+
+            real2imag = self.imag_conv(real)
+            imag2real = self.real_conv(imag)
+
+        real = real2real - imag2imag
+        imag = real2imag + imag2real
+        out = torch.cat([real, imag], self.complex_axis)
+
+        return out
+
+class NavieComplexLSTM(nn.Module):
+    def __init__(self, input_size, hidden_size, projection_dim=None, bidirectional=False, batch_first=False):
+        super(NavieComplexLSTM, self).__init__()
+
+        self.input_dim = input_size // 2
+        self.rnn_units = hidden_size // 2
+        self.real_lstm = nn.LSTM(self.input_dim, self.rnn_units, num_layers=1, bidirectional=bidirectional,
+                                 batch_first=False)
+        self.imag_lstm = nn.LSTM(self.input_dim, self.rnn_units, num_layers=1, bidirectional=bidirectional,
+                                 batch_first=False)
+        if bidirectional:
+            bidirectional = 2
+        else:
+            bidirectional = 1
+        if projection_dim is not None:
+            self.projection_dim = projection_dim // 2
+            self.r_trans = nn.Linear(self.rnn_units * bidirectional, self.projection_dim)
+            self.i_trans = nn.Linear(self.rnn_units * bidirectional, self.projection_dim)
+        else:
+            self.projection_dim = None
+
+    def forward(self, inputs):
+        if isinstance(inputs, list):
+            real, imag = inputs
+        elif isinstance(inputs, torch.Tensor):
+            real, imag = torch.chunk(inputs, -1)
+        r2r_out = self.real_lstm(real)[0]
+        r2i_out = self.imag_lstm(real)[0]
+        i2r_out = self.real_lstm(imag)[0]
+        i2i_out = self.imag_lstm(imag)[0]
+        real_out = r2r_out - i2i_out
+        imag_out = i2r_out + r2i_out
+        if self.projection_dim is not None:
+            real_out = self.r_trans(real_out)
+            imag_out = self.i_trans(imag_out)
+        # print(real_out.shape,imag_out.shape)
+        return [real_out, imag_out]
+
+    def flatten_parameters(self):
+        self.imag_lstm.flatten_parameters()
+        self.real_lstm.flatten_parameters()
 
 
 class dccrn(nn.Module):
