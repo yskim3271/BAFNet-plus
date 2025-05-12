@@ -1,8 +1,8 @@
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
-from models.mapping import mapping
-from models.masking import masking
+from models.mapping import mapping, SPConvTranspose1d
+from models.masking import TSCNet
 from models.dccrn import dccrn
 from models.stft import ConviSTFT, ConvSTFT
 import time
@@ -42,24 +42,12 @@ import time
 #     # Print the shape of the output
 #     # print(f"Output shape: {output.shape}")
 
-def test_masking():
-    # Define the model
-    model = masking(
-    )
-
-    # Generate random input
-    input1 = torch.randn(1, 15400)
-    # input2 = torch.randn(1, 32001)
-    # input3 = torch.randn(1, 32002)
-
-    # Forward pass
+def test_tscnet():
+    model = TSCNet()
+    input1 = torch.randn(2, 1, 32000)
     output = model(input1)
-    # output = model(input2)
-    # output = model(input3)
-
-    # Print the shape of the output
     print(f"Output shape: {output.shape}")
-    
+
 def stft():
     y = torch.randn(1, 1534)
     window_length = 400
@@ -95,11 +83,32 @@ def test_dccrn():
     output = dccrn_model(input1)
 
     print(f"Output shape: {output.shape}")
-    
-    
+
+def test_dilated_dense_net():
+    dilated_dense_net = DilatedDenseNet(
+    )
+    input1 = torch.randn(1, 64, 512, 100)
+
+    output = dilated_dense_net(input1)
+
+    print(f"Output shape: {output.shape}")
+
+def test_spconv_transpose_1d():
+    spconv_transpose_1d = SPConvTranspose1d(
+        in_channels=64,
+        out_channels=128,
+        kernel_size=3,
+        r=2,
+    )
+    input1 = torch.randn(1, 64, 512)
+
+    output = spconv_transpose_1d(input1)
+
+    print(f"Output shape: {output.shape}")
 
 if __name__ == "__main__":
     # test_mapping()
-    test_masking()
+    # test_masking()
     # stft()
     # test_dccrn()
+    test_tscnet()

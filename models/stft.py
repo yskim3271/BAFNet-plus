@@ -103,3 +103,17 @@ class ConviSTFT(nn.Module):
         outputs = outputs[..., self.win_len - self.stride:-(self.win_len - self.stride)]
 
         return outputs
+
+
+def complex_to_mag_phase(complex_spec):
+    mag = torch.sqrt(complex_spec[:, 0, :, :] ** 2 + complex_spec[:, 1, :, :] ** 2).unsqueeze(1)
+    phase = torch.angle(
+        torch.complex(complex_spec[:, 0, :, :], complex_spec[:, 1, :, :])
+    ).unsqueeze(1)
+    return mag, phase
+
+def mag_phase_to_complex(mag, phase):
+    real = mag * torch.cos(phase)
+    imag = mag * torch.sin(phase)
+    return torch.cat([real, imag], 1)
+

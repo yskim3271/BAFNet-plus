@@ -4,6 +4,30 @@ from torch import nn
 from torch.nn import functional as F
 from torchaudio.models.conformer import _FeedForwardModule, _ConvolutionModule
 
+
+class SPConvTranspose1d(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, r=1):
+        super(SPConvTranspose1d, self).__init__()
+
+        pad_l = (kernel_size - 1) // 2
+        pad_r = kernel_size - 1 - pad_l
+
+        self.pad = nn.ConstantPad1d((pad_l, pad_r), value=0.0)
+        self.out_channels = out_channels
+        self.conv = nn.Conv1d(
+            in_channels, out_channels * r, kernel_size=kernel_size, stride=1)
+        self.r = r
+
+    def forward(self, x):
+        x = self.pad(x)
+        out = self.conv(x)
+        batch_size, nchannels, T = out.shape
+        out = out.view((batch_size, self.r, nchannels // self.r, T))
+        out = out.permute(0, 2, 3, 1)
+        out = out.contiguous().view((batch_size, nchannels // self.r, -1))
+        return out
+
+
 class Conmer(nn.Module):
     def __init__(
         self,
@@ -103,7 +127,7 @@ class mapping(nn.Module):
             decode += [
                 nn.Conv1d(self.hidden[index + 1], self.hidden[index + 1]* 2, 1), 
                 nn.GLU(1),
-                nn.ConvTranspose1d(self.hidden[index + 1], self.hidden[index], kernel_size, self.stride[index]),
+                SPConvTranspose1d(self.hidden[index + 1], self.hidden[index], kernel_size, self.stride[index]),
                 nn.BatchNorm1d(self.hidden[index]),
             ]
             if index > 0:
