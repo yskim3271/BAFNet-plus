@@ -101,6 +101,10 @@ class mapping(nn.Module):
         self.hidden = [1] + hidden
         self.kernel_size = kernel_size
         self.kernel_size_2 = kernel_size_2
+
+        pad_l = (kernel_size - 1) // 2
+        pad_r = kernel_size - 1 - pad_l
+
         self.stride = stride
         self.depthwise_conv_kernel_size = depthwise_conv_kernel_size
         self.dropout = dropout
@@ -115,7 +119,8 @@ class mapping(nn.Module):
             encode += [
                 nn.Conv1d(self.hidden[index], self.hidden[index + 1] *2, kernel_size=kernel_size, stride=stride[index]),
                 nn.GLU(1),
-                nn.Conv1d(self.hidden[index + 1], self.hidden[index + 1], kernel_size=self.kernel_size_2, stride=1, padding=(self.kernel_size_2 // 2), groups=self.hidden[index + 1]),
+                nn.ConstantPad1d((pad_l, pad_r), value=0.0),
+                nn.Conv1d(self.hidden[index + 1], self.hidden[index + 1], kernel_size=self.kernel_size_2, stride=1, groups=self.hidden[index + 1]),
                 nn.BatchNorm1d(self.hidden[index + 1]),
                 nn.SiLU(),
                 nn.Conv1d(self.hidden[index + 1], self.hidden[index + 1], 1),

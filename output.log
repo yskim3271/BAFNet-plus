@@ -5174,3 +5174,493 @@ You seem to be using the pipelines sequentially on GPU. In order to maximize eff
 [[36m2025-05-12 09:10:29,355[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 184 | 150/508 | 1.4 it/sec | L1_loss 0.00255 | Multistft_loss 0.35846[0m
 [[36m2025-05-12 09:11:04,219[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 184 | 200/508 | 1.4 it/sec | L1_loss 0.00346 | Multistft_loss 0.35409[0m
 [[36m2025-05-12 09:11:39,098[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 184 | 250/508 | 1.4 it/sec | L1_loss 0.00291 | Multistft_loss 0.36076[0m
+[[36m2025-05-12 09:12:13,968[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 184 | 300/508 | 1.4 it/sec | L1_loss 0.00405 | Multistft_loss 0.36437[0m
+[[36m2025-05-12 09:12:48,839[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 184 | 350/508 | 1.4 it/sec | L1_loss 0.00301 | Multistft_loss 0.36183[0m
+[[36m2025-05-12 09:13:23,705[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 184 | 400/508 | 1.4 it/sec | L1_loss 0.00275 | Multistft_loss 0.33437[0m
+[[36m2025-05-12 09:13:58,551[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 184 | 450/508 | 1.4 it/sec | L1_loss 0.00286 | Multistft_loss 0.34234[0m
+[[36m2025-05-12 09:14:33,362[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 184 | 500/508 | 1.4 it/sec | L1_loss 0.00291 | Multistft_loss 0.36451[0m
+[[36m2025-05-12 09:14:39,897[0m][[34mtrain[0m][[32mINFO[0m] - [1mTrain Summary | End of Epoch 184 | Time 389.22s | Train Loss 0.35700[0m
+[[36m2025-05-12 09:14:39,897[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 09:14:39,898[0m][[34mtrain[0m][[32mINFO[0m] - Validation...[0m
+[[36m2025-05-12 09:15:01,679[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 184 | 50/500 | 13.0 it/sec | L1_loss 0.00665 | Multistft_loss 0.66569[0m
+[[36m2025-05-12 09:15:05,222[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 184 | 100/500 | 13.5 it/sec | L1_loss 0.00577 | Multistft_loss 0.63351[0m
+[[36m2025-05-12 09:15:08,061[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 184 | 150/500 | 14.7 it/sec | L1_loss 0.00549 | Multistft_loss 0.66362[0m
+[[36m2025-05-12 09:15:10,979[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 184 | 200/500 | 15.2 it/sec | L1_loss 0.00411 | Multistft_loss 0.60783[0m
+[[36m2025-05-12 09:15:13,866[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 184 | 250/500 | 15.6 it/sec | L1_loss 0.00524 | Multistft_loss 0.63218[0m
+[[36m2025-05-12 09:15:16,610[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 184 | 300/500 | 16.0 it/sec | L1_loss 0.00440 | Multistft_loss 0.71367[0m
+[[36m2025-05-12 09:15:19,422[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 184 | 350/500 | 16.2 it/sec | L1_loss 0.00401 | Multistft_loss 0.65961[0m
+[[36m2025-05-12 09:15:22,227[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 184 | 400/500 | 16.4 it/sec | L1_loss 0.00313 | Multistft_loss 0.77742[0m
+[[36m2025-05-12 09:15:25,420[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 184 | 450/500 | 16.3 it/sec | L1_loss 0.00206 | Multistft_loss 0.58103[0m
+[[36m2025-05-12 09:15:29,332[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 184 | 500/500 | 15.9 it/sec | L1_loss 0.00286 | Multistft_loss 0.60270[0m
+[[36m2025-05-12 09:15:29,333[0m][[34mtrain[0m][[32mINFO[0m] - [1mValid Summary | End of Epoch 184 | Time 438.65s | Valid Loss 0.65358[0m
+[[36m2025-05-12 09:15:29,341[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 09:15:29,341[0m][[34mtrain[0m][[32mINFO[0m] - [1mOverall Summary | Epoch 184 | Train 0.35700 | Valid 0.65358 | Best 0.62871[0m
+[[36m2025-05-12 09:15:32,952[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 09:15:32,953[0m][[34mtrain[0m][[32mINFO[0m] - Training...[0m
+[[36m2025-05-12 09:16:42,133[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 185 | 50/508 | 1.5 it/sec | L1_loss 0.00283 | Multistft_loss 0.35456[0m
+[[36m2025-05-12 09:17:16,879[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 185 | 100/508 | 1.5 it/sec | L1_loss 0.00248 | Multistft_loss 0.35135[0m
+[[36m2025-05-12 09:17:51,705[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 185 | 150/508 | 1.4 it/sec | L1_loss 0.00271 | Multistft_loss 0.36738[0m
+[[36m2025-05-12 09:18:26,552[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 185 | 200/508 | 1.4 it/sec | L1_loss 0.00274 | Multistft_loss 0.35819[0m
+[[36m2025-05-12 09:19:01,418[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 185 | 250/508 | 1.4 it/sec | L1_loss 0.00347 | Multistft_loss 0.35237[0m
+[[36m2025-05-12 09:19:36,301[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 185 | 300/508 | 1.4 it/sec | L1_loss 0.00252 | Multistft_loss 0.35818[0m
+[[36m2025-05-12 09:20:11,170[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 185 | 350/508 | 1.4 it/sec | L1_loss 0.00290 | Multistft_loss 0.33013[0m
+[[36m2025-05-12 09:20:46,011[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 185 | 400/508 | 1.4 it/sec | L1_loss 0.00311 | Multistft_loss 0.36411[0m
+[[36m2025-05-12 09:21:20,889[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 185 | 450/508 | 1.4 it/sec | L1_loss 0.00266 | Multistft_loss 0.35798[0m
+[[36m2025-05-12 09:21:55,735[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 185 | 500/508 | 1.4 it/sec | L1_loss 0.00180 | Multistft_loss 0.34524[0m
+[[36m2025-05-12 09:22:02,304[0m][[34mtrain[0m][[32mINFO[0m] - [1mTrain Summary | End of Epoch 185 | Time 389.35s | Train Loss 0.35696[0m
+[[36m2025-05-12 09:22:02,305[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 09:22:02,305[0m][[34mtrain[0m][[32mINFO[0m] - Validation...[0m
+[[36m2025-05-12 09:22:24,461[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 185 | 50/500 | 15.4 it/sec | L1_loss 0.00677 | Multistft_loss 0.68350[0m
+[[36m2025-05-12 09:22:27,989[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 185 | 100/500 | 14.8 it/sec | L1_loss 0.00581 | Multistft_loss 0.66790[0m
+[[36m2025-05-12 09:22:30,821[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 185 | 150/500 | 15.6 it/sec | L1_loss 0.00546 | Multistft_loss 0.67290[0m
+[[36m2025-05-12 09:22:33,730[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 185 | 200/500 | 16.0 it/sec | L1_loss 0.00412 | Multistft_loss 0.60216[0m
+[[36m2025-05-12 09:22:36,609[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 185 | 250/500 | 16.2 it/sec | L1_loss 0.00526 | Multistft_loss 0.65073[0m
+[[36m2025-05-12 09:22:39,347[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 185 | 300/500 | 16.5 it/sec | L1_loss 0.00436 | Multistft_loss 0.70278[0m
+[[36m2025-05-12 09:22:42,150[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 185 | 350/500 | 16.7 it/sec | L1_loss 0.00385 | Multistft_loss 0.65512[0m
+[[36m2025-05-12 09:22:44,950[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 185 | 400/500 | 16.8 it/sec | L1_loss 0.00300 | Multistft_loss 0.73961[0m
+[[36m2025-05-12 09:22:48,133[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 185 | 450/500 | 16.7 it/sec | L1_loss 0.00207 | Multistft_loss 0.57180[0m
+[[36m2025-05-12 09:22:52,033[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 185 | 500/500 | 16.2 it/sec | L1_loss 0.00294 | Multistft_loss 0.63174[0m
+[[36m2025-05-12 09:22:52,034[0m][[34mtrain[0m][[32mINFO[0m] - [1mValid Summary | End of Epoch 185 | Time 439.08s | Valid Loss 0.66350[0m
+[[36m2025-05-12 09:22:52,055[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 09:22:52,055[0m][[34mtrain[0m][[32mINFO[0m] - [1mOverall Summary | Epoch 185 | Train 0.35696 | Valid 0.66350 | Best 0.62871[0m
+[[36m2025-05-12 09:22:55,609[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 09:22:55,610[0m][[34mtrain[0m][[32mINFO[0m] - Training...[0m
+[[36m2025-05-12 09:24:04,948[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 186 | 50/508 | 1.5 it/sec | L1_loss 0.00266 | Multistft_loss 0.36893[0m
+[[36m2025-05-12 09:24:39,690[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 186 | 100/508 | 1.5 it/sec | L1_loss 0.00263 | Multistft_loss 0.36357[0m
+[[36m2025-05-12 09:25:14,569[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 186 | 150/508 | 1.4 it/sec | L1_loss 0.00332 | Multistft_loss 0.34542[0m
+[[36m2025-05-12 09:25:49,466[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 186 | 200/508 | 1.4 it/sec | L1_loss 0.00308 | Multistft_loss 0.37847[0m
+[[36m2025-05-12 09:26:24,366[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 186 | 250/508 | 1.4 it/sec | L1_loss 0.00276 | Multistft_loss 0.34002[0m
+[[36m2025-05-12 09:26:59,291[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 186 | 300/508 | 1.4 it/sec | L1_loss 0.00270 | Multistft_loss 0.35747[0m
+[[36m2025-05-12 09:27:34,193[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 186 | 350/508 | 1.4 it/sec | L1_loss 0.00287 | Multistft_loss 0.34582[0m
+[[36m2025-05-12 09:28:09,102[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 186 | 400/508 | 1.4 it/sec | L1_loss 0.00293 | Multistft_loss 0.35737[0m
+[[36m2025-05-12 09:28:44,039[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 186 | 450/508 | 1.4 it/sec | L1_loss 0.00255 | Multistft_loss 0.34634[0m
+[[36m2025-05-12 09:29:18,934[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 186 | 500/508 | 1.4 it/sec | L1_loss 0.00238 | Multistft_loss 0.34626[0m
+[[36m2025-05-12 09:29:25,495[0m][[34mtrain[0m][[32mINFO[0m] - [1mTrain Summary | End of Epoch 186 | Time 389.89s | Train Loss 0.35711[0m
+[[36m2025-05-12 09:29:25,496[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 09:29:25,496[0m][[34mtrain[0m][[32mINFO[0m] - Validation...[0m
+[[36m2025-05-12 09:29:47,506[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 186 | 50/500 | 14.2 it/sec | L1_loss 0.00741 | Multistft_loss 0.59096[0m
+[[36m2025-05-12 09:29:51,055[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 186 | 100/500 | 14.2 it/sec | L1_loss 0.00648 | Multistft_loss 0.64890[0m
+[[36m2025-05-12 09:29:53,895[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 186 | 150/500 | 15.1 it/sec | L1_loss 0.00689 | Multistft_loss 0.73570[0m
+[[36m2025-05-12 09:29:56,813[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 186 | 200/500 | 15.6 it/sec | L1_loss 0.00541 | Multistft_loss 0.63570[0m
+[[36m2025-05-12 09:29:59,696[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 186 | 250/500 | 15.9 it/sec | L1_loss 0.00549 | Multistft_loss 0.58369[0m
+[[36m2025-05-12 09:30:02,440[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 186 | 300/500 | 16.3 it/sec | L1_loss 0.00432 | Multistft_loss 0.61285[0m
+[[36m2025-05-12 09:30:05,252[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 186 | 350/500 | 16.5 it/sec | L1_loss 0.00460 | Multistft_loss 0.70839[0m
+[[36m2025-05-12 09:30:08,056[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 186 | 400/500 | 16.6 it/sec | L1_loss 0.00345 | Multistft_loss 0.81363[0m
+[[36m2025-05-12 09:30:11,248[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 186 | 450/500 | 16.5 it/sec | L1_loss 0.00237 | Multistft_loss 0.62462[0m
+[[36m2025-05-12 09:30:15,149[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 186 | 500/500 | 16.0 it/sec | L1_loss 0.00274 | Multistft_loss 0.57984[0m
+[[36m2025-05-12 09:30:15,150[0m][[34mtrain[0m][[32mINFO[0m] - [1mValid Summary | End of Epoch 186 | Time 439.54s | Valid Loss 0.65767[0m
+[[36m2025-05-12 09:30:15,157[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 09:30:15,158[0m][[34mtrain[0m][[32mINFO[0m] - [1mOverall Summary | Epoch 186 | Train 0.35711 | Valid 0.65767 | Best 0.62871[0m
+[[36m2025-05-12 09:30:18,707[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 09:30:18,708[0m][[34mtrain[0m][[32mINFO[0m] - Training...[0m
+[[36m2025-05-12 09:31:27,486[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 187 | 50/508 | 1.5 it/sec | L1_loss 0.00306 | Multistft_loss 0.36493[0m
+[[36m2025-05-12 09:32:02,271[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 187 | 100/508 | 1.5 it/sec | L1_loss 0.00259 | Multistft_loss 0.36214[0m
+[[36m2025-05-12 09:32:37,101[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 187 | 150/508 | 1.4 it/sec | L1_loss 0.00246 | Multistft_loss 0.34553[0m
+[[36m2025-05-12 09:33:12,005[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 187 | 200/508 | 1.4 it/sec | L1_loss 0.00313 | Multistft_loss 0.37403[0m
+[[36m2025-05-12 09:33:46,906[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 187 | 250/508 | 1.4 it/sec | L1_loss 0.00288 | Multistft_loss 0.36618[0m
+[[36m2025-05-12 09:34:21,805[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 187 | 300/508 | 1.4 it/sec | L1_loss 0.00230 | Multistft_loss 0.35972[0m
+[[36m2025-05-12 09:34:56,709[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 187 | 350/508 | 1.4 it/sec | L1_loss 0.00295 | Multistft_loss 0.36950[0m
+[[36m2025-05-12 09:35:31,631[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 187 | 400/508 | 1.4 it/sec | L1_loss 0.00223 | Multistft_loss 0.35370[0m
+[[36m2025-05-12 09:36:06,528[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 187 | 450/508 | 1.4 it/sec | L1_loss 0.00249 | Multistft_loss 0.35016[0m
+[[36m2025-05-12 09:36:41,454[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 187 | 500/508 | 1.4 it/sec | L1_loss 0.00286 | Multistft_loss 0.34573[0m
+[[36m2025-05-12 09:36:48,007[0m][[34mtrain[0m][[32mINFO[0m] - [1mTrain Summary | End of Epoch 187 | Time 389.30s | Train Loss 0.35736[0m
+[[36m2025-05-12 09:36:48,008[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 09:36:48,008[0m][[34mtrain[0m][[32mINFO[0m] - Validation...[0m
+[[36m2025-05-12 09:37:09,918[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 187 | 50/500 | 14.8 it/sec | L1_loss 0.00690 | Multistft_loss 0.60662[0m
+[[36m2025-05-12 09:37:13,476[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 187 | 100/500 | 14.4 it/sec | L1_loss 0.00588 | Multistft_loss 0.63312[0m
+[[36m2025-05-12 09:37:16,326[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 187 | 150/500 | 15.3 it/sec | L1_loss 0.00569 | Multistft_loss 0.67141[0m
+[[36m2025-05-12 09:37:19,255[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 187 | 200/500 | 15.7 it/sec | L1_loss 0.00460 | Multistft_loss 0.59476[0m
+[[36m2025-05-12 09:37:22,152[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 187 | 250/500 | 16.0 it/sec | L1_loss 0.00549 | Multistft_loss 0.62557[0m
+[[36m2025-05-12 09:37:24,902[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 187 | 300/500 | 16.3 it/sec | L1_loss 0.00425 | Multistft_loss 0.63008[0m
+[[36m2025-05-12 09:37:27,721[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 187 | 350/500 | 16.5 it/sec | L1_loss 0.00413 | Multistft_loss 0.63584[0m
+[[36m2025-05-12 09:37:30,531[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 187 | 400/500 | 16.7 it/sec | L1_loss 0.00302 | Multistft_loss 0.73884[0m
+[[36m2025-05-12 09:37:33,734[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 187 | 450/500 | 16.5 it/sec | L1_loss 0.00215 | Multistft_loss 0.58308[0m
+[[36m2025-05-12 09:37:37,658[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 187 | 500/500 | 16.1 it/sec | L1_loss 0.00270 | Multistft_loss 0.59185[0m
+[[36m2025-05-12 09:37:37,660[0m][[34mtrain[0m][[32mINFO[0m] - [1mValid Summary | End of Epoch 187 | Time 438.95s | Valid Loss 0.64123[0m
+[[36m2025-05-12 09:37:37,663[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 09:37:37,664[0m][[34mtrain[0m][[32mINFO[0m] - [1mOverall Summary | Epoch 187 | Train 0.35736 | Valid 0.64123 | Best 0.62871[0m
+[[36m2025-05-12 09:37:41,203[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 09:37:41,204[0m][[34mtrain[0m][[32mINFO[0m] - Training...[0m
+[[36m2025-05-12 09:38:50,451[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 188 | 50/508 | 1.5 it/sec | L1_loss 0.00297 | Multistft_loss 0.35694[0m
+[[36m2025-05-12 09:39:25,269[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 188 | 100/508 | 1.5 it/sec | L1_loss 0.00328 | Multistft_loss 0.35302[0m
+[[36m2025-05-12 09:40:00,182[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 188 | 150/508 | 1.4 it/sec | L1_loss 0.00279 | Multistft_loss 0.36193[0m
+[[36m2025-05-12 09:40:35,127[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 188 | 200/508 | 1.4 it/sec | L1_loss 0.00306 | Multistft_loss 0.35503[0m
+[[36m2025-05-12 09:41:10,064[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 188 | 250/508 | 1.4 it/sec | L1_loss 0.00286 | Multistft_loss 0.34990[0m
+[[36m2025-05-12 09:41:45,004[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 188 | 300/508 | 1.4 it/sec | L1_loss 0.00239 | Multistft_loss 0.35502[0m
+[[36m2025-05-12 09:42:19,956[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 188 | 350/508 | 1.4 it/sec | L1_loss 0.00325 | Multistft_loss 0.37024[0m
+[[36m2025-05-12 09:42:54,936[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 188 | 400/508 | 1.4 it/sec | L1_loss 0.00285 | Multistft_loss 0.34024[0m
+[[36m2025-05-12 09:43:29,894[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 188 | 450/508 | 1.4 it/sec | L1_loss 0.00307 | Multistft_loss 0.35461[0m
+[[36m2025-05-12 09:44:04,845[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 188 | 500/508 | 1.4 it/sec | L1_loss 0.00323 | Multistft_loss 0.33992[0m
+[[36m2025-05-12 09:44:11,425[0m][[34mtrain[0m][[32mINFO[0m] - [1mTrain Summary | End of Epoch 188 | Time 390.22s | Train Loss 0.35664[0m
+[[36m2025-05-12 09:44:11,426[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 09:44:11,426[0m][[34mtrain[0m][[32mINFO[0m] - Validation...[0m
+[[36m2025-05-12 09:44:33,843[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 188 | 50/500 | 15.5 it/sec | L1_loss 0.00711 | Multistft_loss 0.57354[0m
+[[36m2025-05-12 09:44:37,379[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 188 | 100/500 | 14.8 it/sec | L1_loss 0.00609 | Multistft_loss 0.63734[0m
+[[36m2025-05-12 09:44:40,217[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 188 | 150/500 | 15.6 it/sec | L1_loss 0.00597 | Multistft_loss 0.68821[0m
+[[36m2025-05-12 09:44:43,132[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 188 | 200/500 | 16.0 it/sec | L1_loss 0.00552 | Multistft_loss 0.63902[0m
+[[36m2025-05-12 09:44:46,016[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 188 | 250/500 | 16.2 it/sec | L1_loss 0.00554 | Multistft_loss 0.58012[0m
+[[36m2025-05-12 09:44:48,759[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 188 | 300/500 | 16.5 it/sec | L1_loss 0.00457 | Multistft_loss 0.62982[0m
+[[36m2025-05-12 09:44:51,568[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 188 | 350/500 | 16.7 it/sec | L1_loss 0.00405 | Multistft_loss 0.62729[0m
+[[36m2025-05-12 09:44:54,367[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 188 | 400/500 | 16.8 it/sec | L1_loss 0.00314 | Multistft_loss 0.73906[0m
+[[36m2025-05-12 09:44:57,562[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 188 | 450/500 | 16.7 it/sec | L1_loss 0.00220 | Multistft_loss 0.59116[0m
+[[36m2025-05-12 09:45:01,471[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 188 | 500/500 | 16.2 it/sec | L1_loss 0.00271 | Multistft_loss 0.58721[0m
+[[36m2025-05-12 09:45:01,472[0m][[34mtrain[0m][[32mINFO[0m] - [1mValid Summary | End of Epoch 188 | Time 440.27s | Valid Loss 0.63782[0m
+[[36m2025-05-12 09:45:01,485[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 09:45:01,486[0m][[34mtrain[0m][[32mINFO[0m] - [1mOverall Summary | Epoch 188 | Train 0.35664 | Valid 0.63782 | Best 0.62871[0m
+[[36m2025-05-12 09:45:05,028[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 09:45:05,029[0m][[34mtrain[0m][[32mINFO[0m] - Training...[0m
+[[36m2025-05-12 09:46:14,363[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 189 | 50/508 | 1.5 it/sec | L1_loss 0.00301 | Multistft_loss 0.33634[0m
+[[36m2025-05-12 09:46:49,237[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 189 | 100/508 | 1.5 it/sec | L1_loss 0.00285 | Multistft_loss 0.35458[0m
+[[36m2025-05-12 09:47:24,155[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 189 | 150/508 | 1.4 it/sec | L1_loss 0.00295 | Multistft_loss 0.35463[0m
+[[36m2025-05-12 09:47:59,110[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 189 | 200/508 | 1.4 it/sec | L1_loss 0.00373 | Multistft_loss 0.35103[0m
+[[36m2025-05-12 09:48:34,081[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 189 | 250/508 | 1.4 it/sec | L1_loss 0.00290 | Multistft_loss 0.36403[0m
+[[36m2025-05-12 09:49:09,045[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 189 | 300/508 | 1.4 it/sec | L1_loss 0.00278 | Multistft_loss 0.34302[0m
+[[36m2025-05-12 09:49:44,014[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 189 | 350/508 | 1.4 it/sec | L1_loss 0.00306 | Multistft_loss 0.35758[0m
+[[36m2025-05-12 09:50:19,002[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 189 | 400/508 | 1.4 it/sec | L1_loss 0.00280 | Multistft_loss 0.35593[0m
+[[36m2025-05-12 09:50:53,996[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 189 | 450/508 | 1.4 it/sec | L1_loss 0.00281 | Multistft_loss 0.34963[0m
+[[36m2025-05-12 09:51:28,983[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 189 | 500/508 | 1.4 it/sec | L1_loss 0.00226 | Multistft_loss 0.34510[0m
+[[36m2025-05-12 09:51:35,541[0m][[34mtrain[0m][[32mINFO[0m] - [1mTrain Summary | End of Epoch 189 | Time 390.51s | Train Loss 0.35705[0m
+[[36m2025-05-12 09:51:35,542[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 09:51:35,542[0m][[34mtrain[0m][[32mINFO[0m] - Validation...[0m
+[[36m2025-05-12 09:51:57,139[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 189 | 50/500 | 15.2 it/sec | L1_loss 0.00696 | Multistft_loss 0.58131[0m
+[[36m2025-05-12 09:52:00,682[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 189 | 100/500 | 14.7 it/sec | L1_loss 0.00603 | Multistft_loss 0.63413[0m
+[[36m2025-05-12 09:52:03,524[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 189 | 150/500 | 15.5 it/sec | L1_loss 0.00610 | Multistft_loss 0.67123[0m
+[[36m2025-05-12 09:52:06,440[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 189 | 200/500 | 15.9 it/sec | L1_loss 0.00499 | Multistft_loss 0.61383[0m
+[[36m2025-05-12 09:52:09,328[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 189 | 250/500 | 16.2 it/sec | L1_loss 0.00556 | Multistft_loss 0.61604[0m
+[[36m2025-05-12 09:52:12,076[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 189 | 300/500 | 16.5 it/sec | L1_loss 0.00418 | Multistft_loss 0.60282[0m
+[[36m2025-05-12 09:52:14,887[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 189 | 350/500 | 16.6 it/sec | L1_loss 0.00416 | Multistft_loss 0.64359[0m
+[[36m2025-05-12 09:52:17,688[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 189 | 400/500 | 16.8 it/sec | L1_loss 0.00313 | Multistft_loss 0.75435[0m
+[[36m2025-05-12 09:52:20,881[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 189 | 450/500 | 16.7 it/sec | L1_loss 0.00219 | Multistft_loss 0.58793[0m
+[[36m2025-05-12 09:52:24,784[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 189 | 500/500 | 16.2 it/sec | L1_loss 0.00275 | Multistft_loss 0.59510[0m
+[[36m2025-05-12 09:52:24,785[0m][[34mtrain[0m][[32mINFO[0m] - [1mValid Summary | End of Epoch 189 | Time 439.76s | Valid Loss 0.63857[0m
+[[36m2025-05-12 09:52:24,785[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 09:52:24,785[0m][[34mtrain[0m][[32mINFO[0m] - [1mOverall Summary | Epoch 189 | Train 0.35705 | Valid 0.63857 | Best 0.62871[0m
+[[36m2025-05-12 09:52:28,378[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 09:52:28,379[0m][[34mtrain[0m][[32mINFO[0m] - Training...[0m
+[[36m2025-05-12 09:53:37,668[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 190 | 50/508 | 1.5 it/sec | L1_loss 0.00284 | Multistft_loss 0.37272[0m
+[[36m2025-05-12 09:54:12,547[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 190 | 100/508 | 1.5 it/sec | L1_loss 0.00221 | Multistft_loss 0.35208[0m
+[[36m2025-05-12 09:54:47,519[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 190 | 150/508 | 1.4 it/sec | L1_loss 0.00272 | Multistft_loss 0.35579[0m
+[[36m2025-05-12 09:55:22,492[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 190 | 200/508 | 1.4 it/sec | L1_loss 0.00288 | Multistft_loss 0.34624[0m
+[[36m2025-05-12 09:55:57,477[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 190 | 250/508 | 1.4 it/sec | L1_loss 0.00400 | Multistft_loss 0.34893[0m
+[[36m2025-05-12 09:56:32,452[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 190 | 300/508 | 1.4 it/sec | L1_loss 0.00317 | Multistft_loss 0.35409[0m
+[[36m2025-05-12 09:57:07,397[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 190 | 350/508 | 1.4 it/sec | L1_loss 0.00336 | Multistft_loss 0.35687[0m
+[[36m2025-05-12 09:57:42,351[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 190 | 400/508 | 1.4 it/sec | L1_loss 0.00227 | Multistft_loss 0.33658[0m
+[[36m2025-05-12 09:58:17,341[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 190 | 450/508 | 1.4 it/sec | L1_loss 0.00256 | Multistft_loss 0.34648[0m
+[[36m2025-05-12 09:58:52,326[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 190 | 500/508 | 1.4 it/sec | L1_loss 0.00252 | Multistft_loss 0.33900[0m
+[[36m2025-05-12 09:58:58,889[0m][[34mtrain[0m][[32mINFO[0m] - [1mTrain Summary | End of Epoch 190 | Time 390.51s | Train Loss 0.35686[0m
+[[36m2025-05-12 09:58:58,890[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 09:58:58,890[0m][[34mtrain[0m][[32mINFO[0m] - Validation...[0m
+[[36m2025-05-12 09:59:20,679[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 190 | 50/500 | 14.6 it/sec | L1_loss 0.00727 | Multistft_loss 0.77643[0m
+[[36m2025-05-12 09:59:24,243[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 190 | 100/500 | 14.3 it/sec | L1_loss 0.00581 | Multistft_loss 0.69051[0m
+[[36m2025-05-12 09:59:27,098[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 190 | 150/500 | 15.2 it/sec | L1_loss 0.00531 | Multistft_loss 0.70438[0m
+[[36m2025-05-12 09:59:30,029[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 190 | 200/500 | 15.6 it/sec | L1_loss 0.00405 | Multistft_loss 0.66942[0m
+[[36m2025-05-12 09:59:32,925[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 190 | 250/500 | 15.9 it/sec | L1_loss 0.00544 | Multistft_loss 0.79120[0m
+[[36m2025-05-12 09:59:35,677[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 190 | 300/500 | 16.3 it/sec | L1_loss 0.00452 | Multistft_loss 0.81750[0m
+[[36m2025-05-12 09:59:38,502[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 190 | 350/500 | 16.5 it/sec | L1_loss 0.00380 | Multistft_loss 0.69225[0m
+[[36m2025-05-12 09:59:41,313[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 190 | 400/500 | 16.6 it/sec | L1_loss 0.00287 | Multistft_loss 0.70792[0m
+[[36m2025-05-12 09:59:44,522[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 190 | 450/500 | 16.5 it/sec | L1_loss 0.00197 | Multistft_loss 0.56411[0m
+[[36m2025-05-12 09:59:48,451[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 190 | 500/500 | 16.0 it/sec | L1_loss 0.00330 | Multistft_loss 0.72535[0m
+[[36m2025-05-12 09:59:48,452[0m][[34mtrain[0m][[32mINFO[0m] - [1mValid Summary | End of Epoch 190 | Time 440.07s | Valid Loss 0.72633[0m
+[[36m2025-05-12 09:59:48,453[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 09:59:48,453[0m][[34mtrain[0m][[32mINFO[0m] - [1mOverall Summary | Epoch 190 | Train 0.35686 | Valid 0.72633 | Best 0.62871[0m
+[[36m2025-05-12 09:59:52,013[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 09:59:52,014[0m][[34mtrain[0m][[32mINFO[0m] - Training...[0m
+[[36m2025-05-12 10:01:01,537[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 191 | 50/508 | 1.5 it/sec | L1_loss 0.00268 | Multistft_loss 0.35407[0m
+[[36m2025-05-12 10:01:36,395[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 191 | 100/508 | 1.5 it/sec | L1_loss 0.00326 | Multistft_loss 0.35442[0m
+[[36m2025-05-12 10:02:11,280[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 191 | 150/508 | 1.4 it/sec | L1_loss 0.00257 | Multistft_loss 0.35807[0m
+[[36m2025-05-12 10:02:46,153[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 191 | 200/508 | 1.4 it/sec | L1_loss 0.00264 | Multistft_loss 0.33108[0m
+[[36m2025-05-12 10:03:21,082[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 191 | 250/508 | 1.4 it/sec | L1_loss 0.00251 | Multistft_loss 0.35045[0m
+[[36m2025-05-12 10:03:56,033[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 191 | 300/508 | 1.4 it/sec | L1_loss 0.00332 | Multistft_loss 0.35110[0m
+[[36m2025-05-12 10:04:31,001[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 191 | 350/508 | 1.4 it/sec | L1_loss 0.00259 | Multistft_loss 0.34686[0m
+[[36m2025-05-12 10:05:05,969[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 191 | 400/508 | 1.4 it/sec | L1_loss 0.00326 | Multistft_loss 0.35856[0m
+[[36m2025-05-12 10:05:40,963[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 191 | 450/508 | 1.4 it/sec | L1_loss 0.00297 | Multistft_loss 0.36211[0m
+[[36m2025-05-12 10:06:15,931[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 191 | 500/508 | 1.4 it/sec | L1_loss 0.00268 | Multistft_loss 0.34173[0m
+[[36m2025-05-12 10:06:22,487[0m][[34mtrain[0m][[32mINFO[0m] - [1mTrain Summary | End of Epoch 191 | Time 390.47s | Train Loss 0.35636[0m
+[[36m2025-05-12 10:06:22,488[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 10:06:22,488[0m][[34mtrain[0m][[32mINFO[0m] - Validation...[0m
+[[36m2025-05-12 10:06:44,221[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 191 | 50/500 | 13.6 it/sec | L1_loss 0.00690 | Multistft_loss 0.57931[0m
+[[36m2025-05-12 10:06:47,776[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 191 | 100/500 | 13.8 it/sec | L1_loss 0.00603 | Multistft_loss 0.63206[0m
+[[36m2025-05-12 10:06:50,631[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 191 | 150/500 | 14.8 it/sec | L1_loss 0.00582 | Multistft_loss 0.66945[0m
+[[36m2025-05-12 10:06:53,561[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 191 | 200/500 | 15.3 it/sec | L1_loss 0.00445 | Multistft_loss 0.57251[0m
+[[36m2025-05-12 10:06:56,457[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 191 | 250/500 | 15.7 it/sec | L1_loss 0.00550 | Multistft_loss 0.58477[0m
+[[36m2025-05-12 10:06:59,211[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 191 | 300/500 | 16.1 it/sec | L1_loss 0.00414 | Multistft_loss 0.60293[0m
+[[36m2025-05-12 10:07:02,031[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 191 | 350/500 | 16.3 it/sec | L1_loss 0.00396 | Multistft_loss 0.62161[0m
+[[36m2025-05-12 10:07:04,841[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 191 | 400/500 | 16.4 it/sec | L1_loss 0.00301 | Multistft_loss 0.73423[0m
+[[36m2025-05-12 10:07:08,046[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 191 | 450/500 | 16.3 it/sec | L1_loss 0.00210 | Multistft_loss 0.58339[0m
+[[36m2025-05-12 10:07:11,979[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 191 | 500/500 | 15.9 it/sec | L1_loss 0.00276 | Multistft_loss 0.59202[0m
+[[36m2025-05-12 10:07:11,980[0m][[34mtrain[0m][[32mINFO[0m] - [1mValid Summary | End of Epoch 191 | Time 439.97s | Valid Loss 0.63235[0m
+[[36m2025-05-12 10:07:11,981[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 10:07:11,981[0m][[34mtrain[0m][[32mINFO[0m] - [1mOverall Summary | Epoch 191 | Train 0.35636 | Valid 0.63235 | Best 0.62871[0m
+[[36m2025-05-12 10:07:15,177[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 10:07:15,178[0m][[34mtrain[0m][[32mINFO[0m] - Training...[0m
+[[36m2025-05-12 10:08:24,835[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 192 | 50/508 | 1.5 it/sec | L1_loss 0.00355 | Multistft_loss 0.34697[0m
+[[36m2025-05-12 10:08:59,645[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 192 | 100/508 | 1.5 it/sec | L1_loss 0.00260 | Multistft_loss 0.36613[0m
+[[36m2025-05-12 10:09:34,568[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 192 | 150/508 | 1.4 it/sec | L1_loss 0.00283 | Multistft_loss 0.33055[0m
+[[36m2025-05-12 10:10:09,512[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 192 | 200/508 | 1.4 it/sec | L1_loss 0.00241 | Multistft_loss 0.33505[0m
+[[36m2025-05-12 10:10:44,470[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 192 | 250/508 | 1.4 it/sec | L1_loss 0.00274 | Multistft_loss 0.36429[0m
+[[36m2025-05-12 10:11:19,423[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 192 | 300/508 | 1.4 it/sec | L1_loss 0.00282 | Multistft_loss 0.36653[0m
+[[36m2025-05-12 10:11:54,406[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 192 | 350/508 | 1.4 it/sec | L1_loss 0.00250 | Multistft_loss 0.37895[0m
+[[36m2025-05-12 10:12:29,398[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 192 | 400/508 | 1.4 it/sec | L1_loss 0.00284 | Multistft_loss 0.35711[0m
+[[36m2025-05-12 10:13:04,387[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 192 | 450/508 | 1.4 it/sec | L1_loss 0.00284 | Multistft_loss 0.35110[0m
+[[36m2025-05-12 10:13:39,374[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 192 | 500/508 | 1.4 it/sec | L1_loss 0.00226 | Multistft_loss 0.34512[0m
+[[36m2025-05-12 10:13:45,980[0m][[34mtrain[0m][[32mINFO[0m] - [1mTrain Summary | End of Epoch 192 | Time 390.80s | Train Loss 0.35623[0m
+[[36m2025-05-12 10:13:45,981[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 10:13:45,982[0m][[34mtrain[0m][[32mINFO[0m] - Validation...[0m
+[[36m2025-05-12 10:14:07,843[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 192 | 50/500 | 15.5 it/sec | L1_loss 0.00713 | Multistft_loss 0.57749[0m
+[[36m2025-05-12 10:14:11,399[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 192 | 100/500 | 14.7 it/sec | L1_loss 0.00612 | Multistft_loss 0.62913[0m
+[[36m2025-05-12 10:14:14,247[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 192 | 150/500 | 15.6 it/sec | L1_loss 0.00661 | Multistft_loss 0.72777[0m
+[[36m2025-05-12 10:14:17,176[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 192 | 200/500 | 15.9 it/sec | L1_loss 0.00479 | Multistft_loss 0.58661[0m
+[[36m2025-05-12 10:14:20,072[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 192 | 250/500 | 16.2 it/sec | L1_loss 0.00543 | Multistft_loss 0.59794[0m
+[[36m2025-05-12 10:14:22,825[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 192 | 300/500 | 16.5 it/sec | L1_loss 0.00447 | Multistft_loss 0.62314[0m
+[[36m2025-05-12 10:14:25,645[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 192 | 350/500 | 16.6 it/sec | L1_loss 0.00438 | Multistft_loss 0.66957[0m
+[[36m2025-05-12 10:14:28,454[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 192 | 400/500 | 16.8 it/sec | L1_loss 0.00315 | Multistft_loss 0.77262[0m
+[[36m2025-05-12 10:14:31,656[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 192 | 450/500 | 16.6 it/sec | L1_loss 0.00219 | Multistft_loss 0.59048[0m
+[[36m2025-05-12 10:14:35,569[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 192 | 500/500 | 16.1 it/sec | L1_loss 0.00265 | Multistft_loss 0.58431[0m
+[[36m2025-05-12 10:14:35,571[0m][[34mtrain[0m][[32mINFO[0m] - [1mValid Summary | End of Epoch 192 | Time 440.39s | Valid Loss 0.64342[0m
+[[36m2025-05-12 10:14:35,571[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 10:14:35,572[0m][[34mtrain[0m][[32mINFO[0m] - [1mOverall Summary | Epoch 192 | Train 0.35623 | Valid 0.64342 | Best 0.62871[0m
+[[36m2025-05-12 10:14:39,119[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 10:14:39,120[0m][[34mtrain[0m][[32mINFO[0m] - Training...[0m
+[[36m2025-05-12 10:15:48,225[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 193 | 50/508 | 1.5 it/sec | L1_loss 0.00276 | Multistft_loss 0.37294[0m
+[[36m2025-05-12 10:16:23,087[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 193 | 100/508 | 1.5 it/sec | L1_loss 0.00291 | Multistft_loss 0.36487[0m
+[[36m2025-05-12 10:16:58,052[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 193 | 150/508 | 1.4 it/sec | L1_loss 0.00337 | Multistft_loss 0.36843[0m
+[[36m2025-05-12 10:17:33,004[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 193 | 200/508 | 1.4 it/sec | L1_loss 0.00320 | Multistft_loss 0.36009[0m
+[[36m2025-05-12 10:18:07,995[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 193 | 250/508 | 1.4 it/sec | L1_loss 0.00291 | Multistft_loss 0.33513[0m
+[[36m2025-05-12 10:18:42,987[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 193 | 300/508 | 1.4 it/sec | L1_loss 0.00282 | Multistft_loss 0.35674[0m
+[[36m2025-05-12 10:19:17,973[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 193 | 350/508 | 1.4 it/sec | L1_loss 0.00260 | Multistft_loss 0.35118[0m
+[[36m2025-05-12 10:19:52,962[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 193 | 400/508 | 1.4 it/sec | L1_loss 0.00247 | Multistft_loss 0.34448[0m
+[[36m2025-05-12 10:20:27,948[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 193 | 450/508 | 1.4 it/sec | L1_loss 0.00240 | Multistft_loss 0.34893[0m
+[[36m2025-05-12 10:21:02,936[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 193 | 500/508 | 1.4 it/sec | L1_loss 0.00264 | Multistft_loss 0.33851[0m
+[[36m2025-05-12 10:21:09,515[0m][[34mtrain[0m][[32mINFO[0m] - [1mTrain Summary | End of Epoch 193 | Time 390.40s | Train Loss 0.35621[0m
+[[36m2025-05-12 10:21:09,516[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 10:21:09,517[0m][[34mtrain[0m][[32mINFO[0m] - Validation...[0m
+[[36m2025-05-12 10:21:31,629[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 193 | 50/500 | 15.3 it/sec | L1_loss 0.00787 | Multistft_loss 0.61950[0m
+[[36m2025-05-12 10:21:35,170[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 193 | 100/500 | 14.7 it/sec | L1_loss 0.00629 | Multistft_loss 0.64291[0m
+[[36m2025-05-12 10:21:38,016[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 193 | 150/500 | 15.6 it/sec | L1_loss 0.00718 | Multistft_loss 0.75145[0m
+[[36m2025-05-12 10:21:40,932[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 193 | 200/500 | 15.9 it/sec | L1_loss 0.00537 | Multistft_loss 0.63557[0m
+[[36m2025-05-12 10:21:43,818[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 193 | 250/500 | 16.2 it/sec | L1_loss 0.00574 | Multistft_loss 0.59680[0m
+[[36m2025-05-12 10:21:46,564[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 193 | 300/500 | 16.5 it/sec | L1_loss 0.00463 | Multistft_loss 0.66200[0m
+[[36m2025-05-12 10:21:49,377[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 193 | 350/500 | 16.7 it/sec | L1_loss 0.00466 | Multistft_loss 0.69042[0m
+[[36m2025-05-12 10:21:52,184[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 193 | 400/500 | 16.8 it/sec | L1_loss 0.00311 | Multistft_loss 0.76552[0m
+[[36m2025-05-12 10:21:55,379[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 193 | 450/500 | 16.7 it/sec | L1_loss 0.00226 | Multistft_loss 0.59887[0m
+[[36m2025-05-12 10:21:59,280[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 193 | 500/500 | 16.2 it/sec | L1_loss 0.00276 | Multistft_loss 0.59446[0m
+[[36m2025-05-12 10:21:59,281[0m][[34mtrain[0m][[32mINFO[0m] - [1mValid Summary | End of Epoch 193 | Time 440.16s | Valid Loss 0.66160[0m
+[[36m2025-05-12 10:21:59,282[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 10:21:59,282[0m][[34mtrain[0m][[32mINFO[0m] - [1mOverall Summary | Epoch 193 | Train 0.35621 | Valid 0.66160 | Best 0.62871[0m
+[[36m2025-05-12 10:22:02,831[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 10:22:02,832[0m][[34mtrain[0m][[32mINFO[0m] - Training...[0m
+[[36m2025-05-12 10:23:12,087[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 194 | 50/508 | 1.5 it/sec | L1_loss 0.00318 | Multistft_loss 0.33916[0m
+[[36m2025-05-12 10:23:46,912[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 194 | 100/508 | 1.5 it/sec | L1_loss 0.00227 | Multistft_loss 0.32098[0m
+[[36m2025-05-12 10:24:21,847[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 194 | 150/508 | 1.4 it/sec | L1_loss 0.00208 | Multistft_loss 0.33664[0m
+[[36m2025-05-12 10:24:56,789[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 194 | 200/508 | 1.4 it/sec | L1_loss 0.00260 | Multistft_loss 0.34749[0m
+[[36m2025-05-12 10:25:31,753[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 194 | 250/508 | 1.4 it/sec | L1_loss 0.00273 | Multistft_loss 0.34571[0m
+[[36m2025-05-12 10:26:06,723[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 194 | 300/508 | 1.4 it/sec | L1_loss 0.00300 | Multistft_loss 0.33502[0m
+[[36m2025-05-12 10:26:41,690[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 194 | 350/508 | 1.4 it/sec | L1_loss 0.00311 | Multistft_loss 0.35348[0m
+[[36m2025-05-12 10:27:16,638[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 194 | 400/508 | 1.4 it/sec | L1_loss 0.00247 | Multistft_loss 0.31504[0m
+[[36m2025-05-12 10:27:51,551[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 194 | 450/508 | 1.4 it/sec | L1_loss 0.00253 | Multistft_loss 0.34625[0m
+[[36m2025-05-12 10:28:26,487[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 194 | 500/508 | 1.4 it/sec | L1_loss 0.00312 | Multistft_loss 0.35007[0m
+[[36m2025-05-12 10:28:33,053[0m][[34mtrain[0m][[32mINFO[0m] - [1mTrain Summary | End of Epoch 194 | Time 390.22s | Train Loss 0.35593[0m
+[[36m2025-05-12 10:28:33,054[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 10:28:33,054[0m][[34mtrain[0m][[32mINFO[0m] - Validation...[0m
+[[36m2025-05-12 10:28:55,115[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 194 | 50/500 | 15.4 it/sec | L1_loss 0.00701 | Multistft_loss 0.60583[0m
+[[36m2025-05-12 10:28:58,678[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 194 | 100/500 | 14.7 it/sec | L1_loss 0.00612 | Multistft_loss 0.62607[0m
+[[36m2025-05-12 10:29:01,535[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 194 | 150/500 | 15.5 it/sec | L1_loss 0.00668 | Multistft_loss 0.71530[0m
+[[36m2025-05-12 10:29:04,460[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 194 | 200/500 | 15.9 it/sec | L1_loss 0.00460 | Multistft_loss 0.58807[0m
+[[36m2025-05-12 10:29:07,342[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 194 | 250/500 | 16.2 it/sec | L1_loss 0.00544 | Multistft_loss 0.58149[0m
+[[36m2025-05-12 10:29:10,085[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 194 | 300/500 | 16.5 it/sec | L1_loss 0.00420 | Multistft_loss 0.59684[0m
+[[36m2025-05-12 10:29:12,892[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 194 | 350/500 | 16.6 it/sec | L1_loss 0.00444 | Multistft_loss 0.66820[0m
+[[36m2025-05-12 10:29:15,694[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 194 | 400/500 | 16.8 it/sec | L1_loss 0.00324 | Multistft_loss 0.78774[0m
+[[36m2025-05-12 10:29:18,883[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 194 | 450/500 | 16.7 it/sec | L1_loss 0.00221 | Multistft_loss 0.59586[0m
+[[36m2025-05-12 10:29:22,780[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 194 | 500/500 | 16.2 it/sec | L1_loss 0.00281 | Multistft_loss 0.58858[0m
+[[36m2025-05-12 10:29:22,781[0m][[34mtrain[0m][[32mINFO[0m] - [1mValid Summary | End of Epoch 194 | Time 439.95s | Valid Loss 0.64561[0m
+[[36m2025-05-12 10:29:22,781[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 10:29:22,782[0m][[34mtrain[0m][[32mINFO[0m] - [1mOverall Summary | Epoch 194 | Train 0.35593 | Valid 0.64561 | Best 0.62871[0m
+[[36m2025-05-12 10:29:26,192[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 10:29:26,192[0m][[34mtrain[0m][[32mINFO[0m] - Training...[0m
+[[36m2025-05-12 10:30:35,334[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 195 | 50/508 | 1.5 it/sec | L1_loss 0.00278 | Multistft_loss 0.35925[0m
+[[36m2025-05-12 10:31:10,142[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 195 | 100/508 | 1.5 it/sec | L1_loss 0.00256 | Multistft_loss 0.36880[0m
+[[36m2025-05-12 10:31:45,037[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 195 | 150/508 | 1.4 it/sec | L1_loss 0.00299 | Multistft_loss 0.33643[0m
+[[36m2025-05-12 10:32:19,951[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 195 | 200/508 | 1.4 it/sec | L1_loss 0.00360 | Multistft_loss 0.37370[0m
+[[36m2025-05-12 10:32:54,850[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 195 | 250/508 | 1.4 it/sec | L1_loss 0.00265 | Multistft_loss 0.35043[0m
+[[36m2025-05-12 10:33:29,723[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 195 | 300/508 | 1.4 it/sec | L1_loss 0.00224 | Multistft_loss 0.34471[0m
+[[36m2025-05-12 10:34:04,636[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 195 | 350/508 | 1.4 it/sec | L1_loss 0.00281 | Multistft_loss 0.36709[0m
+[[36m2025-05-12 10:34:39,570[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 195 | 400/508 | 1.4 it/sec | L1_loss 0.00257 | Multistft_loss 0.35886[0m
+[[36m2025-05-12 10:35:14,514[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 195 | 450/508 | 1.4 it/sec | L1_loss 0.00288 | Multistft_loss 0.36276[0m
+[[36m2025-05-12 10:35:49,477[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 195 | 500/508 | 1.4 it/sec | L1_loss 0.00261 | Multistft_loss 0.35098[0m
+[[36m2025-05-12 10:35:56,022[0m][[34mtrain[0m][[32mINFO[0m] - [1mTrain Summary | End of Epoch 195 | Time 389.83s | Train Loss 0.35609[0m
+[[36m2025-05-12 10:35:56,023[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 10:35:56,023[0m][[34mtrain[0m][[32mINFO[0m] - Validation...[0m
+[[36m2025-05-12 10:36:18,448[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 195 | 50/500 | 14.0 it/sec | L1_loss 0.00695 | Multistft_loss 0.72796[0m
+[[36m2025-05-12 10:36:22,024[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 195 | 100/500 | 14.0 it/sec | L1_loss 0.00593 | Multistft_loss 0.64116[0m
+[[36m2025-05-12 10:36:24,887[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 195 | 150/500 | 15.0 it/sec | L1_loss 0.00562 | Multistft_loss 0.67004[0m
+[[36m2025-05-12 10:36:27,828[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 195 | 200/500 | 15.4 it/sec | L1_loss 0.00441 | Multistft_loss 0.58908[0m
+[[36m2025-05-12 10:36:30,735[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 195 | 250/500 | 15.7 it/sec | L1_loss 0.00532 | Multistft_loss 0.64340[0m
+[[36m2025-05-12 10:36:33,496[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 195 | 300/500 | 16.1 it/sec | L1_loss 0.00444 | Multistft_loss 0.71326[0m
+[[36m2025-05-12 10:36:36,326[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 195 | 350/500 | 16.3 it/sec | L1_loss 0.00390 | Multistft_loss 0.63744[0m
+[[36m2025-05-12 10:36:39,145[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 195 | 400/500 | 16.5 it/sec | L1_loss 0.00294 | Multistft_loss 0.72587[0m
+[[36m2025-05-12 10:36:42,362[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 195 | 450/500 | 16.4 it/sec | L1_loss 0.00213 | Multistft_loss 0.57272[0m
+[[36m2025-05-12 10:36:46,282[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 195 | 500/500 | 15.9 it/sec | L1_loss 0.00289 | Multistft_loss 0.58863[0m
+[[36m2025-05-12 10:36:46,283[0m][[34mtrain[0m][[32mINFO[0m] - [1mValid Summary | End of Epoch 195 | Time 440.09s | Valid Loss 0.64596[0m
+[[36m2025-05-12 10:36:46,284[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 10:36:46,284[0m][[34mtrain[0m][[32mINFO[0m] - [1mOverall Summary | Epoch 195 | Train 0.35609 | Valid 0.64596 | Best 0.62871[0m
+[[36m2025-05-12 10:36:49,847[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 10:36:49,847[0m][[34mtrain[0m][[32mINFO[0m] - Training...[0m
+[[36m2025-05-12 10:37:58,861[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 196 | 50/508 | 1.5 it/sec | L1_loss 0.00292 | Multistft_loss 0.34977[0m
+[[36m2025-05-12 10:38:33,703[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 196 | 100/508 | 1.5 it/sec | L1_loss 0.00220 | Multistft_loss 0.33790[0m
+[[36m2025-05-12 10:39:08,643[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 196 | 150/508 | 1.4 it/sec | L1_loss 0.00275 | Multistft_loss 0.36756[0m
+[[36m2025-05-12 10:39:43,634[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 196 | 200/508 | 1.4 it/sec | L1_loss 0.00235 | Multistft_loss 0.35636[0m
+[[36m2025-05-12 10:40:18,622[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 196 | 250/508 | 1.4 it/sec | L1_loss 0.00307 | Multistft_loss 0.35777[0m
+[[36m2025-05-12 10:40:53,617[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 196 | 300/508 | 1.4 it/sec | L1_loss 0.00323 | Multistft_loss 0.35469[0m
+[[36m2025-05-12 10:41:28,604[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 196 | 350/508 | 1.4 it/sec | L1_loss 0.00282 | Multistft_loss 0.36038[0m
+[[36m2025-05-12 10:42:03,590[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 196 | 400/508 | 1.4 it/sec | L1_loss 0.00274 | Multistft_loss 0.34143[0m
+[[36m2025-05-12 10:42:38,568[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 196 | 450/508 | 1.4 it/sec | L1_loss 0.00259 | Multistft_loss 0.34303[0m
+[[36m2025-05-12 10:43:13,520[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 196 | 500/508 | 1.4 it/sec | L1_loss 0.00266 | Multistft_loss 0.36022[0m
+[[36m2025-05-12 10:43:20,101[0m][[34mtrain[0m][[32mINFO[0m] - [1mTrain Summary | End of Epoch 196 | Time 390.25s | Train Loss 0.35544[0m
+[[36m2025-05-12 10:43:20,102[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 10:43:20,103[0m][[34mtrain[0m][[32mINFO[0m] - Validation...[0m
+[[36m2025-05-12 10:43:42,219[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 196 | 50/500 | 15.4 it/sec | L1_loss 0.00678 | Multistft_loss 0.58742[0m
+[[36m2025-05-12 10:43:45,767[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 196 | 100/500 | 14.7 it/sec | L1_loss 0.00586 | Multistft_loss 0.62454[0m
+[[36m2025-05-12 10:43:48,612[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 196 | 150/500 | 15.6 it/sec | L1_loss 0.00599 | Multistft_loss 0.68816[0m
+[[36m2025-05-12 10:43:51,533[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 196 | 200/500 | 15.9 it/sec | L1_loss 0.00450 | Multistft_loss 0.57585[0m
+[[36m2025-05-12 10:43:54,423[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 196 | 250/500 | 16.2 it/sec | L1_loss 0.00560 | Multistft_loss 0.58960[0m
+[[36m2025-05-12 10:43:57,169[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 196 | 300/500 | 16.5 it/sec | L1_loss 0.00439 | Multistft_loss 0.65125[0m
+[[36m2025-05-12 10:43:59,984[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 196 | 350/500 | 16.7 it/sec | L1_loss 0.00414 | Multistft_loss 0.64267[0m
+[[36m2025-05-12 10:44:02,791[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 196 | 400/500 | 16.8 it/sec | L1_loss 0.00311 | Multistft_loss 0.76365[0m
+[[36m2025-05-12 10:44:05,987[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 196 | 450/500 | 16.7 it/sec | L1_loss 0.00216 | Multistft_loss 0.58234[0m
+[[36m2025-05-12 10:44:09,880[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 196 | 500/500 | 16.2 it/sec | L1_loss 0.00281 | Multistft_loss 0.56941[0m
+[[36m2025-05-12 10:44:09,881[0m][[34mtrain[0m][[32mINFO[0m] - [1mValid Summary | End of Epoch 196 | Time 440.03s | Valid Loss 0.63641[0m
+[[36m2025-05-12 10:44:09,898[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 10:44:09,899[0m][[34mtrain[0m][[32mINFO[0m] - [1mOverall Summary | Epoch 196 | Train 0.35544 | Valid 0.63641 | Best 0.62871[0m
+[[36m2025-05-12 10:44:13,418[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 10:44:13,419[0m][[34mtrain[0m][[32mINFO[0m] - Training...[0m
+[[36m2025-05-12 10:45:22,848[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 197 | 50/508 | 1.5 it/sec | L1_loss 0.00278 | Multistft_loss 0.35283[0m
+[[36m2025-05-12 10:45:57,584[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 197 | 100/508 | 1.5 it/sec | L1_loss 0.00190 | Multistft_loss 0.34594[0m
+[[36m2025-05-12 10:46:32,392[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 197 | 150/508 | 1.4 it/sec | L1_loss 0.00288 | Multistft_loss 0.35517[0m
+[[36m2025-05-12 10:47:07,292[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 197 | 200/508 | 1.4 it/sec | L1_loss 0.00308 | Multistft_loss 0.33742[0m
+[[36m2025-05-12 10:47:42,223[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 197 | 250/508 | 1.4 it/sec | L1_loss 0.00296 | Multistft_loss 0.35597[0m
+[[36m2025-05-12 10:48:17,159[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 197 | 300/508 | 1.4 it/sec | L1_loss 0.00244 | Multistft_loss 0.33755[0m
+[[36m2025-05-12 10:48:52,120[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 197 | 350/508 | 1.4 it/sec | L1_loss 0.00278 | Multistft_loss 0.35536[0m
+[[36m2025-05-12 10:49:27,108[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 197 | 400/508 | 1.4 it/sec | L1_loss 0.00252 | Multistft_loss 0.35985[0m
+[[36m2025-05-12 10:50:02,099[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 197 | 450/508 | 1.4 it/sec | L1_loss 0.00243 | Multistft_loss 0.34302[0m
+[[36m2025-05-12 10:50:37,089[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 197 | 500/508 | 1.4 it/sec | L1_loss 0.00219 | Multistft_loss 0.36808[0m
+[[36m2025-05-12 10:50:43,715[0m][[34mtrain[0m][[32mINFO[0m] - [1mTrain Summary | End of Epoch 197 | Time 390.30s | Train Loss 0.35527[0m
+[[36m2025-05-12 10:50:43,717[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 10:50:43,717[0m][[34mtrain[0m][[32mINFO[0m] - Validation...[0m
+[[36m2025-05-12 10:51:05,898[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 197 | 50/500 | 15.3 it/sec | L1_loss 0.00690 | Multistft_loss 0.55719[0m
+[[36m2025-05-12 10:51:09,449[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 197 | 100/500 | 14.7 it/sec | L1_loss 0.00644 | Multistft_loss 0.64738[0m
+[[36m2025-05-12 10:51:12,294[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 197 | 150/500 | 15.5 it/sec | L1_loss 0.00748 | Multistft_loss 0.77992[0m
+[[36m2025-05-12 10:51:15,217[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 197 | 200/500 | 15.9 it/sec | L1_loss 0.00431 | Multistft_loss 0.57203[0m
+[[36m2025-05-12 10:51:18,108[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 197 | 250/500 | 16.1 it/sec | L1_loss 0.00519 | Multistft_loss 0.57981[0m
+[[36m2025-05-12 10:51:20,858[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 197 | 300/500 | 16.5 it/sec | L1_loss 0.00393 | Multistft_loss 0.60884[0m
+[[36m2025-05-12 10:51:23,674[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 197 | 350/500 | 16.6 it/sec | L1_loss 0.00457 | Multistft_loss 0.67764[0m
+[[36m2025-05-12 10:51:26,483[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 197 | 400/500 | 16.8 it/sec | L1_loss 0.00309 | Multistft_loss 0.77472[0m
+[[36m2025-05-12 10:51:29,679[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 197 | 450/500 | 16.6 it/sec | L1_loss 0.00230 | Multistft_loss 0.60576[0m
+[[36m2025-05-12 10:51:33,588[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 197 | 500/500 | 16.1 it/sec | L1_loss 0.00266 | Multistft_loss 0.58464[0m
+[[36m2025-05-12 10:51:33,590[0m][[34mtrain[0m][[32mINFO[0m] - [1mValid Summary | End of Epoch 197 | Time 440.17s | Valid Loss 0.64872[0m
+[[36m2025-05-12 10:51:33,590[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 10:51:33,591[0m][[34mtrain[0m][[32mINFO[0m] - [1mOverall Summary | Epoch 197 | Train 0.35527 | Valid 0.64872 | Best 0.62871[0m
+[[36m2025-05-12 10:51:36,677[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 10:51:36,677[0m][[34mtrain[0m][[32mINFO[0m] - Training...[0m
+[[36m2025-05-12 10:52:45,827[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 198 | 50/508 | 1.5 it/sec | L1_loss 0.00346 | Multistft_loss 0.35450[0m
+[[36m2025-05-12 10:53:20,620[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 198 | 100/508 | 1.5 it/sec | L1_loss 0.00259 | Multistft_loss 0.34341[0m
+[[36m2025-05-12 10:53:55,569[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 198 | 150/508 | 1.4 it/sec | L1_loss 0.00232 | Multistft_loss 0.33031[0m
+[[36m2025-05-12 10:54:30,537[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 198 | 200/508 | 1.4 it/sec | L1_loss 0.00242 | Multistft_loss 0.36887[0m
+[[36m2025-05-12 10:55:05,511[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 198 | 250/508 | 1.4 it/sec | L1_loss 0.00290 | Multistft_loss 0.34799[0m
+[[36m2025-05-12 10:55:40,498[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 198 | 300/508 | 1.4 it/sec | L1_loss 0.00301 | Multistft_loss 0.36663[0m
+[[36m2025-05-12 10:56:15,469[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 198 | 350/508 | 1.4 it/sec | L1_loss 0.00258 | Multistft_loss 0.35321[0m
+[[36m2025-05-12 10:56:50,462[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 198 | 400/508 | 1.4 it/sec | L1_loss 0.00319 | Multistft_loss 0.34901[0m
+[[36m2025-05-12 10:57:25,448[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 198 | 450/508 | 1.4 it/sec | L1_loss 0.00383 | Multistft_loss 0.36517[0m
+[[36m2025-05-12 10:58:00,437[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 198 | 500/508 | 1.4 it/sec | L1_loss 0.00259 | Multistft_loss 0.35479[0m
+[[36m2025-05-12 10:58:07,003[0m][[34mtrain[0m][[32mINFO[0m] - [1mTrain Summary | End of Epoch 198 | Time 390.33s | Train Loss 0.35492[0m
+[[36m2025-05-12 10:58:07,004[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 10:58:07,004[0m][[34mtrain[0m][[32mINFO[0m] - Validation...[0m
+[[36m2025-05-12 10:58:28,792[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 198 | 50/500 | 15.3 it/sec | L1_loss 0.00683 | Multistft_loss 0.74422[0m
+[[36m2025-05-12 10:58:32,359[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 198 | 100/500 | 14.7 it/sec | L1_loss 0.00578 | Multistft_loss 0.64853[0m
+[[36m2025-05-12 10:58:35,215[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 198 | 150/500 | 15.5 it/sec | L1_loss 0.00578 | Multistft_loss 0.70495[0m
+[[36m2025-05-12 10:58:38,144[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 198 | 200/500 | 15.9 it/sec | L1_loss 0.00422 | Multistft_loss 0.58905[0m
+[[36m2025-05-12 10:58:41,040[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 198 | 250/500 | 16.1 it/sec | L1_loss 0.00526 | Multistft_loss 0.64747[0m
+[[36m2025-05-12 10:58:43,798[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 198 | 300/500 | 16.4 it/sec | L1_loss 0.00442 | Multistft_loss 0.73765[0m
+[[36m2025-05-12 10:58:46,622[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 198 | 350/500 | 16.6 it/sec | L1_loss 0.00401 | Multistft_loss 0.64476[0m
+[[36m2025-05-12 10:58:49,437[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 198 | 400/500 | 16.7 it/sec | L1_loss 0.00271 | Multistft_loss 0.72189[0m
+[[36m2025-05-12 10:58:52,650[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 198 | 450/500 | 16.6 it/sec | L1_loss 0.00203 | Multistft_loss 0.56381[0m
+[[36m2025-05-12 10:58:56,585[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 198 | 500/500 | 16.1 it/sec | L1_loss 0.00286 | Multistft_loss 0.58280[0m
+[[36m2025-05-12 10:58:56,586[0m][[34mtrain[0m][[32mINFO[0m] - [1mValid Summary | End of Epoch 198 | Time 439.91s | Valid Loss 0.65979[0m
+[[36m2025-05-12 10:58:56,600[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 10:58:56,601[0m][[34mtrain[0m][[32mINFO[0m] - [1mOverall Summary | Epoch 198 | Train 0.35492 | Valid 0.65979 | Best 0.62871[0m
+[[36m2025-05-12 10:59:00,222[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 10:59:00,222[0m][[34mtrain[0m][[32mINFO[0m] - Training...[0m
+[[36m2025-05-12 11:00:09,604[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 199 | 50/508 | 1.5 it/sec | L1_loss 0.00222 | Multistft_loss 0.34065[0m
+[[36m2025-05-12 11:00:44,480[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 199 | 100/508 | 1.5 it/sec | L1_loss 0.00277 | Multistft_loss 0.33916[0m
+[[36m2025-05-12 11:01:19,453[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 199 | 150/508 | 1.4 it/sec | L1_loss 0.00301 | Multistft_loss 0.37126[0m
+[[36m2025-05-12 11:01:54,422[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 199 | 200/508 | 1.4 it/sec | L1_loss 0.00304 | Multistft_loss 0.36461[0m
+[[36m2025-05-12 11:02:29,413[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 199 | 250/508 | 1.4 it/sec | L1_loss 0.00301 | Multistft_loss 0.37020[0m
+[[36m2025-05-12 11:03:04,405[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 199 | 300/508 | 1.4 it/sec | L1_loss 0.00311 | Multistft_loss 0.35813[0m
+[[36m2025-05-12 11:03:39,391[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 199 | 350/508 | 1.4 it/sec | L1_loss 0.00288 | Multistft_loss 0.34615[0m
+[[36m2025-05-12 11:04:14,383[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 199 | 400/508 | 1.4 it/sec | L1_loss 0.00263 | Multistft_loss 0.34413[0m
+[[36m2025-05-12 11:04:49,374[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 199 | 450/508 | 1.4 it/sec | L1_loss 0.00359 | Multistft_loss 0.36263[0m
+[[36m2025-05-12 11:05:24,365[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 199 | 500/508 | 1.4 it/sec | L1_loss 0.00229 | Multistft_loss 0.33068[0m
+[[36m2025-05-12 11:05:30,946[0m][[34mtrain[0m][[32mINFO[0m] - [1mTrain Summary | End of Epoch 199 | Time 390.72s | Train Loss 0.35470[0m
+[[36m2025-05-12 11:05:30,947[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 11:05:30,947[0m][[34mtrain[0m][[32mINFO[0m] - Validation...[0m
+[[36m2025-05-12 11:05:52,862[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 199 | 50/500 | 15.4 it/sec | L1_loss 0.00726 | Multistft_loss 0.58275[0m
+[[36m2025-05-12 11:05:56,403[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 199 | 100/500 | 14.7 it/sec | L1_loss 0.00624 | Multistft_loss 0.63981[0m
+[[36m2025-05-12 11:05:59,245[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 199 | 150/500 | 15.6 it/sec | L1_loss 0.00680 | Multistft_loss 0.72821[0m
+[[36m2025-05-12 11:06:02,163[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 199 | 200/500 | 15.9 it/sec | L1_loss 0.00502 | Multistft_loss 0.62203[0m
+[[36m2025-05-12 11:06:05,050[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 199 | 250/500 | 16.2 it/sec | L1_loss 0.00545 | Multistft_loss 0.59374[0m
+[[36m2025-05-12 11:06:07,794[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 199 | 300/500 | 16.5 it/sec | L1_loss 0.00402 | Multistft_loss 0.61390[0m
+[[36m2025-05-12 11:06:10,605[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 199 | 350/500 | 16.7 it/sec | L1_loss 0.00467 | Multistft_loss 0.68489[0m
+[[36m2025-05-12 11:06:13,407[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 199 | 400/500 | 16.8 it/sec | L1_loss 0.00334 | Multistft_loss 0.82550[0m
+[[36m2025-05-12 11:06:16,597[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 199 | 450/500 | 16.7 it/sec | L1_loss 0.00227 | Multistft_loss 0.61295[0m
+[[36m2025-05-12 11:06:20,494[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 199 | 500/500 | 16.2 it/sec | L1_loss 0.00274 | Multistft_loss 0.58368[0m
+[[36m2025-05-12 11:06:20,495[0m][[34mtrain[0m][[32mINFO[0m] - [1mValid Summary | End of Epoch 199 | Time 440.27s | Valid Loss 0.65343[0m
+[[36m2025-05-12 11:06:20,496[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 11:06:20,496[0m][[34mtrain[0m][[32mINFO[0m] - [1mOverall Summary | Epoch 199 | Train 0.35470 | Valid 0.65343 | Best 0.62871[0m
+[[36m2025-05-12 11:06:23,740[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 11:06:23,740[0m][[34mtrain[0m][[32mINFO[0m] - Training...[0m
+[[36m2025-05-12 11:07:33,356[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 200 | 50/508 | 1.5 it/sec | L1_loss 0.00317 | Multistft_loss 0.35925[0m
+[[36m2025-05-12 11:08:08,230[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 200 | 100/508 | 1.5 it/sec | L1_loss 0.00270 | Multistft_loss 0.34298[0m
+[[36m2025-05-12 11:08:43,178[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 200 | 150/508 | 1.4 it/sec | L1_loss 0.00275 | Multistft_loss 0.36918[0m
+[[36m2025-05-12 11:09:18,166[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 200 | 200/508 | 1.4 it/sec | L1_loss 0.00299 | Multistft_loss 0.33335[0m
+[[36m2025-05-12 11:09:53,158[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 200 | 250/508 | 1.4 it/sec | L1_loss 0.00237 | Multistft_loss 0.34692[0m
+[[36m2025-05-12 11:10:28,151[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 200 | 300/508 | 1.4 it/sec | L1_loss 0.00214 | Multistft_loss 0.35244[0m
+[[36m2025-05-12 11:11:03,138[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 200 | 350/508 | 1.4 it/sec | L1_loss 0.00275 | Multistft_loss 0.36207[0m
+[[36m2025-05-12 11:11:38,122[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 200 | 400/508 | 1.4 it/sec | L1_loss 0.00278 | Multistft_loss 0.34918[0m
+[[36m2025-05-12 11:12:13,117[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 200 | 450/508 | 1.4 it/sec | L1_loss 0.00315 | Multistft_loss 0.34893[0m
+[[36m2025-05-12 11:12:48,106[0m][[34mtrain[0m][[32mINFO[0m] - Train | Epoch 200 | 500/508 | 1.4 it/sec | L1_loss 0.00314 | Multistft_loss 0.37274[0m
+[[36m2025-05-12 11:12:54,681[0m][[34mtrain[0m][[32mINFO[0m] - [1mTrain Summary | End of Epoch 200 | Time 390.94s | Train Loss 0.35446[0m
+[[36m2025-05-12 11:12:54,681[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 11:12:54,682[0m][[34mtrain[0m][[32mINFO[0m] - Validation...[0m
+[[36m2025-05-12 11:13:16,588[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 200 | 50/500 | 13.6 it/sec | L1_loss 0.00680 | Multistft_loss 0.58131[0m
+[[36m2025-05-12 11:13:20,140[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 200 | 100/500 | 13.8 it/sec | L1_loss 0.00610 | Multistft_loss 0.63723[0m
+[[36m2025-05-12 11:13:22,987[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 200 | 150/500 | 14.9 it/sec | L1_loss 0.00585 | Multistft_loss 0.67228[0m
+[[36m2025-05-12 11:13:25,912[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 200 | 200/500 | 15.4 it/sec | L1_loss 0.00506 | Multistft_loss 0.61251[0m
+[[36m2025-05-12 11:13:28,802[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 200 | 250/500 | 15.7 it/sec | L1_loss 0.00547 | Multistft_loss 0.59163[0m
+[[36m2025-05-12 11:13:31,549[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 200 | 300/500 | 16.1 it/sec | L1_loss 0.00433 | Multistft_loss 0.63125[0m
+[[36m2025-05-12 11:13:34,364[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 200 | 350/500 | 16.3 it/sec | L1_loss 0.00419 | Multistft_loss 0.65300[0m
+[[36m2025-05-12 11:13:37,171[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 200 | 400/500 | 16.5 it/sec | L1_loss 0.00290 | Multistft_loss 0.74425[0m
+[[36m2025-05-12 11:13:40,371[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 200 | 450/500 | 16.4 it/sec | L1_loss 0.00220 | Multistft_loss 0.59181[0m
+[[36m2025-05-12 11:13:44,277[0m][[34mtrain[0m][[32mINFO[0m] - Valid | Epoch 200 | 500/500 | 15.9 it/sec | L1_loss 0.00274 | Multistft_loss 0.59394[0m
+[[36m2025-05-12 11:13:44,278[0m][[34mtrain[0m][[32mINFO[0m] - [1mValid Summary | End of Epoch 200 | Time 440.54s | Valid Loss 0.63714[0m
+[[36m2025-05-12 11:13:44,291[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 11:13:44,291[0m][[34mtrain[0m][[32mINFO[0m] - Evaluating on the test set...[0m
+[[36m2025-05-12 11:21:19,239[0m][[34mtrain[0m][[32mINFO[0m] - Evaluate on 0dB | 400/2000 | 0.9 it/sec[0m
+[[36m2025-05-12 11:29:02,874[0m][[34mtrain[0m][[32mINFO[0m] - Evaluate on 0dB | 800/2000 | 0.9 it/sec[0m
+[[36m2025-05-12 11:36:36,336[0m][[34mtrain[0m][[32mINFO[0m] - Evaluate on 0dB | 1200/2000 | 0.9 it/sec[0m
+[[36m2025-05-12 11:43:50,525[0m][[34mtrain[0m][[32mINFO[0m] - Evaluate on 0dB | 1600/2000 | 0.9 it/sec[0m
+[[36m2025-05-12 11:51:17,464[0m][[34mtrain[0m][[32mINFO[0m] - Evaluate on 0dB | 2000/2000 | 0.9 it/sec[0m
+[[36m2025-05-12 11:51:17,467[0m][[34mtrain[0m][[32mINFO[0m] - [1mEpoch 200, Performance on 0dB: PESQ=2.0417, STOI=0.8964, CSIG=3.4150, CBAK=2.6031, COVL=2.7262[0m
+Special tokens have been added in the vocabulary, make sure the associated word embeddings are fine-tuned or trained.
+[[36m2025-05-12 11:54:24,179[0m][[34mtrain[0m][[32mINFO[0m] - STT Evaluation | 400/2000 | 2.2 it/sec[0m
+[[36m2025-05-12 11:57:30,743[0m][[34mtrain[0m][[32mINFO[0m] - STT Evaluation | 800/2000 | 2.2 it/sec[0m
+[[36m2025-05-12 12:00:32,904[0m][[34mtrain[0m][[32mINFO[0m] - STT Evaluation | 1200/2000 | 2.2 it/sec[0m
+[[36m2025-05-12 12:03:40,600[0m][[34mtrain[0m][[32mINFO[0m] - STT Evaluation | 1600/2000 | 2.2 it/sec[0m
+[[36m2025-05-12 12:06:40,509[0m][[34mtrain[0m][[32mINFO[0m] - STT Evaluation | 2000/2000 | 2.2 it/sec[0m
+[[36m2025-05-12 12:06:40,516[0m][[34mtrain[0m][[32mINFO[0m] - [1mEpoch 200, Performance on 0dB: CER=0.2217, WER=0.5111[0m
+[[36m2025-05-12 12:06:40,519[0m][[34mtrain[0m][[32mINFO[0m] - Enhance and save samples...[0m
+[[36m2025-05-12 12:07:05,997[0m][[34mtrain[0m][[32mINFO[0m] - Generate enhanced files | 4/20 | 2.4 it/sec[0m
+[[36m2025-05-12 12:07:08,069[0m][[34mtrain[0m][[32mINFO[0m] - Generate enhanced files | 8/20 | 2.2 it/sec[0m
+[[36m2025-05-12 12:07:10,287[0m][[34mtrain[0m][[32mINFO[0m] - Generate enhanced files | 12/20 | 2.1 it/sec[0m
+[[36m2025-05-12 12:07:12,323[0m][[34mtrain[0m][[32mINFO[0m] - Generate enhanced files | 16/20 | 2.0 it/sec[0m
+[[36m2025-05-12 12:07:15,297[0m][[34mtrain[0m][[32mINFO[0m] - Generate enhanced files | 20/20 | 1.9 it/sec[0m
+[[36m2025-05-12 12:07:15,367[0m][[34mtrain[0m][[32mINFO[0m] - ----------------------------------------------------------------------[0m
+[[36m2025-05-12 12:07:15,368[0m][[34mtrain[0m][[32mINFO[0m] - [1mOverall Summary | Epoch 200 | Train 0.35446 | Valid 0.63714 | Best 0.62871[0m
