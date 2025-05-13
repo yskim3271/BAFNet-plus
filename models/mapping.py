@@ -94,9 +94,13 @@ class mapping(nn.Module):
                  seq_module_depth=4,
                  dropout=0.1,
                  normalize=True,
+                 concat=False,
+                 spconv=False,
                  ):
 
         super().__init__()
+
+        assert len(hidden) == len(stride), "hidden and stride must have the same length"
 
         self.hidden = [1] + hidden
         self.kernel_size = kernel_size
@@ -109,6 +113,13 @@ class mapping(nn.Module):
         self.depthwise_conv_kernel_size = depthwise_conv_kernel_size
         self.dropout = dropout
         self.normalize = normalize
+        self.concat = concat
+        self.spconv = spconv
+
+        if self.spconv:
+            convtr = SPConvTranspose1d
+        else:
+            convtr = nn.ConvTranspose1d
 
         self.encoder = nn.ModuleList()
         self.decoder = nn.ModuleList()
@@ -130,9 +141,9 @@ class mapping(nn.Module):
             
             decode = []
             decode += [
-                nn.Conv1d(self.hidden[index + 1], self.hidden[index + 1]* 2, 1), 
+                nn.Conv1d(self.hidden[index + 1] if self.concat else self.hidden[index + 1] * 2, self.hidden[index + 1]* 2, 1), 
                 nn.GLU(1),
-                SPConvTranspose1d(self.hidden[index + 1], self.hidden[index], kernel_size, self.stride[index]),
+                convtr(self.hidden[index + 1], self.hidden[index], kernel_size, self.stride[index]),
                 nn.BatchNorm1d(self.hidden[index]),
             ]
             if index > 0:
@@ -190,7 +201,10 @@ class mapping(nn.Module):
         
         for decode in self.decoder:
             skip = skips.pop(-1)
-            x = x + skip[..., :x.shape[-1]]
+            if self.concat:
+                x = torch.cat((x, skip[..., :x.shape[-1]]), dim=1)
+            else:
+                x = x + skip[..., :x.shape[-1]]
             x = decode(x)
 
         x = x[..., :length]

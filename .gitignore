@@ -5,6 +5,7 @@ checkpoint
 run.sh
 sandbox.py
 backup
+output.log
 
 *pycache*
 *.pyc

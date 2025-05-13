@@ -2,11 +2,13 @@ model_name: mapping
 input_type: tm
 
 param:
-  hidden: [256, 512, 1024, 1024, 1024]
+  hidden: [64, 128, 256, 512, 1024]
   kernel_size: 8
-  kernel_size_2: 9
+  kernel_size_2: 8
   stride: [2, 2, 4, 4, 4]
   depthwise_conv_kernel_size: 15
   seq_module_depth: 4
   dropout: 0.1
   normalize: true
+  concat: true
+  spconv: true
