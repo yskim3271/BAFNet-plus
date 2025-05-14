@@ -141,7 +141,7 @@ class mapping(nn.Module):
             
             decode = []
             decode += [
-                nn.Conv1d(self.hidden[index + 1] if self.concat else self.hidden[index + 1] * 2, self.hidden[index + 1]* 2, 1), 
+                nn.Conv1d(self.hidden[index + 1] * 2 if self.concat else self.hidden[index + 1], self.hidden[index + 1]* 2, 1), 
                 nn.GLU(1),
                 convtr(self.hidden[index + 1], self.hidden[index], kernel_size, self.stride[index]),
                 nn.BatchNorm1d(self.hidden[index]),

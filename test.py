@@ -2,9 +2,13 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 from models.mapping import mapping, SPConvTranspose1d
-from models.masking import TSCNet
+# from models.masking import TSCNet
 from models.dccrn import dccrn
 from models.stft import ConviSTFT, ConvSTFT
+from models.discriminator import Discriminator
+from criteria import GAN_Loss, CompositeLoss
+from omegaconf import OmegaConf
+
 import time
 
 # def test_mapping():
@@ -46,7 +50,7 @@ def test_tscnet():
     model = TSCNet()
     input1 = torch.randn(2, 1, 32000)
     output = model(input1)
-    print(f"Output shape: {output.shape}")
+    
 
 def stft():
     y = torch.randn(1, 1534)
@@ -106,9 +110,34 @@ def test_spconv_transpose_1d():
 
     print(f"Output shape: {output.shape}")
 
+def test_discriminator():
+    discriminator = Discriminator(ndf=16)
+    discriminator = discriminator.to("cuda")
+    x = torch.randn(16, 16000).to("cuda")
+    y = torch.randn(16, 16000).to("cuda")
+
+    x = F.pad()
+
+    args = OmegaConf.create({
+        "l1_loss": 1.0,
+        "ganloss": {
+            "fft_size": 512,
+            "hop_size": 256,
+            "win_length": 512,
+            "window": "hann_window",
+            "factor_disc": 1.0,
+            "factor_gen": 0.1,
+        }
+    })
+
+    loss = CompositeLoss(args, discriminator=discriminator)
+    print(loss.forward_disc_loss(x, y))
+    # print(loss(x, y))
+
 if __name__ == "__main__":
     # test_mapping()
     # test_masking()
     # stft()
     # test_dccrn()
-    test_tscnet()
+    # test_tscnet()
+    test_discriminator()

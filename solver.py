@@ -19,7 +19,9 @@ class Solver(object):
         self, 
         data, 
         model, 
+        discriminator,
         optim, 
+        optim_disc,
         args, 
         logger, 
         rank=0,     
@@ -34,7 +36,9 @@ class Solver(object):
         self.tr_sampler = data['tr_sampler']    # Distributed sampler for training
         
         self.model = model
+        self.discriminator = discriminator
         self.optim = optim
+        self.optim_disc = optim_disc
         self.logger = logger
 
         # Basic config
@@ -48,7 +52,7 @@ class Solver(object):
         self.clip_grad_norm = args.clip_grad_norm
         
         self.input_type = args.model.input_type
-        self.loss = CompositeLoss(args.loss).to(self.device)
+        self.loss = CompositeLoss(args.loss, self.discriminator).to(self.device)
 
         self.eval_every = args.eval_every   # interval for evaluation
             
@@ -319,12 +323,12 @@ class Solver(object):
             elif self.input_type == "am+tm":
                 clean_am_hat = self.model(tm, noisy_am)
             else:
-                raise ValueError("Invalid input type, check input_type in config file.")
-            
+                raise ValueError("Invalid input type, check input_type in config file.")                
+
             # Compute loss
             loss_all, loss_dict = self.loss(clean_am_hat, clean_am, mask)
             
-            # For distributed training, we do all_reduce
+            # For logging, we do all_reduce
             if self.is_distributed:
                 dist.all_reduce(loss_all)
                 loss_all = loss_all / self.world_size
@@ -354,7 +358,18 @@ class Solver(object):
                     
                 # Optimizer step
                 self.optim.step()
-                
+
+                if self.discriminator is not None:
+                    disc_loss = self.loss.forward_disc_loss(clean_am_hat.detach().squeeze(1), clean_am.squeeze(1))
+                    if disc_loss is not None:
+                        self.optim_disc.zero_grad()
+                        disc_loss.backward()
+                        self.optim_disc.step()
+                        if self.rank == 0:
+                            logprog.append(**{'Discriminator Loss': format(disc_loss.item(), "4.5f")})
+                    elif self.rank == 0:
+                        logprog.append(**{'Discriminator Loss': format(0.0, "4.5f")})
+
             else:
                 # Validation step (rank=0 logs)
                 if self.rank == 0:

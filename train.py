@@ -13,6 +13,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data import DataLoader
 from datasets import load_dataset, concatenate_datasets
+from models.discriminator import Discriminator
 
 from data import TAPSnoisytdataset, StepSampler, validation_collate_fn
 from solver import Solver
@@ -82,9 +83,20 @@ def run(rank, world_size, args):
     
     model = model_class(**model_args.param)
     model = model.to(args.device)
+    
+    if args.loss.ganloss:
+        discriminator = Discriminator(ndf=args.loss.ganloss.ndf)
+        del args.loss.ganloss.ndf
+        discriminator = discriminator.to(args.device)
+        optim_disc = torch.optim.Adam(discriminator.parameters(), lr=args.lr, betas=args.betas)
+    else:
+        discriminator = None
+        optim_disc = None
 
     if world_size > 1:
         model = DDP(model, device_ids=[rank])
+        if discriminator is not None:
+            discriminator = DDP(discriminator, device_ids=[rank])
 
     # Load dataset
     if rank == 0:
@@ -217,7 +229,9 @@ def run(rank, world_size, args):
     solver = Solver(
         data=dataloader,
         model=model,
+        discriminator=discriminator,
         optim=optim,
+        optim_disc=optim_disc,
         args=args,
         logger=logger,
         rank=rank,
