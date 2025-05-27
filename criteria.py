@@ -271,22 +271,22 @@ def power_uncompress(real, imag):
     imag_compress = mag * torch.sin(phase)
     return torch.stack([real_compress, imag_compress], -1)
 
-class GAN_Loss(torch.nn.Module):
+class CMGAN_Loss(torch.nn.Module):
     def __init__(self, discriminator, fft_size, hop_size, win_length, window):
         super().__init__()
-        self.name = "GAN_Loss"
+        self.name = "CMGAN_Loss"
         self.discriminator = discriminator
         self.fft_size = fft_size
         self.hop_size = hop_size
         self.win_length = win_length
         self.register_buffer("window", getattr(torch, window)(win_length))
 
-    def calculate_disc_loss(self, x, y):
+    def calculate_disc_loss(self, x, y, mask=None):
         length = x.shape[-1]
         batch_size = x.shape[0]
 
-        x_list = list(x.detach().cpu().numpy())
-        y_list = list(y.detach().cpu().numpy())
+        x_list = list(x.squeeze(1).detach().cpu().numpy())
+        y_list = list(y.squeeze(1).detach().cpu().numpy())
 
         pesq_score = batch_pesq(y_list, x_list)
 
@@ -320,6 +320,62 @@ class GAN_Loss(torch.nn.Module):
 
         return generator_loss
 
+class HiFiGAN_Loss(torch.nn.Module):
+    def __init__(self, discriminator):
+        super().__init__()
+        self.name = "HiFiGAN_Loss"
+        self.discriminator = discriminator
+    
+    @staticmethod
+    def feature_loss(fmap_real, fmap_generated):
+        loss = 0
+        for dr, dg in zip(fmap_real, fmap_generated):
+            for rl, gl in zip(dr, dg):
+                loss += torch.mean(torch.abs(rl - gl))
+        return loss*2
+
+    @staticmethod
+    def generator_loss(disc_generated_outputs):
+        loss = 0
+        for dg in disc_generated_outputs:
+            l = torch.mean((1-dg)**2)
+            loss += l
+        return loss
+
+    @staticmethod
+    def discriminator_loss(disc_real_outputs, disc_generated_outputs):
+        loss = 0
+        for dr, dg in zip(disc_real_outputs, disc_generated_outputs):
+            r_loss = torch.mean((1-dr)**2)
+            g_loss = torch.mean(dg**2)
+            loss += (r_loss + g_loss)
+        return loss
+
+    def calculate_disc_loss(self, x, y, mask=None):
+        outputs_x, _ = self.discriminator(x)
+        outputs_y, _ = self.discriminator(y)
+        
+        discriminator_loss_mpd = self.discriminator_loss(outputs_y['mpd'], outputs_x['mpd'])
+        discriminator_loss_msd = self.discriminator_loss(outputs_y['msd'], outputs_x['msd'])
+
+        discriminator_loss = discriminator_loss_mpd + discriminator_loss_msd
+
+        return discriminator_loss
+
+
+    def forward(self, x, y, mask=None):
+        outputs_x, fmaps_x = self.discriminator(x)
+        _, fmaps_y = self.discriminator(y)
+
+        feature_loss_mpd = self.feature_loss(fmaps_y['mpd'], fmaps_x['mpd'])
+        feature_loss_msd = self.feature_loss(fmaps_y['msd'], fmaps_x['msd'])
+
+        generator_loss_mpd = self.generator_loss(outputs_x['mpd'])
+        generator_loss_msd = self.generator_loss(outputs_x['msd'])
+
+        loss_all = feature_loss_mpd + feature_loss_msd + generator_loss_mpd + generator_loss_msd
+
+        return loss_all
 
 class CompositeLoss(torch.nn.Module):
     def __init__(self, args, discriminator=None):
@@ -330,35 +386,43 @@ class CompositeLoss(torch.nn.Module):
         self.discriminator = discriminator
         
         if 'l1_loss' in args:
-            self.loss_dict['l1_loss'] = l1_loss
-            self.loss_weight['l1_loss'] = args.l1_loss
+            self.loss_dict['L1'] = l1_loss
+            self.loss_weight['L1'] = args.l1_loss
         
         if 'l2_loss' in args:
-            self.loss_dict['l2_loss'] = l2_loss
-            self.loss_weight['l2_loss'] = args.l2_loss
+            self.loss_dict['L2'] = l2_loss
+            self.loss_weight['L2'] = args.l2_loss
             
         if 'multistftloss' in args:
-            self.loss_weight['multistft_loss'] = args.multistftloss.weight
+            self.loss_weight['MultiSTFT'] = args.multistftloss.weight
             del args.multistftloss.weight
             
-            self.loss_dict['multistft_loss'] = MultiResolutionSTFTLoss(
+            self.loss_dict['MultiSTFT'] = MultiResolutionSTFTLoss(
                 **args.multistftloss
             )
 
         if 'sisnrloss' in args:
-            self.loss_dict['sisnr_loss'] = si_snr_loss         
-            self.loss_weight['sisnr_loss'] = args.sisnrloss
+            self.loss_dict['SISNR'] = si_snr_loss         
+            self.loss_weight['SISNR'] = args.sisnrloss
             
         if 'sisdrloss' in args:
-            self.loss_dict['sisdr_loss'] = si_sdr_loss
-            self.loss_weight['sisdr_loss'] = args.sisdrloss
+            self.loss_dict['SISDR'] = si_sdr_loss
+            self.loss_weight['SISDR'] = args.sisdrloss
         
-        if 'ganloss' in args:
-            self.loss_weight['gan_loss'] = args.ganloss.factor_gen
-            self.loss_weight['gan_loss_disc'] = args.ganloss.factor_disc
-            del args.ganloss.factor_gen, args.ganloss.factor_disc
+        if 'cmganloss' in args:
+            self.loss_weight['CMGAN'] = args.cmganloss.factor_gen
+            self.loss_weight['CMGAN_Disc'] = args.cmganloss.factor_disc
+            del args.cmganloss.factor_gen, args.cmganloss.factor_disc
 
-            self.loss_dict['gan_loss'] = GAN_Loss(self.discriminator, **args.ganloss)
+            self.loss_dict['CMGAN'] = CMGAN_Loss(self.discriminator['CMGAN'], **args.cmganloss)
+        
+        if 'hifiganloss' in args:
+            self.loss_weight['HiFiGAN'] = args.hifiganloss.factor_gen
+            self.loss_weight['HiFiGAN_Disc'] = args.hifiganloss.factor_disc
+            del args.hifiganloss.factor_gen, args.hifiganloss.factor_disc
+            
+            self.loss_dict['HiFiGAN'] = HiFiGAN_Loss(self.discriminator['HiFiGAN'])
+
             
     def forward(self, x, y, mask=None):
         loss_all = 0
@@ -371,12 +435,16 @@ class CompositeLoss(torch.nn.Module):
         
         return loss_all, loss_dict
     
-    def forward_disc_loss(self, x, y):
-        if 'gan_loss' in self.loss_dict:
-            loss = self.loss_dict['gan_loss'].calculate_disc_loss(x, y)
+    def forward_disc_loss(self, x, y, mask=None):
+        loss_dict = {}
+        
+        if 'CMGAN' in self.loss_dict:
+            loss = self.loss_dict['CMGAN'].calculate_disc_loss(x, y)
             if loss is not None:
-                return loss * self.loss_weight['gan_loss_disc']
-            else:
-                return None
-        else:
-            return None
+                loss_dict['CMGAN'] = loss * self.loss_weight['CMGAN_Disc']
+
+        if 'HiFiGAN' in self.loss_dict:
+            loss = self.loss_dict['HiFiGAN'].calculate_disc_loss(x, y) 
+            loss_dict['HiFiGAN'] = loss * self.loss_weight['HiFiGAN_Disc']
+        
+        return loss_dict

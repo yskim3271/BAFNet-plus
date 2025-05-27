@@ -343,10 +343,10 @@ class Solver(object):
                     # Log current losses in the progress bar
                     for i, (key, value) in enumerate(loss_dict.items()):
                         if i == 0:
-                            logprog.update(**{key.capitalize(): format(value, "4.5f")})
+                            logprog.update(**{f"{key}_Loss": format(value, "4.5f")})
                         else:
-                            logprog.append(**{key.capitalize(): format(value, "4.5f")})
-                        self.writer.add_scalar(f"train/{key.capitalize()}", value, epoch * len(data_loader) + i)
+                            logprog.append(**{f"{key}_Loss": format(value, "4.5f")})
+                        self.writer.add_scalar(f"train/{key}_Loss", value, epoch * len(data_loader) + i)
                     self.writer.add_scalar("train/Loss", loss_all.item(), epoch * len(data_loader) + i)
                 
                 # Backpropagation
@@ -359,16 +359,19 @@ class Solver(object):
                 # Optimizer step
                 self.optim.step()
 
-                if self.discriminator is not None:
-                    disc_loss = self.loss.forward_disc_loss(clean_am_hat.detach().squeeze(1), clean_am.squeeze(1))
-                    if disc_loss is not None:
-                        self.optim_disc.zero_grad()
-                        disc_loss.backward()
-                        self.optim_disc.step()
-                        if self.rank == 0:
-                            logprog.append(**{'Discriminator Loss': format(disc_loss.item(), "4.5f")})
-                    elif self.rank == 0:
-                        logprog.append(**{'Discriminator Loss': format(0.0, "4.5f")})
+                if self.discriminator.keys() is not None:
+                    disc_loss_dict = self.loss.forward_disc_loss(clean_am_hat.detach(), clean_am)
+                    for key, loss in disc_loss_dict.items():
+                        if loss is not None:
+                            self.optim_disc[key].zero_grad()
+                            loss.backward()
+                            self.optim_disc[key].step()
+                            if self.rank == 0:
+                                logprog.append(**{f'Discriminator_{key}_Loss': format(loss.item(), "4.5f")})
+                                self.writer.add_scalar(f"train/Discriminator_{key}_Loss", loss.item(), epoch * len(data_loader) + i)
+                        elif self.rank == 0:
+                            logprog.append(**{f'Discriminator_{key}_Loss': format(0.0, "4.5f")})
+                            self.writer.add_scalar(f"train/Discriminator_{key}_Loss", 0.0, epoch * len(data_loader) + i)
 
             else:
                 # Validation step (rank=0 logs)

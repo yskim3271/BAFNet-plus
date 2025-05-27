@@ -8,8 +8,10 @@ from models.stft import ConviSTFT, ConvSTFT
 from models.discriminator import Discriminator
 from criteria import GAN_Loss, CompositeLoss
 from omegaconf import OmegaConf
+from seconformer import Seconformer
 
 import time
+from datasets import load_dataset
 
 # def test_mapping():
 #     # Define the model
@@ -133,6 +135,11 @@ def test_discriminator():
     loss = CompositeLoss(args, discriminator=discriminator)
     print(loss.forward_disc_loss(x, y))
     # print(loss(x, y))
+    
+def test_dataset():
+    dataset = load_dataset("yskim3271/Throat_and_Acoustic_Pairing_Speech_Dataset", split="test")
+
+    print(dataset[0])    
 
 if __name__ == "__main__":
     # test_mapping()
@@ -140,4 +147,6 @@ if __name__ == "__main__":
     # stft()
     # test_dccrn()
     # test_tscnet()
-    test_discriminator()
+    # test_discriminator()
+    test_dataset()
+    

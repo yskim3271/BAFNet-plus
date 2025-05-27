@@ -13,7 +13,7 @@ class LearnableSigmoid(nn.Module):
     def forward(self, x):
         return self.beta * torch.sigmoid(self.slope * x)
 
-class Discriminator(nn.Module):
+class CMGAN_Discriminator(nn.Module):
     def __init__(self, ndf, in_channel=2):
         super().__init__()
         self.layers = nn.Sequential(

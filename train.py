@@ -13,7 +13,8 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data import DataLoader
 from datasets import load_dataset, concatenate_datasets
-from models.discriminator import Discriminator
+from models.disc_cmgan import CMGAN_Discriminator
+from models.disc_hifigan import HiFiGAN_Discriminator
 
 from data import TAPSnoisytdataset, StepSampler, validation_collate_fn
 from solver import Solver
@@ -83,20 +84,33 @@ def run(rank, world_size, args):
     
     model = model_class(**model_args.param)
     model = model.to(args.device)
+
+    discriminator = {}
+    optim_disc = {}
+
+    if args.optim == "adam":
+        optim_class = torch.optim.Adam
+    elif args.optim == "adamW" or args.optim == "adamw":
+        optim_class = torch.optim.AdamW
     
-    if args.loss.ganloss:
-        discriminator = Discriminator(ndf=args.loss.ganloss.ndf)
-        del args.loss.ganloss.ndf
-        discriminator = discriminator.to(args.device)
-        optim_disc = torch.optim.Adam(discriminator.parameters(), lr=args.lr, betas=args.betas)
-    else:
-        discriminator = None
-        optim_disc = None
+    if 'cmganloss' in args.loss:
+        discriminator['CMGAN'] = CMGAN_Discriminator(ndf=args.loss.cmganloss.ndf)
+        del args.loss.cmganloss.ndf
+        discriminator['CMGAN'] = discriminator['CMGAN'].to(args.device)
+    
+    if 'hifiganloss' in args.loss:
+        discriminator['HiFiGAN'] = HiFiGAN_Discriminator()
+        discriminator['HiFiGAN'] = discriminator['HiFiGAN'].to(args.device)
 
     if world_size > 1:
         model = DDP(model, device_ids=[rank])
-        if discriminator is not None:
-            discriminator = DDP(discriminator, device_ids=[rank])
+        for key in discriminator.keys():
+            discriminator[key] = DDP(discriminator[key], device_ids=[rank])
+    
+    # optimizer
+    optim = optim_class(model.parameters(), lr=args.lr, betas=args.betas)
+    for key in discriminator.keys():
+        optim_disc[key] = optim_class(discriminator[key].parameters(), lr=args.lr, betas=args.betas)
 
     # Load dataset
     if rank == 0:
@@ -218,12 +232,6 @@ def run(rank, world_size, args):
         "tt_loader_list": tt_loader_list,
         "tr_sampler": tr_sampler,
     }
-    
-    # optimizer
-    if args.optim == "adam":
-        optim = torch.optim.Adam(model.parameters(), lr=args.lr, betas=args.betas)
-    elif args.optim == "adamW" or args.optim == "adamw":
-        optim = torch.optim.AdamW(model.parameters(), lr=args.lr, betas=args.betas)
     
     # Solver
     solver = Solver(
