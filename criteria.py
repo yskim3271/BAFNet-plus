@@ -282,7 +282,6 @@ class CMGAN_Loss(torch.nn.Module):
         self.register_buffer("window", getattr(torch, window)(win_length))
 
     def calculate_disc_loss(self, x, y, mask=None):
-        length = x.shape[-1]
         batch_size = x.shape[0]
 
         x_list = list(x.squeeze(1).detach().cpu().numpy())
@@ -325,57 +324,49 @@ class HiFiGAN_Loss(torch.nn.Module):
         super().__init__()
         self.name = "HiFiGAN_Loss"
         self.discriminator = discriminator
-    
-    @staticmethod
-    def feature_loss(fmap_real, fmap_generated):
-        loss = 0
-        for dr, dg in zip(fmap_real, fmap_generated):
-            for rl, gl in zip(dr, dg):
-                loss += torch.mean(torch.abs(rl - gl))
-        return loss*2
-
-    @staticmethod
-    def generator_loss(disc_generated_outputs):
-        loss = 0
-        for dg in disc_generated_outputs:
-            l = torch.mean((1-dg)**2)
-            loss += l
-        return loss
-
-    @staticmethod
-    def discriminator_loss(disc_real_outputs, disc_generated_outputs):
-        loss = 0
-        for dr, dg in zip(disc_real_outputs, disc_generated_outputs):
-            r_loss = torch.mean((1-dr)**2)
-            g_loss = torch.mean(dg**2)
-            loss += (r_loss + g_loss)
-        return loss
 
     def calculate_disc_loss(self, x, y, mask=None):
-        outputs_x, _ = self.discriminator(x)
-        outputs_y, _ = self.discriminator(y)
-        
-        discriminator_loss_mpd = self.discriminator_loss(outputs_y['mpd'], outputs_x['mpd'])
-        discriminator_loss_msd = self.discriminator_loss(outputs_y['msd'], outputs_x['msd'])
+        batch_size = x.shape[0]
 
-        discriminator_loss = discriminator_loss_mpd + discriminator_loss_msd
+        x_list = list(x.squeeze(1).detach().cpu().numpy())
+        y_list = list(y.squeeze(1).detach().cpu().numpy())
 
+        pesq_score = batch_pesq(y_list, x_list)
+
+        if pesq_score is not None:
+            predict_enhance_metric_msd, predict_enhance_metric_mpd = self.discriminator(y, x)
+            predict_max_metric_msd, predict_max_metric_mpd = self.discriminator(y, y)
+
+            predict_enhance_metric = predict_enhance_metric_msd + predict_enhance_metric_mpd
+            predict_max_metric = predict_max_metric_msd + predict_max_metric_mpd
+            
+            discriminator_loss = 0
+            for i in range(len(predict_enhance_metric)):
+                discriminator_loss += F.mse_loss(
+                    predict_max_metric[i].flatten(), torch.ones(batch_size).to(x.device)
+                ) + F.mse_loss(
+                    predict_enhance_metric[i].flatten(), pesq_score.to(x.device)
+                )
+            discriminator_loss /= len(predict_enhance_metric)
+        else:
+            discriminator_loss = None
+            
         return discriminator_loss
 
 
     def forward(self, x, y, mask=None):
-        outputs_x, fmaps_x = self.discriminator(x)
-        _, fmaps_y = self.discriminator(y)
+        batch_size = x.shape[0]
+        predict_fake_metric_msd, predict_fake_metric_mpd = self.discriminator(y, x)
+        predict_fake_metric = predict_fake_metric_msd + predict_fake_metric_mpd
 
-        feature_loss_mpd = self.feature_loss(fmaps_y['mpd'], fmaps_x['mpd'])
-        feature_loss_msd = self.feature_loss(fmaps_y['msd'], fmaps_x['msd'])
-
-        generator_loss_mpd = self.generator_loss(outputs_x['mpd'])
-        generator_loss_msd = self.generator_loss(outputs_x['msd'])
-
-        loss_all = feature_loss_mpd + feature_loss_msd + generator_loss_mpd + generator_loss_msd
-
-        return loss_all
+        generator_loss = 0
+        for i in range(len(predict_fake_metric)):
+            generator_loss += F.mse_loss(
+                predict_fake_metric[i].flatten(), torch.ones(batch_size).to(x.device)
+            )
+        generator_loss /= len(predict_fake_metric)
+        
+        return generator_loss
 
 class CompositeLoss(torch.nn.Module):
     def __init__(self, args, discriminator=None):
@@ -445,6 +436,7 @@ class CompositeLoss(torch.nn.Module):
 
         if 'HiFiGAN' in self.loss_dict:
             loss = self.loss_dict['HiFiGAN'].calculate_disc_loss(x, y) 
-            loss_dict['HiFiGAN'] = loss * self.loss_weight['HiFiGAN_Disc']
+            if loss is not None:
+                loss_dict['HiFiGAN'] = loss * self.loss_weight['HiFiGAN_Disc']
         
         return loss_dict

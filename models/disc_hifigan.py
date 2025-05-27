@@ -15,7 +15,7 @@ class DiscriminatorP(torch.nn.Module):
         self.period = period
         norm_f = weight_norm if use_spectral_norm == False else spectral_norm
         self.convs = nn.ModuleList([
-            norm_f(Conv2d(1, 32, (kernel_size, 1), (stride, 1), padding=(get_padding(5, 1), 0))),
+            norm_f(Conv2d(2, 32, (kernel_size, 1), (stride, 1), padding=(get_padding(5, 1), 0))),
             norm_f(Conv2d(32, 128, (kernel_size, 1), (stride, 1), padding=(get_padding(5, 1), 0))),
             norm_f(Conv2d(128, 512, (kernel_size, 1), (stride, 1), padding=(get_padding(5, 1), 0))),
             norm_f(Conv2d(512, 1024, (kernel_size, 1), (stride, 1), padding=(get_padding(5, 1), 0))),
@@ -23,9 +23,9 @@ class DiscriminatorP(torch.nn.Module):
         ])
         self.conv_post = norm_f(Conv2d(1024, 1, (3, 1), 1, padding=(1, 0)))
 
-    def forward(self, x):
-        fmap = []
+        self.adaptive_pool = nn.AdaptiveAvgPool2d((1, 1))
 
+    def forward(self, x):
         # 1d to 2d
         b, c, t = x.shape
         if t % self.period != 0: # pad first
@@ -37,12 +37,12 @@ class DiscriminatorP(torch.nn.Module):
         for l in self.convs:
             x = l(x)
             x = F.leaky_relu(x, LRELU_SLOPE)
-            fmap.append(x)
         x = self.conv_post(x)
-        fmap.append(x)
-        x = torch.flatten(x, 1, -1)
 
-        return x, fmap
+        pooled_x = self.adaptive_pool(x)
+        prediction = torch.flatten(pooled_x, 1, -1)
+
+        return prediction
 
 
 class MultiPeriodDiscriminator(torch.nn.Module):
@@ -58,13 +58,11 @@ class MultiPeriodDiscriminator(torch.nn.Module):
 
     def forward(self, x):
         outputs = []
-        fmaps = []
         for disc in self.discriminators:
-            y, fmap = disc(x)
+            y = disc(x)
             outputs.append(y)
-            fmaps.append(fmap)
 
-        return outputs, fmaps
+        return outputs
 
 
 class DiscriminatorS(torch.nn.Module):
@@ -72,7 +70,7 @@ class DiscriminatorS(torch.nn.Module):
         super(DiscriminatorS, self).__init__()
         norm_f = weight_norm if use_spectral_norm == False else spectral_norm
         self.convs = nn.ModuleList([
-            norm_f(Conv1d(1, 128, 15, 1, padding=7)),
+            norm_f(Conv1d(2, 128, 15, 1, padding=7)),
             norm_f(Conv1d(128, 128, 41, 2, groups=4, padding=20)),
             norm_f(Conv1d(128, 256, 41, 2, groups=16, padding=20)),
             norm_f(Conv1d(256, 512, 41, 4, groups=16, padding=20)),
@@ -82,17 +80,18 @@ class DiscriminatorS(torch.nn.Module):
         ])
         self.conv_post = norm_f(Conv1d(1024, 1, 3, 1, padding=1))
 
+        self.adaptive_pool = nn.AdaptiveAvgPool1d(1)
+
     def forward(self, x):
-        fmap = []
         for l in self.convs:
             x = l(x)
             x = F.leaky_relu(x, LRELU_SLOPE)
-            fmap.append(x)
         x = self.conv_post(x)
-        fmap.append(x)
-        x = torch.flatten(x, 1, -1)
 
-        return x, fmap
+        pooled_x = self.adaptive_pool(x)
+        prediction = torch.flatten(pooled_x, 1, -1)
+
+        return prediction
 
 
 class MultiScaleDiscriminator(torch.nn.Module):
@@ -109,13 +108,11 @@ class MultiScaleDiscriminator(torch.nn.Module):
 
     def forward(self, x):
         outputs = []
-        fmaps = []
         for disc in self.discriminators:
-            y, fmap = disc(x)
+            y = disc(x)
             outputs.append(y)
-            fmaps.append(fmap)
 
-        return outputs, fmaps
+        return outputs
 
 
 class HiFiGAN_Discriminator(torch.nn.Module):
@@ -124,10 +121,9 @@ class HiFiGAN_Discriminator(torch.nn.Module):
         self.mpd = MultiPeriodDiscriminator()
         self.msd = MultiScaleDiscriminator()
 
-    def forward(self, x):
-        outputs = {}
-        fmaps = {}
-        outputs['mpd'], fmaps['mpd'] = self.mpd(x)
-        outputs['msd'], fmaps['msd'] = self.msd(x)
+    def forward(self, x, y):
+        xy = torch.cat([x, y], dim=1)
+        outputs_msd = self.msd(xy)
+        outputs_mpd = self.mpd(xy)
 
-        return outputs, fmaps
+        return outputs_msd, outputs_mpd
