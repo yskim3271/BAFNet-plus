@@ -378,9 +378,9 @@ class Solver(object):
                 if self.rank == 0:
                     for i, (key, value) in enumerate(loss_dict.items()):
                         if i == 0:
-                            logprog.update(**{key.capitalize(): format(value, "4.5f")})
+                            logprog.update(**{f"{key}_Loss": format(value, "4.5f")})
                         else:
-                            logprog.append(**{key.capitalize(): format(value, "4.5f")})
+                            logprog.append(**{f"{key}_Loss": format(value, "4.5f")})
                     self.writer.add_scalar("valid/Loss", loss_all.item(), epoch * len(data_loader) + i)
         
         # Return the average loss over the entire epoch
