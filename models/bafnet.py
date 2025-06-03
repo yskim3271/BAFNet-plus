@@ -1,8 +1,7 @@
+import importlib
 import torch
 import torch.nn as nn
 from models.stft import ConvSTFT, ConviSTFT
-from models.seconformer import seconformer
-from models.dccrn import dccrn
 
 def normal_energy(spec: torch.Tensor, eps: float = 1e-8):
     
@@ -14,49 +13,55 @@ def normal_energy(spec: torch.Tensor, eps: float = 1e-8):
 
     return spec_norm, energy
 
-class bafnet(torch.nn.Module):
-    def __init__(self, 
-                 depth, 
-                 channels, 
-                 kernel_size, 
-                 args_seconformer, 
-                 args_dccrn, 
-                 checkpoint_seconformer=None,
-                 checkpoint_dccrn=None,
+class BAFNet(torch.nn.Module):
+    def __init__(self,
+                 win_len=400,
+                 win_inc=100,
+                 fft_len=512,
+                 win_type='hann',
+                 depth=4, 
+                 channels=16, 
+                 kernel_size=7,
+                 args_mapping=None, 
+                 args_masking=None, 
+                 checkpoint_mapping=None,
+                 checkpoint_masking=None,
                  ):
-        super(bafnet, self).__init__()
+        super(BAFNet, self).__init__()
+
+        self.win_len = win_len
+        self.win_inc = win_inc
+        self.fft_len = fft_len
+        self.win_type = win_type
         
         self.depth = depth
         self.channels = channels
         self.kernel_size = kernel_size
         self.padding = kernel_size // 2
+
+        module_mapping = importlib.import_module("models." + args_mapping.model_lib)
+        module_masking = importlib.import_module("models." + args_masking.model_lib)
+
+        mapping_class = getattr(module_mapping, args_mapping.model_class)
+        masking_class = getattr(module_masking, args_masking.model_class)
+
+        self.mapping = mapping_class(**args_mapping.param)
+        self.masking = masking_class(**args_masking.param)
+
                 
-        self.seconformer = seconformer(
-            **args_seconformer
-        )
-        self.dccrn = dccrn(
-            **args_dccrn
-        )
-        
-        if checkpoint_dccrn is not None:
-            self.dccrn.load_state_dict(torch.load(checkpoint_dccrn)['model'])
-        
-        if checkpoint_seconformer is not None:
-            self.seconformer.load_state_dict(torch.load(checkpoint_seconformer)['model'])            
-        
         self.stft = ConvSTFT(
-            args_dccrn.win_len,
-            args_dccrn.win_inc,
-            args_dccrn.fft_len,
-            args_dccrn.win_type,
+            self.win_len,
+            self.win_inc,
+            self.fft_len,
+            self.win_type,
             feature_type='complex',
             fix=True
         )
         self.istft = ConviSTFT(
-            args_dccrn.win_len,
-            args_dccrn.win_inc,
-            args_dccrn.fft_len,
-            args_dccrn.win_type,
+            self.win_len,
+            self.win_inc,
+            self.fft_len,
+            self.win_type,
             feature_type='complex',
             fix=True
         )
@@ -85,11 +90,12 @@ class bafnet(torch.nn.Module):
         ]
         
         self.ratio_estimator = nn.Sequential(*estimator)
-        
-        estimator = []
-        
-        
         self.init_estimator()
+
+        if checkpoint_mapping is not None:
+            self.mapping.load_state_dict(torch.load(checkpoint_mapping)['model'])
+        if checkpoint_masking is not None:
+            self.masking.load_state_dict(torch.load(checkpoint_masking)['model'])
         
     def init_estimator(self):
         for m in self.ratio_estimator.modules():
@@ -106,9 +112,9 @@ class bafnet(torch.nn.Module):
                         
         in_len = tm.size(-1)
         
-        tm_wav = self.seconformer(tm)
+        tm_wav = self.mapping(tm)
         
-        mask_mags, am_spec, am_wav = self.dccrn(am, lens=True)
+        mask_mags, am_spec, am_wav = self.masking(am, lens=True)
 
         tm_spec = self.stft(tm_wav)
 

@@ -47,7 +47,7 @@ test_noise:
   silence_length: 0.2
   deterministic: true
 
-batch_size: 4
+batch_size: 16
 batch_size_valid: 1
 epochs: 200
 

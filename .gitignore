@@ -6,6 +6,7 @@ run.sh
 sandbox.py
 backup
 output.log
+evaluate.sh
 
 *pycache*
 *.pyc
