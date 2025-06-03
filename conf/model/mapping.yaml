@@ -1,4 +1,5 @@
-model_name: mapping
+model_lib: mapping
+model_class: mapping
 input_type: tm
 
 param:

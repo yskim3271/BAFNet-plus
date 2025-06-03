@@ -47,7 +47,7 @@ test_noise:
   silence_length: 0.2
   deterministic: true
 
-batch_size: 16
+batch_size: 4
 batch_size_valid: 1
 epochs: 200
 
@@ -65,23 +65,20 @@ loss:
     hop_sizes: [120, 240, 50]
     win_lengths: [600, 1200, 240]
     window: hann_window
-  # cmganloss:
-  #   ndf: 16
-  #   factor_disc: 1.0
-  #   factor_gen: 0.1
-  #   fft_size: 512
-  #   hop_size: 256
-  #   win_length: 512
-  #   window: hann_window
-  hifiganloss:
+  metricganloss:
+    ndf: 16
     factor_disc: 1.0
-    factor_gen: 1.0
+    factor_gen: 0.1
+    fft_size: 512
+    hop_size: 256
+    win_length: 512
+    window: hann_window
 
 # Optimization related
 lr: 3e-4
 optim: adam
 betas: [0.9, 0.99]
-clip_grad_norm: 1.0
+clip_grad_norm: 
 
 # Logging and printing, and does not impact training
 device: cuda

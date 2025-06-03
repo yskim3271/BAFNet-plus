@@ -198,7 +198,7 @@ class NavieComplexLSTM(nn.Module):
         self.real_lstm.flatten_parameters()
 
 
-class dccrn(nn.Module):
+class DCCRN(nn.Module):
 
     def __init__(
             self,
@@ -218,7 +218,7 @@ class dccrn(nn.Module):
             rnn_units: for clstm, rnn_units = real+imag
         '''
 
-        super(dccrn, self).__init__()
+        super(DCCRN, self).__init__()
 
         # for fft
         self.win_len = win_len

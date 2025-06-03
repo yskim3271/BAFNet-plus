@@ -13,7 +13,7 @@ class LearnableSigmoid(nn.Module):
     def forward(self, x):
         return self.beta * torch.sigmoid(self.slope * x)
 
-class CMGAN_Discriminator(nn.Module):
+class MetricGAN_Discriminator(nn.Module):
     def __init__(self, ndf, in_channel=2):
         super().__init__()
         self.layers = nn.Sequential(
@@ -49,20 +49,3 @@ class CMGAN_Discriminator(nn.Module):
     def forward(self, x, y):
         xy = torch.cat([x, y], dim=1)
         return self.layers(xy)
-
-
-
-if __name__ == "__main__":
-    discriminator = Discriminator(ndf=16)
-    x = torch.randn(1, 2, 1024, 1024)
-    y = torch.randn(1, 2, 1024, 1024)
-    print(discriminator(x, y).shape)
-
-    args = OmegaConf.create({
-        "fft_size": 1024,
-        "hop_size": 120,
-        "win_length": 600,
-    })
-    loss = GAN_Loss(args, discriminator)
-    print(loss.calculate_disc_loss(x, y))
-    print(loss.calculate_ge_loss(x, y))

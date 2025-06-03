@@ -54,14 +54,14 @@ class ConvSTFT(nn.Module):
         outputs = F.conv1d(inputs, self.weight, stride=self.stride)
 
         if self.feature_type == 'complex':
-            return outputs
+            return outputs ## [B, fft_len + 2, T]
         else:
             dim = self.dim // 2 + 1
             real = outputs[:, :dim, :]
             imag = outputs[:, dim:, :]
             mags = torch.sqrt(real ** 2 + imag ** 2)
             phase = torch.atan2(imag, real)
-            return mags, phase
+            return mags, phase ## [B, fft_len // 2 + 1, T], [B, fft_len // 2 + 1, T]
 
 class ConviSTFT(nn.Module):
 

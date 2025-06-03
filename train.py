@@ -13,8 +13,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data import DataLoader
 from datasets import load_dataset, concatenate_datasets
-from models.disc_cmgan import CMGAN_Discriminator
-from models.disc_hifigan import HiFiGAN_Discriminator
+from models.discriminator import MetricGAN_Discriminator
 
 from data import TAPSnoisytdataset, StepSampler, validation_collate_fn
 from solver import Solver
@@ -76,11 +75,12 @@ def run(rank, world_size, args):
     device = torch.device(f'cuda:{rank}')
     
     model_args = args.model
-    model_name = model_args.model_name
+    model_lib = model_args.model_lib
+    model_class = model_args.model_class
     
     # import model library
-    module = importlib.import_module("models." + model_name)
-    model_class = getattr(module, model_name)
+    module = importlib.import_module("models." + model_lib)
+    model_class = getattr(module, model_class)
     
     model = model_class(**model_args.param)
     model = model.to(args.device)
@@ -93,15 +93,12 @@ def run(rank, world_size, args):
     elif args.optim == "adamW" or args.optim == "adamw":
         optim_class = torch.optim.AdamW
     
-    if 'cmganloss' in args.loss:
-        discriminator['CMGAN'] = CMGAN_Discriminator(ndf=args.loss.cmganloss.ndf)
-        del args.loss.cmganloss.ndf
-        discriminator['CMGAN'] = discriminator['CMGAN'].to(args.device)
-    
-    if 'hifiganloss' in args.loss:
-        discriminator['HiFiGAN'] = HiFiGAN_Discriminator()
-        discriminator['HiFiGAN'] = discriminator['HiFiGAN'].to(args.device)
+    if 'metricganloss' in args.loss:
+        discriminator['MetricGAN'] = MetricGAN_Discriminator(ndf=args.loss.metricganloss.ndf)
+        discriminator['MetricGAN'] = discriminator['MetricGAN'].to(args.device)
+        del args.loss.metricganloss.ndf
 
+    
     if world_size > 1:
         model = DDP(model, device_ids=[rank])
         for key in discriminator.keys():

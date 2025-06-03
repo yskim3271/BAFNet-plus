@@ -271,10 +271,10 @@ def power_uncompress(real, imag):
     imag_compress = mag * torch.sin(phase)
     return torch.stack([real_compress, imag_compress], -1)
 
-class CMGAN_Loss(torch.nn.Module):
+class MetricGAN_Loss(torch.nn.Module):
     def __init__(self, discriminator, fft_size, hop_size, win_length, window):
         super().__init__()
-        self.name = "CMGAN_Loss"
+        self.name = "MetricGAN_Loss"
         self.discriminator = discriminator
         self.fft_size = fft_size
         self.hop_size = hop_size
@@ -400,20 +400,12 @@ class CompositeLoss(torch.nn.Module):
             self.loss_dict['SISDR'] = si_sdr_loss
             self.loss_weight['SISDR'] = args.sisdrloss
         
-        if 'cmganloss' in args:
-            self.loss_weight['CMGAN'] = args.cmganloss.factor_gen
-            self.loss_weight['CMGAN_Disc'] = args.cmganloss.factor_disc
-            del args.cmganloss.factor_gen, args.cmganloss.factor_disc
+        if 'metricganloss' in args:
+            self.loss_weight['MetricGAN'] = args.metricganloss.factor_gen
+            self.loss_weight['MetricGAN_Disc'] = args.metricganloss.factor_disc
+            del args.metricganloss.factor_gen, args.metricganloss.factor_disc
 
-            self.loss_dict['CMGAN'] = CMGAN_Loss(self.discriminator['CMGAN'], **args.cmganloss)
-        
-        if 'hifiganloss' in args:
-            self.loss_weight['HiFiGAN'] = args.hifiganloss.factor_gen
-            self.loss_weight['HiFiGAN_Disc'] = args.hifiganloss.factor_disc
-            del args.hifiganloss.factor_gen, args.hifiganloss.factor_disc
-            
-            self.loss_dict['HiFiGAN'] = HiFiGAN_Loss(self.discriminator['HiFiGAN'])
-
+            self.loss_dict['MetricGAN'] = MetricGAN_Loss(self.discriminator['MetricGAN'], **args.metricganloss)
             
     def forward(self, x, y, mask=None):
         loss_all = 0
@@ -429,14 +421,9 @@ class CompositeLoss(torch.nn.Module):
     def forward_disc_loss(self, x, y, mask=None):
         loss_dict = {}
         
-        if 'CMGAN' in self.loss_dict:
-            loss = self.loss_dict['CMGAN'].calculate_disc_loss(x, y)
+        if 'MetricGAN' in self.loss_dict:
+            loss = self.loss_dict['MetricGAN'].calculate_disc_loss(x, y)
             if loss is not None:
-                loss_dict['CMGAN'] = loss * self.loss_weight['CMGAN_Disc']
+                loss_dict['MetricGAN'] = loss * self.loss_weight['MetricGAN_Disc']
 
-        if 'HiFiGAN' in self.loss_dict:
-            loss = self.loss_dict['HiFiGAN'].calculate_disc_loss(x, y) 
-            if loss is not None:
-                loss_dict['HiFiGAN'] = loss * self.loss_weight['HiFiGAN_Disc']
-        
         return loss_dict

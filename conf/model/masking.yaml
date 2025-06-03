@@ -1,4 +1,5 @@
-model_name: masking
+model_lib: masking
+model_class: masking
 input_type: am
 
 param:
