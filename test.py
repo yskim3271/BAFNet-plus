@@ -1,17 +1,8 @@
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
-from models.mapping import mapping, SPConvTranspose1d
-# from models.masking import TSCNet
-from models.dccrn import dccrn
 from models.stft import ConviSTFT, ConvSTFT
-from models.disc_hifigan import HiFiGAN_Discriminator
-from models.disc_cmgan import CMGAN_Discriminator
-from criteria import HiFiGAN_Loss, CompositeLoss
 from omegaconf import OmegaConf
-
-import time
-from datasets import load_dataset
 
 # def test_mapping():
 #     # Define the model
@@ -48,33 +39,33 @@ from datasets import load_dataset
 #     # Print the shape of the output
 #     # print(f"Output shape: {output.shape}")
 
-def squeeze_to_2d(x):
-    """Squeeze tensor to 2D.
-    Args:
-        x (Tensor): Input tensor (B, ..., T).
-    Returns:
-        Tensor: Squeezed tensor (B, T).
-    """
-    return x.view(x.size(0), -1)
+# def squeeze_to_2d(x):
+#     """Squeeze tensor to 2D.
+#     Args:
+#         x (Tensor): Input tensor (B, ..., T).
+#     Returns:
+#         Tensor: Squeezed tensor (B, T).
+#     """
+#     return x.view(x.size(0), -1)
 
-def stft(x, fft_size, hop_size, win_length, window, onesided=False, center=True):
-    """Perform STFT and convert to magnitude spectrogram.
-    Args:
-        x (Tensor): Input signal tensor (B, T).
-        fft_size (int): FFT size.
-        hop_size (int): Hop size.
-        win_length (int): Window length.
-        window (str): Window function type.
-    Returns:
-        Tensor: Magnitude spectrogram (B, #frames, fft_size // 2 + 1).
-    """
-    x = squeeze_to_2d(x)
-    window = window.to(x.device)
-    x_stft = torch.stft(x, n_fft=fft_size, hop_length=hop_size, win_length=win_length, window=window, 
-                        return_complex=True, onesided=onesided, center=center)
-    real = x_stft.real
-    imag = x_stft.imag
-    return torch.sqrt(real ** 2 + imag ** 2 + 1e-9).transpose(2, 1)
+# def stft(x, fft_size, hop_size, win_length, window, onesided=False, center=True):
+#     """Perform STFT and convert to magnitude spectrogram.
+#     Args:
+#         x (Tensor): Input signal tensor (B, T).
+#         fft_size (int): FFT size.
+#         hop_size (int): Hop size.
+#         win_length (int): Window length.
+#         window (str): Window function type.
+#     Returns:
+#         Tensor: Magnitude spectrogram (B, #frames, fft_size // 2 + 1).
+#     """
+#     x = squeeze_to_2d(x)
+#     window = window.to(x.device)
+#     x_stft = torch.stft(x, n_fft=fft_size, hop_length=hop_size, win_length=win_length, window=window, 
+#                         return_complex=True, onesided=onesided, center=center)
+#     real = x_stft.real
+#     imag = x_stft.imag
+#     return torch.sqrt(real ** 2 + imag ** 2 + 1e-9).transpose(2, 1)
 
 
 # def stft():
@@ -104,69 +95,35 @@ def stft(x, fft_size, hop_size, win_length, window, onesided=False, center=True)
     
 #     print(f'istft: {y_hat.shape}')
     
-def test_dccrn():
-    dccrn_model = dccrn(
-    )
-    input1 = torch.randn(1, 8340)
+# def test_dccrn():
+#     dccrn_model = dccrn(
+#     )
+#     input1 = torch.randn(1, 8340)
 
-    output = dccrn_model(input1)
+#     output = dccrn_model(input1)
 
-    print(f"Output shape: {output.shape}")
-
-
-def test_spconv_transpose_1d():
-    spconv_transpose_1d = SPConvTranspose1d(
-        in_channels=64,
-        out_channels=128,
-        kernel_size=3,
-        r=2,
-    )
-    input1 = torch.randn(1, 64, 512)
-
-    output = spconv_transpose_1d(input1)
-
-    print(f"Output shape: {output.shape}")
-
-def test_hifigan_discriminator():
-    discriminator = HiFiGAN_Discriminator()
-    discriminator = discriminator.to("cuda")
-    x = torch.randn(1, 1, 16000).to("cuda")
-    y = torch.randn(1, 1, 16000).to("cuda")
-
-    outputs_msd, outputs_mpd = discriminator(x, y)
-
-    print(outputs_msd[0].shape)
-    print(outputs_mpd[0].shape)
-
-    print(outputs_msd[1].shape)
-    print(outputs_mpd[1].shape)
-
-    print(outputs_msd[2].shape)
-    print(outputs_mpd[2].shape)
-    
-def test_cmgan_discriminator():
+#     print(f"Output shape: {output.shape}")
 
 
-    discriminator = CMGAN_Discriminator(ndf=16)
-    discriminator = discriminator.to("cuda")
-    x = torch.randn(1, 1, 48000).to("cuda")
-    y = torch.randn(1, 1, 48000).to("cuda")
+# def test_spconv_transpose_1d():
+#     spconv_transpose_1d = SPConvTranspose1d(
+#         in_channels=64,
+#         out_channels=128,
+#         kernel_size=3,
+#         r=2,
+#     )
+#     input1 = torch.randn(1, 64, 512)
 
-    window = torch.hann_window(512)
+#     output = spconv_transpose_1d(input1)
 
-    x_mag = stft(x, 512, 256, 512, window, onesided=False, center = True).unsqueeze(1)
-    y_mag = stft(y, 512, 256, 512, window, onesided=False, center = True).unsqueeze(1)
+#     print(f"Output shape: {output.shape}")
 
 
-    discriminator_loss = discriminator(x_mag, y_mag)
-
-    print(discriminator_loss)
-    
-
-def test_dataset():
-    dataset = load_dataset("yskim3271/Throat_and_Acoustic_Pairing_Speech_Dataset", split="test")
-
-    print(dataset[0])    
+def test_masking():
+    from models.masking import masking
+    model = masking()
+    input = torch.randn(16, 1, 32000)
+    output = model(input)
 
 if __name__ == "__main__":
     # test_mapping()
@@ -174,7 +131,5 @@ if __name__ == "__main__":
     # stft()
     # test_dccrn()
     # test_tscnet()
-    # test_cmgan_discriminator()
-    test_hifigan_discriminator()
-    # test_dataset()
+    test_masking()
     

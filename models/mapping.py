@@ -27,7 +27,6 @@ class SPConvTranspose1d(nn.Module):
         out = out.contiguous().view((batch_size, nchannels // self.r, -1))
         return out
 
-
 class Conmer(nn.Module):
     def __init__(
         self,
@@ -209,9 +208,3 @@ class mapping(nn.Module):
 
         x = x[..., :length]
         return std * x
-
-
-if __name__ == "__main__":
-    model = mapping()
-    x = torch.randn(2, 16000)
-    y = model(x)

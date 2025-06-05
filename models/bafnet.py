@@ -13,6 +13,16 @@ def normal_energy(spec: torch.Tensor, eps: float = 1e-8):
 
     return spec_norm, energy
 
+class LearnableSigmoid2d(nn.Module):
+    def __init__(self, in_features, beta=1):
+        super().__init__()
+        self.beta = beta
+        self.slope = nn.Parameter(torch.ones(in_features, 1))
+        self.slope.requiresGrad = True
+
+    def forward(self, x):
+        return self.beta * torch.sigmoid(self.slope * x)
+
 class BAFNet(torch.nn.Module):
     def __init__(self,
                  win_len=400,
