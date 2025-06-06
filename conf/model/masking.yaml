@@ -4,8 +4,8 @@ input_type: am
 
 param:
   win_len: 400
-  win_inc: 100
-  fft_len: 512
+  hop_len: 100
+  fft_len: 400
   win_type: hann
   hidden: [16, 32, 64]
   TSCB_numb: 3

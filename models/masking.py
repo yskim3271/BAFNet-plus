@@ -1,11 +1,12 @@
 """
 dccrn: Deep complex convolution recurrent network
 """
+import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchaudio.models.conformer import _FeedForwardModule, _ConvolutionModule
-from models.stft import mag_pha_stft, mag_pha_istft
+from models.stft import mag_pha_stft, mag_pha_istft, pad_stft_input
 
 class LearnableSigmoid2d(nn.Module):
     def __init__(self, in_features, beta=1):
@@ -265,7 +266,7 @@ class masking(nn.Module):
     def __init__(
             self,
             win_len=400,
-            win_inc=100,
+            hop_len=100,
             fft_len=400,
             win_type='hann',
             hidden=[16, 32, 64],
@@ -281,7 +282,7 @@ class masking(nn.Module):
 
         # for fft
         self.win_len = win_len
-        self.win_inc = win_inc
+        self.hop_len = hop_len
         self.fft_len = fft_len
         self.win_type = win_type
         self.hidden = [3] + hidden
@@ -305,11 +306,9 @@ class masking(nn.Module):
     def forward(self, inputs, lens=False):
         
         in_len = inputs.size(-1)
-
-        print(f"inputs shape: {inputs.shape}")
-        inputs = inputs.squeeze(1)
+        padded_inputs = pad_stft_input(inputs, self.fft_len, self.hop_len).squeeze(1)       
         
-        mag, pha, com = mag_pha_stft(inputs, self.fft_len, self.win_inc, self.win_len, compress_factor=0.3)
+        mag, pha, com = mag_pha_stft(padded_inputs, self.fft_len, self.hop_len, self.win_len, compress_factor=0.3, center=False)
         # print(f"mag shape: {mag.shape}")
         # print(f"pha shape: {pha.shape}")
         # print(f"com shape: {com.shape}")
@@ -358,13 +357,11 @@ class masking(nn.Module):
         # print(f"mag shape: {mag.shape}")
         # print(f"phase shape: {phase.shape}")
 
-        output_wav = mag_pha_istft(mags, phase, self.fft_len, self.win_inc, self.win_len, compress_factor=0.3)
+        output_wav = mag_pha_istft(mags, phase, self.fft_len, self.hop_len, self.win_len, compress_factor=0.3)
 
-        out_len = output_wav.size(-1)
+        output_wav = output_wav.unsqueeze(1)
 
-        if out_len > in_len:
-            leftover = out_len - in_len 
-            output_wav = output_wav[..., leftover//2:-(leftover//2)]
+        output_wav = output_wav[..., :in_len]
 
         if lens == True:
             return mask, output_wav

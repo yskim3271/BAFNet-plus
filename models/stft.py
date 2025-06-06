@@ -3,7 +3,7 @@ import torch.nn as nn
 import numpy as np
 import torch.nn.functional as F
 from scipy.signal import get_window
-
+import math
 
 def init_kernels(win_len, win_inc, fft_len, win_type=None, invers=False):
     if win_type == 'None' or win_type is None:
@@ -117,6 +117,17 @@ def mag_phase_to_complex(mag, phase):
     imag = mag * torch.sin(phase)
     return torch.cat([real, imag], 1)
 
+
+def pad_stft_input(y, n_fft, hop_size):
+    
+    in_len = y.size(-1)
+    num_frames = math.ceil(in_len / hop_size) + 1
+    total_length = (num_frames - 1) * hop_size + n_fft
+    pad_left = n_fft // 2
+    pad_right = total_length - in_len - pad_left
+    padded_y = F.pad(y, (pad_left, 0), mode='reflect')
+    padded_y = F.pad(padded_y, (0, pad_right), mode='constant', value=0.0)
+    return padded_y
 
 def mag_pha_stft(y, n_fft, hop_size, win_size, compress_factor=1.0, center=True):
 

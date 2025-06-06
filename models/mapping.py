@@ -174,6 +174,7 @@ class mapping(nn.Module):
         return int(length)
 
     def forward(self, mix):
+
         if mix.dim() == 2:
             mix = mix.unsqueeze(1)
         if self.normalize:

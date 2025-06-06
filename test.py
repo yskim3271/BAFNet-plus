@@ -119,11 +119,43 @@ from omegaconf import OmegaConf
 #     print(f"Output shape: {output.shape}")
 
 
+def test_pad_stft_input():
+    from models.stft import pad_stft_input, mag_pha_stft, mag_pha_istft
+    input = torch.randn(1, 1, 178746)
+    output = pad_stft_input(input, 400, 100)
+    print(f"Output shape: {output.shape}")
+
+    output = output.squeeze(1)
+    mag, pha, com = mag_pha_stft(output, 400, 100, 400, center=False)
+    print(f"mag shape: {mag.shape}")
+
+    output_wav = mag_pha_istft(mag, pha, 400, 100, 400)
+    print(f"output_wav shape: {output_wav.shape}")
+
+    input = torch.randn(1, 1, 600)
+    output = pad_stft_input(input, 400, 100)
+    print(f"Output shape: {output.shape}")
+
+    output = output.squeeze(1)
+    mag, pha, com = mag_pha_stft(output, 400, 100, 400, center=False)
+    print(f"mag shape: {mag.shape}")
+
+    output_wav = mag_pha_istft(mag, pha, 400, 100, 400)
+    print(f"output_wav shape: {output_wav.shape}")
+
 def test_masking():
     from models.masking import masking
     model = masking()
-    input = torch.randn(16, 1, 32000)
+    # input = torch.randn(4, 1, 32000)
+    # output = model(input)
+
+    input = torch.randn(4, 1, 168688)
     output = model(input)
+
+    model.eval()
+    input = torch.randn(1, 1, 178746)
+    output = model(input)
+    print(f"Output shape: {output.shape}")
 
 if __name__ == "__main__":
     # test_mapping()
@@ -131,5 +163,5 @@ if __name__ == "__main__":
     # stft()
     # test_dccrn()
     # test_tscnet()
-    test_masking()
+    test_pad_stft_input()
     
