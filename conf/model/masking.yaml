@@ -9,3 +9,7 @@ param:
   win_type: hann
   hidden: [16, 32, 64]
   TSCB_numb: 3
+  ffn_dim: 16
+  depthwise_conv_kernel_size: 15
+  dropout: 0.2
+  use_group_norm: true

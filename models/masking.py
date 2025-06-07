@@ -1,7 +1,6 @@
 """
 dccrn: Deep complex convolution recurrent network
 """
-import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -142,21 +141,27 @@ class Conmer(nn.Module):
 
 
 class TSCB(nn.Module):
-    def __init__(self, num_channel=64):
+    def __init__(self, 
+                 input_dim= 64,
+                 ffn_dim= 16,
+                 depthwise_conv_kernel_size=15,
+                 dropout=0.2,
+                 use_group_norm=True,
+                 ):
         super(TSCB, self).__init__()
         self.time_conmer = Conmer(
-            input_dim=num_channel,
-            ffn_dim=num_channel // 4,
-            depthwise_conv_kernel_size=15,
-            dropout=0.2,
-            use_group_norm=True,
+            input_dim=input_dim,
+            ffn_dim=ffn_dim,
+            depthwise_conv_kernel_size=depthwise_conv_kernel_size,
+            dropout=dropout,
+            use_group_norm=use_group_norm,
         )
         self.freq_conmer = Conmer(
-            input_dim=num_channel,
-            ffn_dim=num_channel // 4,
-            depthwise_conv_kernel_size=15,
-            dropout=0.2,
-            use_group_norm=True,
+            input_dim=input_dim,
+            ffn_dim=ffn_dim,
+            depthwise_conv_kernel_size=depthwise_conv_kernel_size,
+            dropout=dropout,
+            use_group_norm=use_group_norm,
         )
 
     def forward(self, x_in):
@@ -270,6 +275,10 @@ class masking(nn.Module):
             fft_len=400,
             hidden=[16, 32, 64],
             TSCB_numb=4,
+            ffn_dim=16,
+            depthwise_conv_kernel_size=15,
+            dropout=0.2,
+            use_group_norm=True,
     ):
         '''
 
@@ -284,8 +293,11 @@ class masking(nn.Module):
         self.hop_len = hop_len
         self.fft_len = fft_len
         self.hidden = [3] + hidden
-        self.TSCBNumb = TSCB_numb
-
+        self.TSCB_numb = TSCB_numb
+        self.ffn_dim = ffn_dim
+        self.depthwise_conv_kernel_size = depthwise_conv_kernel_size
+        self.dropout = dropout
+        self.use_group_norm = use_group_norm
 
         for i in range(len(self.hidden) - 1):
             setattr(self, f"dense_encoder_{i}", 
@@ -297,8 +309,13 @@ class masking(nn.Module):
         self.mask_decoder = MaskDecoder(num_features=fft_len//2, num_channel=self.hidden[0], out_channel=1)
         self.phase_decoder = PhaseDecoder(num_channel=self.hidden[0], out_channel=1)
             
-        for i in range(self.TSCBNumb):
-            setattr(self, f"tscb_{i}", TSCB(num_channel=self.hidden[-1]))
+        for i in range(self.TSCB_numb):
+            setattr(self, f"tscb_{i}", 
+                    TSCB(input_dim=self.hidden[-1], 
+                         ffn_dim=self.ffn_dim, 
+                         depthwise_conv_kernel_size=self.depthwise_conv_kernel_size, 
+                         dropout=self.dropout, 
+                         use_group_norm=self.use_group_norm))
 
 
     def forward(self, inputs, lens=False):
