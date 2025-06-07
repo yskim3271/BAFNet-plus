@@ -93,11 +93,13 @@ def run(rank, world_size, args):
     elif args.optim == "adamW" or args.optim == "adamw":
         optim_class = torch.optim.AdamW
     
-    if 'metricganloss' in args.loss:
-        discriminator['MetricGAN'] = MetricGAN_Discriminator(ndf=args.loss.metricganloss.ndf)
-        discriminator['MetricGAN'] = discriminator['MetricGAN'].to(args.device)
-        del args.loss.metricganloss.ndf
 
+    metricganloss_cfg = args.loss.get("metricganloss")
+
+    if metricganloss_cfg is not None:
+        discriminator['MetricGAN'] = MetricGAN_Discriminator(ndf=metricganloss_cfg.ndf)
+        discriminator['MetricGAN'] = discriminator['MetricGAN'].to(args.device)
+        del metricganloss_cfg.ndf
     
     if world_size > 1:
         model = DDP(model, device_ids=[rank])

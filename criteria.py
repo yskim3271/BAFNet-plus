@@ -230,8 +230,6 @@ class MultiResolutionSTFTLoss(torch.nn.Module):
         loss = self.factor_sc * sc_loss + self.factor_mag * mag_loss
         return loss
 
-
-
 def pesq_loss(clean, noisy, sr=16000):
     try:
         pesq_score = pesq(sr, clean, noisy, "wb")
@@ -376,36 +374,42 @@ class CompositeLoss(torch.nn.Module):
         self.loss_weight = {}
         self.discriminator = discriminator
         
-        if 'l1_loss' in args:
+        l1_loss_cfg = args.get("l1_loss")
+        if l1_loss_cfg is not None:
             self.loss_dict['L1'] = l1_loss
-            self.loss_weight['L1'] = args.l1_loss
+            self.loss_weight['L1'] = l1_loss_cfg
         
-        if 'l2_loss' in args:
+        l2_loss_cfg = args.get("l2_loss")
+        if l2_loss_cfg is not None:
             self.loss_dict['L2'] = l2_loss
-            self.loss_weight['L2'] = args.l2_loss
+            self.loss_weight['L2'] = l2_loss_cfg
             
-        if 'multistftloss' in args:
-            self.loss_weight['MultiSTFT'] = args.multistftloss.weight
-            del args.multistftloss.weight
+        multistftloss_cfg = args.get("multistftloss")
+        if multistftloss_cfg is not None:
+            self.loss_weight['MultiSTFT'] = multistftloss_cfg.weight
+            del multistftloss_cfg.weight
             
             self.loss_dict['MultiSTFT'] = MultiResolutionSTFTLoss(
-                **args.multistftloss
+                **multistftloss_cfg
             )
 
-        if 'sisnrloss' in args:
+        sisnrloss_cfg = args.get("sisnrloss")
+        if sisnrloss_cfg is not None:
             self.loss_dict['SISNR'] = si_snr_loss         
-            self.loss_weight['SISNR'] = args.sisnrloss
+            self.loss_weight['SISNR'] = sisnrloss_cfg
             
-        if 'sisdrloss' in args:
+        sisdrloss_cfg = args.get("sisdrloss")
+        if sisdrloss_cfg is not None:
             self.loss_dict['SISDR'] = si_sdr_loss
-            self.loss_weight['SISDR'] = args.sisdrloss
+            self.loss_weight['SISDR'] = sisdrloss_cfg
         
-        if 'metricganloss' in args:
-            self.loss_weight['MetricGAN'] = args.metricganloss.factor_gen
-            self.loss_weight['MetricGAN_Disc'] = args.metricganloss.factor_disc
-            del args.metricganloss.factor_gen, args.metricganloss.factor_disc
+        metricganloss_cfg = args.get("metricganloss")
+        if metricganloss_cfg is not None:
+            self.loss_weight['MetricGAN'] = metricganloss_cfg.factor_gen
+            self.loss_weight['MetricGAN_Disc'] = metricganloss_cfg.factor_disc
+            del metricganloss_cfg.factor_gen, metricganloss_cfg.factor_disc
 
-            self.loss_dict['MetricGAN'] = MetricGAN_Loss(self.discriminator['MetricGAN'], **args.metricganloss)
+            self.loss_dict['MetricGAN'] = MetricGAN_Loss(self.discriminator['MetricGAN'], **metricganloss_cfg)
             
     def forward(self, x, y, mask=None):
         loss_all = 0

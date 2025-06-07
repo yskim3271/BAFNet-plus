@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
-from models.stft import ConviSTFT, ConvSTFT
+from models.stft import mag_pha_stft, mag_pha_istft, pad_stft_input, complex_to_mag_pha
 from omegaconf import OmegaConf
 
 # def test_mapping():
@@ -157,11 +157,40 @@ def test_masking():
     output = model(input)
     print(f"Output shape: {output.shape}")
 
+def test_omegaconf():
+    cfg = OmegaConf.load("conf/model/masking.yaml")
+    print(cfg)
+
+    test_cfg = cfg.get("model_lib")
+    print(test_cfg)
+
+    test_cfg = cfg.get("model")
+    print(test_cfg)
+
+    test_cfg = cfg.get("param")
+    print(test_cfg)
+
+    del test_cfg.win_len
+    print(test_cfg)
+    print(cfg)
+
+def test_bafnet():
+    from models.bafnet import BAFNet
+    cfg = OmegaConf.load("conf/model/bafnet.yaml")
+    model = BAFNet(**cfg.param)
+    tm = torch.randn(4, 1, 178746)
+    am = torch.randn(4, 1, 178746)
+    output = model(tm, am, lens=False)
+    print(f"Output shape: {output.shape}")
+
+
 if __name__ == "__main__":
     # test_mapping()
     # test_masking()
     # stft()
     # test_dccrn()
     # test_tscnet()
-    test_pad_stft_input()
-    
+    # test_pad_stft_input()
+    # test_omegaconf()
+    # test_dccrn()
+    test_bafnet()

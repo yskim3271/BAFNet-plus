@@ -3,38 +3,37 @@ model_class: BAFNet
 input_type: am+tm
 
 param:
-  depth: 4
-  channels: 16
-  kernel_size: 7
+  win_len: 400
+  hop_len: 100
+  fft_len: 400
+  conv_depth: 4
+  conv_channels: 16
+  conv_kernel_size: 7
 
-  args_seconformer:
-    chin: 1
-    chout: 1
-    hidden: 64
-    depth: 4
-    conformer_dim: 512
-    conformer_ffn_dim: 64
-    conformer_num_attention_heads: 4
-    conformer_depth: 4
-    depthwise_conv_kernel_size: 15
-    kernel_size: 8
-    stride: 4
-    resample: 4
-    growth: 2
-    dropout: 0.1
-    rescale: 0.1
-    normalize: true
+  args_mapping:
+    model_lib: mapping
+    model_class: mapping
+    param:
+      hidden: [128, 256, 512, 1024, 1024]
+      kernel_size: 8
+      kernel_size_2: 8
+      stride: [2, 2, 4, 4, 4]
+      depthwise_conv_kernel_size: 15
+      seq_module_depth: 4
+      dropout: 0.1
+      normalize: true
+      concat: true
+      spconv: true
 
-  args_dccrn:
-    rnn_layers: 2
-    rnn_units: 256
-    use_clstm: true
-    kernel_size: 5
-    kernel_num: [32, 64, 128, 256, 256, 256]
-    win_type: hann
-    win_len: 400
-    win_inc: 100
-    fft_len: 512
-    
-  checkpoint_dccrn: /home/user114/yunsik/mmtmse/checkpoint/dccrn/best.th
-  checkpoint_seconformer: /home/user114/yunsik/mmtmse/checkpoint/seconformer_tm/best.th
+  args_masking:
+    model_lib: masking
+    model_class: masking
+    param:
+      win_len: 400
+      hop_len: 100
+      fft_len: 400
+      hidden: [16, 32, 64]
+      TSCB_numb: 2
+
+  checkpoint_mapping:
+  checkpoint_masking:

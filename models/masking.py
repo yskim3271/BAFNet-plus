@@ -268,7 +268,6 @@ class masking(nn.Module):
             win_len=400,
             hop_len=100,
             fft_len=400,
-            win_type='hann',
             hidden=[16, 32, 64],
             TSCB_numb=4,
     ):
@@ -284,7 +283,6 @@ class masking(nn.Module):
         self.win_len = win_len
         self.hop_len = hop_len
         self.fft_len = fft_len
-        self.win_type = win_type
         self.hidden = [3] + hidden
         self.TSCBNumb = TSCB_numb
 
@@ -309,9 +307,6 @@ class masking(nn.Module):
         padded_inputs = pad_stft_input(inputs, self.fft_len, self.hop_len).squeeze(1)       
         
         mag, pha, com = mag_pha_stft(padded_inputs, self.fft_len, self.hop_len, self.win_len, compress_factor=0.3, center=False)
-        # print(f"mag shape: {mag.shape}")
-        # print(f"pha shape: {pha.shape}")
-        # print(f"com shape: {com.shape}")
         
         real = com[:, :, :, 0]
         imag = com[:, :, :, 1]
@@ -319,48 +314,34 @@ class masking(nn.Module):
         real = real[:, 1:, :]
         imag = imag[:, 1:, :]
 
-        # print(f"real shape: {real.shape}")
-        # print(f"imag shape: {imag.shape}")
-
         mag = mag[:, 1:, :]
         pha = pha[:, 1:, :]
 
         input = torch.stack([mag, real, imag], dim=1)
-        # print(f"input shape: {input.shape}")
-
 
         skips = []
         for i in range(len(self.hidden) - 1):
             input = getattr(self, f"dense_encoder_{i}")(input)
-            # print(f"dense_encoder_{i} output shape: {input.shape}")
             skips.append(input)
         
         for i in range(self.TSCBNumb):
             input = getattr(self, f"tscb_{i}")(input)
-            # print(f"tscb_{i} output shape: {input.shape}")
         
         for i in range(len(self.hidden) - 1, 0, -1):
-            # print(f"skips[{i-1}] shape: {skips[i-1].shape}")    
             input = input + skips[i-1]
             input = getattr(self, f"dense_decoder_{i}")(input)
-            # print(f"dense_decoder_{i} output shape: {input.shape}")
         
         mask = self.mask_decoder(input)
-        phase = self.phase_decoder(input)
-        # print(f"mask shape: {mask.shape}")
-        # print(f"phase shape: {phase.shape}")
+        pha = self.phase_decoder(input)
 
-        mags = mag * mask
-        mags = F.pad(mags, [0, 0, 1, 0])
-        phase = F.pad(phase, [0, 0, 1, 0])
+        mag = mag * mask
+        mag = F.pad(mag, [0, 0, 1, 0])
+        pha = F.pad(pha, [0, 0, 1, 0])
+        mask = F.pad(mask, [0, 0, 1, 0])
 
-        # print(f"mag shape: {mag.shape}")
-        # print(f"phase shape: {phase.shape}")
-
-        output_wav = mag_pha_istft(mags, phase, self.fft_len, self.hop_len, self.win_len, compress_factor=0.3)
+        output_wav = mag_pha_istft(mag, pha, self.fft_len, self.hop_len, self.win_len, compress_factor=0.3)
 
         output_wav = output_wav.unsqueeze(1)
-
         output_wav = output_wav[..., :in_len]
 
         if lens == True:
