@@ -307,7 +307,6 @@ class masking(nn.Module):
             fft_len=400,
             hidden=[16, 32, 64],
             dense_depth=4,
-            dense_channels=64,
             TSCB_numb=4,
             ffn_dim=16,
             depthwise_conv_kernel_size=15,
@@ -328,7 +327,6 @@ class masking(nn.Module):
         self.fft_len = fft_len
         self.hidden = [3] + hidden
         self.dense_depth = dense_depth
-        self.dense_channels = dense_channels
         self.TSCB_numb = TSCB_numb
         self.ffn_dim = ffn_dim
         self.depthwise_conv_kernel_size = depthwise_conv_kernel_size
@@ -340,23 +338,23 @@ class masking(nn.Module):
                     DenseEncoder(in_channels=self.hidden[i], 
                                  out_channels=self.hidden[i+1], 
                                  depth=self.dense_depth, 
-                                 dense_channels=self.dense_channels))
+                                 dense_channels=self.hidden[i+1]))
         for i in range(len(self.hidden) - 1, 0, -1):
             setattr(self, f"dense_decoder_{i}", 
                     DenseDecoder(in_channels=self.hidden[i], 
                                  out_channels=self.hidden[i-1], 
                                  depth=self.dense_depth, 
-                                 dense_channels=self.dense_channels))
+                                 dense_channels=self.hidden[i-1]))
                 
         self.mask_decoder = MaskDecoder(num_features=fft_len//2, 
                                         in_channels=self.hidden[0], 
                                         out_channels=1, 
-                                        dense_channels=self.dense_channels,
+                                        dense_channels=self.hidden[0],
                                         depth=self.dense_depth)
         
         self.phase_decoder = PhaseDecoder(in_channels=self.hidden[0], 
                                           out_channels=1, 
-                                          dense_channels=self.dense_channels,
+                                          dense_channels=self.hidden[0],
                                           depth=self.dense_depth)
             
         for i in range(self.TSCB_numb):

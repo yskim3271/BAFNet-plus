@@ -50,7 +50,7 @@ test_noise:
 
 batch_size: 16
 batch_size_valid: 1
-epochs: 200
+epochs: 100
 
 eval_every: 100  # compute test metrics every so epochs
 eval_stt: true
