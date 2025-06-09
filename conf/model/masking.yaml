@@ -6,8 +6,9 @@ param:
   win_len: 400
   hop_len: 100
   fft_len: 400
-  win_type: hann
   hidden: [16, 32, 64]
+  dense_depth: 4
+  dense_channels: 64
   TSCB_numb: 3
   ffn_dim: 16
   depthwise_conv_kernel_size: 15

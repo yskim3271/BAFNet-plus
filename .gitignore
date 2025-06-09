@@ -6,6 +6,7 @@ run.sh
 sandbox.py
 backup
 output.log
+output*.log
 evaluate.sh
 test.py
 

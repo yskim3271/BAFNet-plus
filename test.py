@@ -186,11 +186,11 @@ def test_bafnet():
 
 if __name__ == "__main__":
     # test_mapping()
-    # test_masking()
+    test_masking()
     # stft()
     # test_dccrn()
     # test_tscnet()
     # test_pad_stft_input()
     # test_omegaconf()
-    # test_dccrn()
-    test_bafnet()
+    # # test_dccrn()
+    # test_bafnet()
