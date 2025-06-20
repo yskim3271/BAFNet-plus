@@ -103,11 +103,13 @@ def run(rank, world_size, args):
     
     if world_size > 1:
         model = DDP(model, device_ids=[rank])
-        discriminator = DDP(discriminator, device_ids=[rank])
+        if discriminator is not None:
+            discriminator = DDP(discriminator, device_ids=[rank])
     
     # optimizer
     optim = optim_class(model.parameters(), lr=args.lr, betas=args.betas)
-    optim_disc = optim_class(discriminator.parameters(), lr=args.lr, betas=args.betas)
+    if discriminator is not None:
+        optim_disc = optim_class(discriminator.parameters(), lr=args.lr, betas=args.betas)
 
     # Load dataset
     if rank == 0:

@@ -170,6 +170,11 @@ class CompositeLoss(torch.nn.Module):
         
         self.loss_dict = {}
         self.discriminator = discriminator
+
+        allowed_keys = {"l1_loss", "spectral_loss", "multispectral_loss", "metricgan_loss"}
+        unknown_keys = set(args.keys()) - allowed_keys
+        if unknown_keys:
+            raise ValueError(f"Unknown loss keys in args: {unknown_keys}.")
         
         l1_loss_cfg = args.get("l1_loss")
         if l1_loss_cfg is not None:
