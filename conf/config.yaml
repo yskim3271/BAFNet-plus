@@ -49,7 +49,7 @@ test_noise:
 
 batch_size: 4
 batch_size_valid: 1
-epochs: 1
+epochs: 200
 
 eval_every: 100  # compute test metrics every so epochs
 eval_stt: true
@@ -81,7 +81,7 @@ loss:
     win_length: 400
 
 # Optimization related
-lr: 3e-4
+lr: 1e-4
 optim: adam
 betas: [0.9, 0.99]
 clip_grad_norm: 
