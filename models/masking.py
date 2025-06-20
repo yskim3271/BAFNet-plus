@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchaudio.models.conformer import _FeedForwardModule, _ConvolutionModule
-from models.stft import mag_pha_stft, mag_pha_istft, pad_stft_input
+from stft import mag_pha_stft, mag_pha_istft, pad_stft_input
 
 class LearnableSigmoid2d(nn.Module):
     def __init__(self, in_features, beta=1):
@@ -305,11 +305,10 @@ class masking(nn.Module):
 
         super(masking, self).__init__()
 
-        # for fft
         self.win_len = win_len
         self.hop_len = hop_len
         self.fft_len = fft_len
-        self.hidden = [3] + hidden
+        self.hidden = [4] + hidden
         self.dense_channels = dense_channels
         self.dense_depth = dense_depth
         self.TSCB_numb = TSCB_numb
@@ -324,6 +323,7 @@ class masking(nn.Module):
                                  out_channels=self.hidden[i+1], 
                                  dense_channels=self.dense_channels,
                                  dense_depth=self.dense_depth))
+            
         for i in range(len(self.hidden) - 1, 0, -1):
             setattr(self, f"dense_decoder_{i}", 
                     DenseDecoder(in_channels=self.hidden[i], 
@@ -349,7 +349,7 @@ class masking(nn.Module):
                          use_group_norm=self.use_group_norm))
 
 
-    def forward(self, inputs, lens=False):
+    def forward(self, inputs):
         
         in_len = inputs.size(-1)
         padded_inputs = pad_stft_input(inputs, self.fft_len, self.hop_len).squeeze(1)       
@@ -365,7 +365,7 @@ class masking(nn.Module):
         mag = mag[:, 1:, :]
         pha = pha[:, 1:, :]
 
-        input = torch.stack([mag, real, imag], dim=1)
+        input = torch.stack([mag, pha, real, imag], dim=1)
 
         skips = []
         for i in range(len(self.hidden) - 1):
@@ -392,7 +392,4 @@ class masking(nn.Module):
         output_wav = output_wav.unsqueeze(1)
         output_wav = output_wav[..., :in_len]
 
-        if lens == True:
-            return mask, output_wav
-        else:
-            return output_wav
+        return output_wav

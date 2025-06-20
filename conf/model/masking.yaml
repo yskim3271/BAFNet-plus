@@ -6,7 +6,7 @@ param:
   win_len: 400
   hop_len: 100
   fft_len: 400
-  hidden: [16, 32, 64]
+  hidden: [64, 128, 256]
   dense_depth: 4
   dense_channels: 64
   TSCB_numb: 3

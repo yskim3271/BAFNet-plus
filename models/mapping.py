@@ -208,4 +208,7 @@ class mapping(nn.Module):
             x = decode(x)
 
         x = x[..., :length]
-        return std * x
+
+        output_wav = std * x
+        
+        return output_wav

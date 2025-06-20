@@ -14,7 +14,6 @@ def pad_stft_input(y, n_fft, hop_size):
     return padded_y
 
 def mag_pha_stft(y, n_fft, hop_size, win_size, compress_factor=1.0, center=True, stack_dim=-1):
-
     hann_window = torch.hann_window(win_size).to(y.device)
     stft_spec = torch.stft(y, n_fft, hop_length=hop_size, win_length=win_size, window=hann_window,
                            center=center, pad_mode='reflect', normalized=False, return_complex=True)

@@ -254,10 +254,21 @@ class Solver(object):
                         
                         # Temporarily swap model weights with best_state for evaluation
                         with swap_state(self.model.module if self.is_distributed else self.model, self.best_state['model']):
-                            ev_metric = evaluate(self.args, self.model, self.ev_loader_list, self.logger, epoch)
+                            ev_metric = evaluate(
+                                args=self.args, 
+                                model=self.model, 
+                                data_loaders=self.ev_loader_list, 
+                                logger=self.logger, 
+                                epoch=epoch)
 
                             self.logger.info('Enhance and save samples...')
-                            enhance_multiple_snr(self.args, self.model, self.tt_loader_list, self.logger, epoch, self.samples_dir)
+                            enhance_multiple_snr(
+                                args=self.args, 
+                                model=self.model, 
+                                dataloader_list=self.tt_loader_list, 
+                                logger=self.logger, 
+                                epoch=epoch, 
+                                local_out_dir=self.samples_dir)
                     
                         for snr, metric_item in ev_metric.items():
                             for k, v in metric_item.items():
@@ -302,15 +313,8 @@ class Solver(object):
         
         for i, data in enumerate(logprog):
             # Unpack data; if valid, there's an extra item (file id), else just 4 items
-            if valid:
-                tm, noisy_am, clean_am, mask = data
-            else:
-                tm, noisy_am, clean_am = data
-                mask = None
-            
-            if mask is not None:
-                mask = mask.to(self.device)
-            
+            tm, noisy_am, clean_am = data
+
             # Move inputs to the correct device
             tm = tm.to(self.device)
             noisy_am = noisy_am.to(self.device)
@@ -323,10 +327,10 @@ class Solver(object):
             elif self.input_type == "am+tm":
                 clean_am_hat = self.model(tm, noisy_am)
             else:
-                raise ValueError("Invalid input type, check input_type in config file.")                
+                raise ValueError("Invalid input type, check input_type in config file.")               
 
             # Compute loss
-            loss_all, loss_dict = self.loss(clean_am_hat, clean_am, mask)
+            loss_all, loss_dict = self.loss(clean_am_hat, clean_am)
             
             # For logging, we do all_reduce
             if self.is_distributed:
@@ -359,19 +363,18 @@ class Solver(object):
                 # Optimizer step
                 self.optim.step()
 
-                if self.discriminator.keys() is not None:
-                    disc_loss_dict = self.loss.forward_disc_loss(clean_am_hat.detach(), clean_am)
-                    for key, loss in disc_loss_dict.items():
-                        if loss is not None:
-                            self.optim_disc[key].zero_grad()
-                            loss.backward()
-                            self.optim_disc[key].step()
-                            if self.rank == 0:
-                                logprog.append(**{f'Discriminator_{key}_Loss': format(loss.item(), "4.5f")})
-                                self.writer.add_scalar(f"train/Discriminator_{key}_Loss", loss.item(), epoch * len(data_loader) + i)
-                        elif self.rank == 0:
-                            logprog.append(**{f'Discriminator_{key}_Loss': format(0.0, "4.5f")})
-                            self.writer.add_scalar(f"train/Discriminator_{key}_Loss", 0.0, epoch * len(data_loader) + i)
+                if self.discriminator is not None:
+                    disc_loss = self.loss.forward_disc_loss(clean_am_hat.detach(), clean_am)
+                    if disc_loss is not None:
+                        self.optim_disc.zero_grad()
+                        disc_loss.backward()
+                        self.optim_disc.step()
+                        if self.rank == 0:
+                            logprog.append(**{f'Discriminator_Loss': format(disc_loss, "4.5f")})
+                            self.writer.add_scalar(f"train/Discriminator_Loss", disc_loss, epoch * len(data_loader) + i)
+                    elif self.rank == 0:
+                        logprog.append(**{f'Discriminator_Loss': format(0.0, "4.5f")})
+                        self.writer.add_scalar(f"train/Discriminator_Loss", 0.0, epoch * len(data_loader) + i)
 
             else:
                 # Validation step (rank=0 logs)
