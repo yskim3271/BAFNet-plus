@@ -9,8 +9,8 @@ param:
   hidden: [64, 128, 256]
   dense_depth: 4
   dense_channels: 64
-  TSCB_numb: 3
-  ffn_dim: 16
+  TSCB_numb: 4
+  ffn_dim: 24
   depthwise_conv_kernel_size: 15
-  dropout: 0.2
+  dropout: 0.15
   use_group_norm: true
