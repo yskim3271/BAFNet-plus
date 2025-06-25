@@ -1,7 +1,7 @@
 import importlib
 import torch
 import torch.nn as nn
-from models.stft import mag_pha_stft, mag_pha_istft, pad_stft_input, complex_to_mag_pha
+from stft import mag_pha_stft, mag_pha_istft, pad_stft_input, complex_to_mag_pha
 
 class LearnableSigmoid2d(nn.Module):
     def __init__(self, in_features, beta=1):
@@ -63,6 +63,7 @@ class BAFNet(torch.nn.Module):
             self.sigmoid = LearnableSigmoid2d(self.fft_len // 2 + 1)
         else:
             self.sigmoid = nn.Sigmoid()
+        
         
         self.init_modules()
 
