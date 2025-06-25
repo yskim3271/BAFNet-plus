@@ -22,6 +22,8 @@ class Solver(object):
         discriminator,
         optim, 
         optim_disc,
+        scheduler,
+        scheduler_disc,
         args, 
         logger, 
         rank=0,     
@@ -39,6 +41,8 @@ class Solver(object):
         self.discriminator = discriminator
         self.optim = optim
         self.optim_disc = optim_disc
+        self.scheduler = scheduler
+        self.scheduler_disc = scheduler_disc
         self.logger = logger
 
         # Basic config
@@ -88,8 +92,18 @@ class Solver(object):
         
         # Create a package dict
         package = {}
-        package['model'] = copy_state(self.model.module.state_dict() if self.is_distributed else self.model.state_dict())
+        if self.is_distributed:
+            # If using DDP, we need to copy the state dict from the module
+            package['model'] = copy_state(self.model.module.state_dict())
+            package['discriminator'] = copy_state(self.discriminator.module.state_dict()) if self.discriminator is not None else None
+        else:
+            # In non-distributed mode, just use the model's state dict directly
+            package['model'] = copy_state(self.model.state_dict())
+            package['discriminator'] = copy_state(self.discriminator.state_dict()) if self.discriminator is not None else None
         package['optimizer'] = self.optim.state_dict()
+        package['optimizer_disc'] = self.optim_disc.state_dict() if self.optim_disc is not None else None
+        package['scheduler'] = self.scheduler.state_dict() if self.scheduler is not None else None
+        package['scheduler_disc'] = self.scheduler_disc.state_dict() if self.scheduler_disc is not None else None
         package['history'] = self.history
         package['args'] = self.args
         
@@ -136,7 +150,7 @@ class Solver(object):
                     raise FileNotFoundError(f"Checkpoint file {ckpt_path} not found.")
                 self.logger.info(f"Loading checkpoint from {ckpt_path}")
                 package = torch.load(ckpt_path, map_location='cpu')
-
+                
             if self.is_distributed:
                 # Wait until rank 0 finishes loading the checkpoint
                 dist.barrier()
@@ -144,21 +158,31 @@ class Solver(object):
                 # Broadcast the loaded checkpoint object to all ranks
                 obj_list = [package]
                 dist.broadcast_object_list(obj_list, src=0)
-                package = obj_list[0] 
-
-                # Extract model and optimizer state
-                model_state = package['model']
-                optim_state = package['optimizer']
-                
-                # Load states into the DDP-wrapped model and optimizer
-                self.model.module.load_state_dict(model_state)
-                self.optim.load_state_dict(optim_state)
-            else:
-                # In non-distributed (single GPU or CPU) mode, just load directly
-                model_state = package['model']
-                optim_state = package['optimizer']
-                self.model.load_state_dict(model_state)
-                self.optim.load_state_dict(optim_state)
+                package = obj_list[0]  # Extract the broadcasted package
+            
+            model_state = package['model']
+            model_disc_state = package.get('discriminator', None)
+            optim_state = package['optimizer']
+            optim_disc_state = package.get('optimizer_disc', None)
+            scheduler_state = package.get('scheduler', None)
+            scheduler_disc_state = package.get('scheduler_disc', None)
+            
+            target_model = self.model.module if self.is_distributed else self.model
+            target_model.load_state_dict(model_state)
+            self.optim.load_state_dict(optim_state)
+            
+            if self.discriminator is not None and model_disc_state is not None:
+                target_disc = self.discriminator.module if self.is_distributed else self.discriminator
+                target_disc.load_state_dict(model_disc_state)
+            
+            if self.optim_disc is not None and optim_disc_state is not None:
+                self.optim_disc.load_state_dict(optim_disc_state)
+            
+            if self.scheduler is not None and scheduler_state is not None:
+                self.scheduler.load_state_dict(scheduler_state)
+            
+            if self.scheduler_disc is not None and scheduler_disc_state is not None:
+                self.scheduler_disc.load_state_dict(scheduler_disc_state)
             
             # Now attempt to load the best checkpoint if it exists
             best_path = os.path.join(self.continue_from, 'best.th')
@@ -215,7 +239,7 @@ class Solver(object):
                 self.logger.info(
                     bold(f'Train Summary | End of Epoch {epoch + 1} | '
                          f'Time {time.time() - start:.2f}s | Train Loss {train_loss:.5f}'))
-            
+                
             # Optionally run validation if va_loader is present
             self.model.eval()
             
@@ -231,6 +255,9 @@ class Solver(object):
                     bold(f'Valid Summary | End of Epoch {epoch + 1} | '
                         f'Time {time.time() - start:.2f}s | Valid Loss {valid_loss:.5f}'))
 
+                if self.scheduler is not None:
+                    self.logger.info(f"Learning rate: {self.scheduler.get_last_lr()[0]:.6f}")
+                    self.writer.add_scalar("train/Learning_Rate", self.scheduler.get_last_lr()[0], epoch)
             
             # If distributed, we can synchronize here so that next epoch starts together
             if self.is_distributed:
@@ -345,8 +372,8 @@ class Solver(object):
                 
                 if self.rank == 0:
                     # Log current losses in the progress bar
-                    for i, (key, value) in enumerate(loss_dict.items()):
-                        if i == 0:
+                    for j, (key, value) in enumerate(loss_dict.items()):
+                        if j == 0:
                             logprog.update(**{f"{key}_Loss": format(value, "4.5f")})
                         else:
                             logprog.append(**{f"{key}_Loss": format(value, "4.5f")})
@@ -375,12 +402,17 @@ class Solver(object):
             else:
                 # Validation step (rank=0 logs)
                 if self.rank == 0:
-                    for i, (key, value) in enumerate(loss_dict.items()):
-                        if i == 0:
+                    for j, (key, value) in enumerate(loss_dict.items()):
+                        if j == 0:
                             logprog.update(**{f"{key}_Loss": format(value, "4.5f")})
                         else:
                             logprog.append(**{f"{key}_Loss": format(value, "4.5f")})
                     self.writer.add_scalar("valid/Loss", loss_all.item(), epoch * len(data_loader) + i)
+        
+        if self.scheduler is not None:
+            self.scheduler.step()
+        if self.scheduler_disc is not None:
+            self.scheduler_disc.step()
         
         # Return the average loss over the entire epoch
         return total_loss / len(data_loader)

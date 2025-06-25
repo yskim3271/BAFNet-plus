@@ -4,7 +4,7 @@ dccrn: Deep complex convolution recurrent network
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torchaudio.models.conformer import _FeedForwardModule, _ConvolutionModule
+from torchaudio.models.conformer import _FeedForwardModule, _ConvolutionModule, ConformerLayer
 from stft import mag_pha_stft, mag_pha_istft, pad_stft_input
 
 class LearnableSigmoid2d(nn.Module):
@@ -71,6 +71,26 @@ class Conmer(nn.Module):
         x = self.final_layer_norm(x)
         return x
 
+class Conformer(nn.Module):
+    def __init__(self, 
+                 input_dim: int, 
+                 ffn_dim: int, 
+                 depthwise_conv_kernel_size: int, 
+                 num_attention_heads: int,
+                 dropout: float = 0.0, 
+                 use_group_norm: bool = False) -> None:
+        super().__init__()
+        self.conformer_layer = ConformerLayer(
+            input_dim=input_dim,
+            ffn_dim=ffn_dim,
+            num_attention_heads=num_attention_heads,
+            depthwise_conv_kernel_size=depthwise_conv_kernel_size,
+            dropout=dropout,
+            use_group_norm=use_group_norm,
+        )
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        return self.conformer_layer(input, None)  # key_padding_mask is not used in this case
 
 class TSCB(nn.Module):
     def __init__(self, 
@@ -79,22 +99,44 @@ class TSCB(nn.Module):
                  depthwise_conv_kernel_size=15,
                  dropout=0.2,
                  use_group_norm=True,
+                 use_conformer=False,
+                 num_attention_heads=4
                  ):
         super(TSCB, self).__init__()
-        self.time_conmer = Conmer(
-            input_dim=input_dim,
-            ffn_dim=ffn_dim,
-            depthwise_conv_kernel_size=depthwise_conv_kernel_size,
-            dropout=dropout,
-            use_group_norm=use_group_norm,
-        )
-        self.freq_conmer = Conmer(
-            input_dim=input_dim,
-            ffn_dim=ffn_dim,
-            depthwise_conv_kernel_size=depthwise_conv_kernel_size,
-            dropout=dropout,
-            use_group_norm=use_group_norm,
-        )
+        self.use_conformer = use_conformer
+        
+        if use_conformer:
+            self.time_conmer = ConformerLayer(
+                input_dim=input_dim,
+                ffn_dim=ffn_dim,
+                num_attention_heads=num_attention_heads,
+                depthwise_conv_kernel_size=depthwise_conv_kernel_size,
+                dropout=dropout,
+                use_group_norm=use_group_norm,
+            )
+            self.freq_conmer = ConformerLayer(
+                input_dim=input_dim,
+                ffn_dim=ffn_dim,
+                num_attention_heads=num_attention_heads,
+                depthwise_conv_kernel_size=depthwise_conv_kernel_size,
+                dropout=dropout,
+                use_group_norm=use_group_norm,
+            )
+        else:
+            self.time_conmer = Conmer(
+                input_dim=input_dim,
+                ffn_dim=ffn_dim,
+                depthwise_conv_kernel_size=depthwise_conv_kernel_size,
+                dropout=dropout,
+                use_group_norm=use_group_norm,
+            )
+            self.freq_conmer = Conmer(
+                input_dim=input_dim,
+                ffn_dim=ffn_dim,
+                depthwise_conv_kernel_size=depthwise_conv_kernel_size,
+                dropout=dropout,
+                use_group_norm=use_group_norm,
+            )
 
     def forward(self, x_in):
         b, c, t, f = x_in.size()
@@ -295,7 +337,9 @@ class masking(nn.Module):
             ffn_dim=16,
             depthwise_conv_kernel_size=15,
             dropout=0.2,
-            use_group_norm=True
+            use_group_norm=True,
+            use_conformer=False,
+            num_attention_heads=4
     ):
         '''
 
@@ -316,6 +360,8 @@ class masking(nn.Module):
         self.depthwise_conv_kernel_size = depthwise_conv_kernel_size
         self.dropout = dropout
         self.use_group_norm = use_group_norm
+        self.use_conformer = use_conformer
+        self.num_attention_heads = num_attention_heads
 
         for i in range(len(self.hidden) - 1):
             setattr(self, f"dense_encoder_{i}", 
@@ -346,10 +392,12 @@ class masking(nn.Module):
                          ffn_dim=self.ffn_dim, 
                          depthwise_conv_kernel_size=self.depthwise_conv_kernel_size, 
                          dropout=self.dropout, 
-                         use_group_norm=self.use_group_norm))
+                         use_group_norm=self.use_group_norm,
+                         use_conformer=self.use_conformer,
+                         num_attention_heads=self.num_attention_heads))
 
 
-    def forward(self, inputs):
+    def forward(self, inputs, lens=False):
         
         in_len = inputs.size(-1)
         padded_inputs = pad_stft_input(inputs, self.fft_len, self.hop_len).squeeze(1)       
@@ -392,4 +440,9 @@ class masking(nn.Module):
         output_wav = output_wav.unsqueeze(1)
         output_wav = output_wav[..., :in_len]
 
-        return output_wav
+        if lens == True:
+            return mask, output_wav
+        else:
+            return output_wav
+
+

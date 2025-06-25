@@ -12,7 +12,7 @@ dset:
   rir_train: dataset/rir_train.txt 
   rir_valid: dataset/rir_dev.txt
   rir_test: dataset/rir_test.txt
-  test_augment_numb: 1
+  test_augment_numb: 2
 
 # Dataset related
 sampling_rate: 16000
@@ -49,15 +49,15 @@ test_noise:
 
 batch_size: 4
 batch_size_valid: 1
-epochs: 10
+epochs: 200
 
-eval_every: 10  # compute test metrics every so epochs
+eval_every: 100  # compute test metrics every so epochs
 eval_stt: true
 
 # Loss related
 loss:
   l1_loss:
-    weight: 1.0
+    weight: 0.3
   # multispectral_loss:
   #   weight_mag: 1.0
   #   weight_com: 1.0
@@ -67,27 +67,28 @@ loss:
   #   win_lengths: [200, 400, 800]
   #   compress_factor: 0.3
   spectral_loss:
-    weight_mag: 1.0
-    weight_com: 1.0
-    weight_pha: 1.0
+    weight_mag: 0.9
+    weight_com: 0.2
+    weight_pha: 0.3
     fft_size: 400
     hop_size: 100
     win_length: 400
     compress_factor: 0.3
-  # metricgan_loss:
-  #   weight_disc: 1.0
-  #   weight_gen: 0.1
-  #   ndf: 16
-  #   fft_size: 400
-  #   hop_size: 100
-  #   win_length: 400
-  #   compress_factor: 0.3
-  #   pesq_workers: 8
+  metricgan_loss:
+    weight_disc: 1.0
+    weight_gen: 0.05
+    ndf: 16
+    fft_size: 400
+    hop_size: 100
+    win_length: 400
+    compress_factor: 0.3
+    pesq_workers: 8
 
 # Optimization related
-lr: 1e-4
-optim: adam
-betas: [0.9, 0.99]
+lr: 5e-4
+lr_decay: 0.99
+optim: adamW
+betas: [0.8, 0.99]
 clip_grad_norm: 
 
 # Logging and printing, and does not impact training

@@ -2,7 +2,7 @@ import torch
 import math
 from torch import nn
 from torch.nn import functional as F
-from torchaudio.models.conformer import _FeedForwardModule, _ConvolutionModule
+from torchaudio.models.conformer import _FeedForwardModule, _ConvolutionModule, ConformerLayer
 
 
 class SPConvTranspose1d(nn.Module):
@@ -82,6 +82,27 @@ class Conmer(nn.Module):
         x = self.final_layer_norm(x)
         return x
 
+class Conformer(nn.Module):
+    def __init__(self, 
+                 input_dim: int, 
+                 ffn_dim: int, 
+                 depthwise_conv_kernel_size: int, 
+                 num_attention_heads: int,
+                 dropout: float = 0.0, 
+                 use_group_norm: bool = False) -> None:
+        super().__init__()
+        self.conformer_layer = ConformerLayer(
+            input_dim=input_dim,
+            ffn_dim=ffn_dim,
+            num_attention_heads=num_attention_heads,
+            depthwise_conv_kernel_size=depthwise_conv_kernel_size,
+            dropout=dropout,
+            use_group_norm=use_group_norm,
+        )
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        return self.conformer_layer(input, None)  # key_padding_mask is not used in this case
+
 
 class mapping(nn.Module):
     def __init__(self,
@@ -95,6 +116,8 @@ class mapping(nn.Module):
                  normalize=True,
                  concat=False,
                  spconv=False,
+                 use_conformer=False,
+                 num_attention_heads=4,
                  ):
 
         super().__init__()
@@ -114,6 +137,7 @@ class mapping(nn.Module):
         self.normalize = normalize
         self.concat = concat
         self.spconv = spconv
+        self.use_conformer = use_conformer
 
         if self.spconv:
             convtr = SPConvTranspose1d
@@ -154,6 +178,7 @@ class mapping(nn.Module):
         
         self.seq_modules = nn.ModuleList()
         
+        
         for index in range(seq_module_depth):
             self.seq_modules.append(
                 Conmer(
@@ -161,6 +186,14 @@ class mapping(nn.Module):
                     ffn_dim=seq_dim,
                     depthwise_conv_kernel_size=depthwise_conv_kernel_size,
                     dropout=dropout,
+                ) if not use_conformer else
+                Conformer(
+                    input_dim=seq_dim,
+                    ffn_dim=seq_dim,
+                    depthwise_conv_kernel_size=depthwise_conv_kernel_size,
+                    num_attention_heads=num_attention_heads,
+                    dropout=dropout,
+                    use_group_norm=False
                 )
             )
 

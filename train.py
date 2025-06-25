@@ -111,6 +111,15 @@ def run(rank, world_size, args):
     if discriminator is not None:
         optim_disc = optim_class(discriminator.parameters(), lr=args.lr, betas=args.betas)
 
+    scheduler = None
+    scheduler_disc = None
+
+    if args.lr_decay is not None:
+        scheduler = torch.optim.lr_scheduler.ExponentialLR(optim, gamma=args.lr_decay, last_epoch=-1)
+        if discriminator is not None:
+            # Use a separate scheduler for the discriminator
+            scheduler_disc = torch.optim.lr_scheduler.ExponentialLR(optim_disc, gamma=args.lr_decay, last_epoch=-1)
+
     # Load dataset
     if rank == 0:
         taps_dataset = load_dataset("yskim3271/Throat_and_Acoustic_Pairing_Speech_Dataset")
@@ -238,6 +247,8 @@ def run(rank, world_size, args):
         discriminator=discriminator,
         optim=optim,
         optim_disc=optim_disc,
+        scheduler=scheduler,
+        scheduler_disc=scheduler_disc,
         args=args,
         logger=logger,
         rank=rank,
