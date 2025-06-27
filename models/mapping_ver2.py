@@ -250,7 +250,7 @@ class MPNet(nn.Module):
                                         out_channel=1)
         self.phase_decoder = PhaseDecoder(dense_channel, out_channel=1)
 
-    def forward(self, inputs, lens=False):
+    def forward(self, inputs):
         
         in_len = inputs.size(-1)
         padded_inputs = pad_stft_input(inputs, 
@@ -272,12 +272,10 @@ class MPNet(nn.Module):
         for i in range(self.num_tscblocks):
             x = self.TSTransformer[i](x)
         
-        mask = self.mask_decoder(x)
+        mag = self.mask_decoder(x)
+        pha = self.phase_decoder(x)
 
-        enhanced_mag = mag * mask
-        enhanced_pha = self.phase_decoder(x)
-
-        output_wav = mag_pha_istft(enhanced_mag, enhanced_pha,
+        output_wav = mag_pha_istft(mag, pha,
                                    n_fft=self.fft_len,
                                    hop_size=self.hop_len,
                                    win_size=self.win_len,
@@ -286,8 +284,5 @@ class MPNet(nn.Module):
                                    )
         output_wav = output_wav.unsqueeze(1)
         output_wav = output_wav[..., :in_len]
-        
-        if lens == True:
-            return mask, output_wav
-        else:
-            return output_wav
+
+        return output_wav
