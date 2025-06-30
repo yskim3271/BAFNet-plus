@@ -70,7 +70,7 @@ class MultiResolutionSpectralLoss(torch.nn.Module):
                  hop_sizes=[120, 240, 50],
                  win_lengths=[600, 1200, 240],
                  compress_factor=1.0,
-                 weight_mag=1.0,
+                 weight_lmag=1.0,
                  weight_conv=1.0,
                  weight_comp=1.0,
                  weight_pha=1.0
@@ -87,7 +87,7 @@ class MultiResolutionSpectralLoss(torch.nn.Module):
         self.losses = torch.nn.ModuleList()
         for fs, ss, wl in zip(fft_sizes, hop_sizes, win_lengths):
             self.losses += [SpectralLoss(fft_size=fs, hop_size=ss, win_length=wl, compress_factor=compress_factor,
-                                         weight_mag=weight_mag, weight_conv=weight_conv, weight_comp=weight_comp, weight_pha=weight_pha)]
+                                         weight_lmag=weight_lmag, weight_conv=weight_conv, weight_comp=weight_comp, weight_pha=weight_pha)]
 
     def forward(self, x, y):
         total_loss = 0.0
