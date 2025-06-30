@@ -59,17 +59,19 @@ loss:
   l1_loss:
     weight: 1
   multispectral_loss:
-    weight_mag: 0.3
-    weight_com: 0.3
-    weight_pha: 0.3
+    weight_mag: 0.5
+    weight_conv: 0.5
+    weight_comp: 0.5
+    weight_pha: 0.5
     fft_sizes: [1024, 2048, 512]
     hop_sizes: [120, 240, 50]
     win_lengths: [600, 1200, 240]
     compress_factor: 0.3
   # spectral_loss:
-  #   weight_mag: 0.9
-  #   weight_com: 0.2
-  #   weight_pha: 0.3
+  #   weight_mag: 0.5
+  #   weight_conv: 0.5
+  #   weight_comp: 0.5
+  #   weight_pha: 0.5
   #   fft_size: 400
   #   hop_size: 100
   #   win_length: 400

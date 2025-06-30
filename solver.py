@@ -168,12 +168,12 @@ class Solver(object):
             scheduler_disc_state = package.get('scheduler_disc', None)
             
             target_model = self.model.module if self.is_distributed else self.model
-            target_model.load_state_dict(model_state)
+            target_model.load_state_dict(model_state, weights_only=False)
             self.optim.load_state_dict(optim_state)
             
             if self.discriminator is not None and model_disc_state is not None:
                 target_disc = self.discriminator.module if self.is_distributed else self.discriminator
-                target_disc.load_state_dict(model_disc_state)
+                target_disc.load_state_dict(model_disc_state, weights_only=False)
             
             if self.optim_disc is not None and optim_disc_state is not None:
                 self.optim_disc.load_state_dict(optim_disc_state)

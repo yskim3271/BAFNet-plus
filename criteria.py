@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 from joblib import Parallel, delayed
 from pesq import pesq
-from stft import pad_stft_input, mag_pha_stft
+from stft import mag_pha_stft
 
 class L1_Loss(torch.nn.Module):
     def __init__(self, weight=1.0):
@@ -33,7 +33,8 @@ class SpectralLoss(torch.nn.Module):
                  win_length=400,
                  compress_factor=1.0,
                  weight_mag=1.0,
-                 weight_com=1.0,
+                 weight_conv=1.0,
+                 weight_comp=1.0,
                  weight_pha=1.0
                  ):
         super(SpectralLoss, self).__init__()
@@ -43,27 +44,25 @@ class SpectralLoss(torch.nn.Module):
         self.win_length = win_length
         self.compress_factor = compress_factor
         self.weight_mag = weight_mag
-        self.weight_com = weight_com
+        self.weight_conv = weight_conv
+        self.weight_comp = weight_comp
         self.weight_pha = weight_pha
 
     def forward(self, x, y):
         
         x, y = x.squeeze(1), y.squeeze(1)
-        # x = pad_stft_input(x, self.fft_size, self.hop_size).squeeze(1)
-        # y = pad_stft_input(y, self.fft_size, self.hop_size).squeeze(1)
         
         x_mag, x_pha, x_com = mag_pha_stft(x, self.fft_size, self.hop_size, self.win_length, compress_factor=self.compress_factor, center=True)
         y_mag, y_pha, y_com = mag_pha_stft(y, self.fft_size, self.hop_size, self.win_length, compress_factor=self.compress_factor, center=True)
 
         loss_mag = F.l1_loss(torch.log(x_mag + 1e-8), torch.log(y_mag + 1e-8))
-        loss_com = torch.norm(x_mag - y_mag, p="fro") / torch.norm(y_mag, p="fro")
+        loss_conv = torch.norm(x_mag - y_mag, p="fro") / torch.norm(y_mag, p="fro")
+        loss_comp = F.mse_loss(x_com, y_com)
 
-        # loss_mag = F.mse_loss(x_mag, y_mag)
-        # loss_com = F.mse_loss(x_com, y_com)
         loss_ip, loss_gd, loss_iaf = phase_losses(x_pha, y_pha)
         loss_pha = loss_ip + loss_gd + loss_iaf
 
-        return loss_mag * self.weight_mag + loss_com * self.weight_com + loss_pha * self.weight_pha
+        return loss_mag * self.weight_mag + loss_conv * self.weight_conv + loss_comp * self.weight_comp + loss_pha * self.weight_pha
 
 class MultiResolutionSpectralLoss(torch.nn.Module):
     def __init__(self,
@@ -72,7 +71,8 @@ class MultiResolutionSpectralLoss(torch.nn.Module):
                  win_lengths=[600, 1200, 240],
                  compress_factor=1.0,
                  weight_mag=1.0,
-                 weight_com=1.0,
+                 weight_conv=1.0,
+                 weight_comp=1.0,
                  weight_pha=1.0
     ):
         """Initialize Multi Resolution Spectral Loss.
@@ -87,7 +87,7 @@ class MultiResolutionSpectralLoss(torch.nn.Module):
         self.losses = torch.nn.ModuleList()
         for fs, ss, wl in zip(fft_sizes, hop_sizes, win_lengths):
             self.losses += [SpectralLoss(fft_size=fs, hop_size=ss, win_length=wl, compress_factor=compress_factor,
-                                         weight_mag=weight_mag, weight_com=weight_com, weight_pha=weight_pha)]
+                                         weight_mag=weight_mag, weight_conv=weight_conv, weight_comp=weight_comp, weight_pha=weight_pha)]
 
     def forward(self, x, y):
         total_loss = 0.0
@@ -146,10 +146,7 @@ class MetricGAN_Loss(torch.nn.Module):
         pesq_score = batch_pesq(y_list, x_list, workers=self.pesq_workers)
         
         x, y = x.squeeze(1), y.squeeze(1)
-            
-        # x = pad_stft_input(x, self.fft_size, self.hop_size)
-        # y = pad_stft_input(y, self.fft_size, self.hop_size)
-
+        
         x_mag, _, _ = mag_pha_stft(x, self.fft_size, self.hop_size, self.win_length, compress_factor=self.compress_factor, center=True)
         y_mag, _, _ = mag_pha_stft(y, self.fft_size, self.hop_size, self.win_length, compress_factor=self.compress_factor, center=True)
         x_mag = x_mag.unsqueeze(1)
@@ -172,9 +169,6 @@ class MetricGAN_Loss(torch.nn.Module):
         batch_size = x.shape[0]
 
         x, y = x.squeeze(1), y.squeeze(1)
-
-        # x = pad_stft_input(x, self.fft_size, self.hop_size).squeeze(1)
-        # y = pad_stft_input(y, self.fft_size, self.hop_size).squeeze(1)
 
         x_mag, _, _ = mag_pha_stft(x, self.fft_size, self.hop_size, self.win_length, compress_factor=self.compress_factor, center=True)
         y_mag, _, _ = mag_pha_stft(y, self.fft_size, self.hop_size, self.win_length, compress_factor=self.compress_factor, center=True)

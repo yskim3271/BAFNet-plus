@@ -1,0 +1,14 @@
+model_lib: mpnet
+model_class: MPNet_mapping
+input_type: tm
+
+param:
+  win_len: 400
+  hop_len: 100
+  fft_len: 400
+  compress_factor: 0.3
+  dense_channel: 64
+  sigmoid_beta: 2.0
+  numb_attention_heads: 4
+  num_tsblocks: 4
+

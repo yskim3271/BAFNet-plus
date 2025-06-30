@@ -85,6 +85,13 @@ def run(rank, world_size, args):
     model = model_class(**model_args.param)
     model = model.to(args.device)
 
+    if rank == 0:
+        # Calculate and log the total number of parameters and model size
+        logger.info(f"Selected model: {model_lib}.{model_class}")
+        total_params = sum(p.numel() for p in model.parameters())
+        model_size_mb = (total_params) / (1024 * 1024)
+        logger.info(f"Model's size: {model_size_mb:.2f} MB")
+
     discriminator = None
     optim_disc = None
 

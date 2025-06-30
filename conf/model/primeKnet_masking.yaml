@@ -1,0 +1,13 @@
+model_lib: primeKnet
+model_class: PrimeKnet_masking
+input_type: am
+
+param:
+  win_len: 400
+  hop_len: 100
+  fft_len: 400
+  compress_factor: 0.3
+  dense_channel: 64
+  sigmoid_beta: 2.0
+  num_tsblock: 4
+
