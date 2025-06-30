@@ -32,7 +32,7 @@ class SpectralLoss(torch.nn.Module):
                  hop_size=100, 
                  win_length=400,
                  compress_factor=1.0,
-                 weight_mag=1.0,
+                 weight_lmag=1.0,
                  weight_conv=1.0,
                  weight_comp=1.0,
                  weight_pha=1.0
@@ -43,7 +43,7 @@ class SpectralLoss(torch.nn.Module):
         self.hop_size = hop_size
         self.win_length = win_length
         self.compress_factor = compress_factor
-        self.weight_mag = weight_mag
+        self.weight_lmag = weight_lmag
         self.weight_conv = weight_conv
         self.weight_comp = weight_comp
         self.weight_pha = weight_pha
@@ -62,7 +62,7 @@ class SpectralLoss(torch.nn.Module):
         loss_ip, loss_gd, loss_iaf = phase_losses(x_pha, y_pha)
         loss_pha = loss_ip + loss_gd + loss_iaf
 
-        return loss_lmag * self.weight_mag + loss_conv * self.weight_conv + loss_comp * self.weight_comp + loss_pha * self.weight_pha
+        return loss_lmag * self.weight_lmag + loss_conv * self.weight_conv + loss_comp * self.weight_comp + loss_pha * self.weight_pha
 
 class MultiResolutionSpectralLoss(torch.nn.Module):
     def __init__(self,
