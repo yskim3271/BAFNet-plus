@@ -104,8 +104,9 @@ def run(rank, world_size, args):
     metricganloss_cfg = args.loss.get("metricgan_loss")
 
     if metricganloss_cfg is not None:
-        if world_size > 1:
-            logger.error("MetricGAN Loss cannot be used with DDP (DistributedDataParallel). Please use a single GPU.")
+        if world_size > 1 and not metricganloss_cfg.get("use_torch_pesq", False):
+            # Traditional PESQ calculation can occur deadlock with DDP. Use torch_pesq instead.
+            logger.error("MetricGAN Loss with traditional PESQ cannot be used with DDP. Please use a single GPU.")
             cleanup()
             if torch.distributed.is_initialized():
                 torch.distributed.destroy_process_group()
