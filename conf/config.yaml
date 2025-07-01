@@ -85,6 +85,7 @@ loss:
     win_length: 400
     compress_factor: 0.3
     pesq_workers: 8
+    use_torch_pesq: false
 
 # Optimization related
 lr: 5e-4

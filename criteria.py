@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from joblib import Parallel, delayed
 from pesq import pesq
 from stft import mag_pha_stft
+from torch_pesq import PesqLoss
 
 class L1_Loss(torch.nn.Module):
     def __init__(self, weight=1.0):
@@ -23,8 +24,6 @@ def phase_losses(phase_r, phase_g):
     iaf_loss = torch.mean(anti_wrapping_function(torch.diff(phase_r, dim=2) - torch.diff(phase_g, dim=2)))
 
     return ip_loss, gd_loss, iaf_loss
-
-
 
 class SpectralLoss(torch.nn.Module):
     def __init__(self, 
@@ -102,18 +101,17 @@ def pesq_loss(clean, noisy, sr=16000):
         pesq_score = pesq(sr, clean, noisy, "wb")
     except:
         # error can happen due to silent period
-        pesq_score = -0.5
+        pesq_score = -1
     return pesq_score
 
 
 def batch_pesq(clean, noisy, workers=10):
-    pesq_score = Parallel(n_jobs=workers)(
-        delayed(pesq_loss)(c, n) for c, n in zip(clean, noisy)
-    )
+    pesq_score = Parallel(n_jobs=workers)(delayed(pesq_loss)(c, n) for c, n in zip(clean, noisy))
     pesq_score = np.array(pesq_score)
-    pesq_score = (pesq_score + 0.5) / 5
+    if -1 in pesq_score:
+        return None
+    pesq_score = (pesq_score - 1) / 3.5
     return torch.FloatTensor(pesq_score)
-
 
 class MetricGAN_Loss(torch.nn.Module):
     def __init__(self, 
@@ -124,7 +122,8 @@ class MetricGAN_Loss(torch.nn.Module):
                  compress_factor=1.0, 
                  weight_gen=1.0,
                  weight_disc=1.0, 
-                 pesq_workers=10
+                 pesq_workers=10,
+                 use_torch_pesq=False
                  ):
         super().__init__()
         self.name = "MetricGAN_Loss"
@@ -136,23 +135,30 @@ class MetricGAN_Loss(torch.nn.Module):
         self.weight_gen = weight_gen
         self.weight_disc = weight_disc
         self.pesq_workers = pesq_workers
+        self.use_torch_pesq = use_torch_pesq
+        self.torch_pesq = None
+        if self.use_torch_pesq:
+            self.torch_pesq = PesqLoss(factor=1.0, sample_rate=16000)
 
     def calculate_disc_loss(self, x, y):
         batch_size = x.shape[0]
 
-        x_list = list(x.squeeze(1).detach().cpu().numpy())
-        y_list = list(y.squeeze(1).detach().cpu().numpy())
-
-        pesq_score = batch_pesq(y_list, x_list, workers=self.pesq_workers)
-        
-        x, y = x.squeeze(1), y.squeeze(1)
-        
-        x_mag, _, _ = mag_pha_stft(x, self.fft_size, self.hop_size, self.win_length, compress_factor=self.compress_factor, center=True)
-        y_mag, _, _ = mag_pha_stft(y, self.fft_size, self.hop_size, self.win_length, compress_factor=self.compress_factor, center=True)
-        x_mag = x_mag.unsqueeze(1)
-        y_mag = y_mag.unsqueeze(1)
+        if self.use_torch_pesq:
+            self.torch_pesq.to(x.device)
+            pesq_score = self.torch_pesq.mos(ref=y.squeeze(1), deg=x.squeeze(1))
+            pesq_score = (pesq_score - 1.08) / 4.999
+            pesq_score = pesq_score.type(torch.FloatTensor)
+        else:
+            x_list = list(x.squeeze(1).detach().cpu().numpy())
+            y_list = list(y.squeeze(1).detach().cpu().numpy())
+            pesq_score = batch_pesq(y_list, x_list, workers=self.pesq_workers)
         
         if pesq_score is not None:
+            x_mag, _, _ = mag_pha_stft(x.squeeze(1), self.fft_size, self.hop_size, self.win_length, compress_factor=self.compress_factor, center=True)
+            y_mag, _, _ = mag_pha_stft(y.squeeze(1), self.fft_size, self.hop_size, self.win_length, compress_factor=self.compress_factor, center=True)
+            x_mag = x_mag.unsqueeze(1)
+            y_mag = y_mag.unsqueeze(1)
+
             predict_enhance_metric = self.discriminator(y_mag, x_mag)
             predict_max_metric = self.discriminator(y_mag, y_mag)
             discriminator_loss = F.mse_loss(
@@ -167,11 +173,9 @@ class MetricGAN_Loss(torch.nn.Module):
 
     def forward(self, x, y):
         batch_size = x.shape[0]
-
-        x, y = x.squeeze(1), y.squeeze(1)
-
-        x_mag, _, _ = mag_pha_stft(x, self.fft_size, self.hop_size, self.win_length, compress_factor=self.compress_factor, center=True)
-        y_mag, _, _ = mag_pha_stft(y, self.fft_size, self.hop_size, self.win_length, compress_factor=self.compress_factor, center=True)
+    
+        x_mag, _, _ = mag_pha_stft(x.squeeze(1), self.fft_size, self.hop_size, self.win_length, compress_factor=self.compress_factor, center=True)
+        y_mag, _, _ = mag_pha_stft(y.squeeze(1), self.fft_size, self.hop_size, self.win_length, compress_factor=self.compress_factor, center=True)
 
         predict_fake_metric = self.discriminator(y_mag.unsqueeze(1), x_mag.unsqueeze(1))
 

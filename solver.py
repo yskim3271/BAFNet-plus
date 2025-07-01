@@ -392,12 +392,13 @@ class Solver(object):
 
                 if self.discriminator is not None:
                     disc_loss = self.loss.forward_disc_loss(clean_am_hat.detach(), clean_am)
-                    self.optim_disc.zero_grad()
-                    disc_loss.backward()
-                    self.optim_disc.step()
-                    if self.rank == 0:
-                        logprog.append(**{f'Discriminator_Loss': format(disc_loss, "4.5f")})
-                        self.writer.add_scalar(f"train/Discriminator_Loss", disc_loss, epoch * len(data_loader) + i)
+                    if disc_loss is not None:
+                        self.optim_disc.zero_grad()
+                        disc_loss.backward()
+                        self.optim_disc.step()
+                        if self.rank == 0:
+                            logprog.append(**{f'Discriminator_Loss': format(disc_loss, "4.5f")})
+                            self.writer.add_scalar(f"train/Discriminator_Loss", disc_loss, epoch * len(data_loader) + i)
 
             else:
                 # Validation step (rank=0 logs)

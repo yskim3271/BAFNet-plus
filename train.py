@@ -104,6 +104,13 @@ def run(rank, world_size, args):
     metricganloss_cfg = args.loss.get("metricgan_loss")
 
     if metricganloss_cfg is not None:
+        if world_size > 1:
+            logger.error("MetricGAN Loss cannot be used with DDP (DistributedDataParallel). Please use a single GPU.")
+            cleanup()
+            if torch.distributed.is_initialized():
+                torch.distributed.destroy_process_group()
+            sys.exit(0)
+            
         discriminator = MetricGAN_Discriminator(ndf=metricganloss_cfg.ndf)
         discriminator = discriminator.to(args.device)
         del metricganloss_cfg.ndf
