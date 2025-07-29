@@ -1,12 +1,6 @@
 import torch
-import torch.nn.functional as F
 import torch.nn as nn
-from einops.layers.torch import Rearrange
-import math
-from torchvision.ops.deform_conv import DeformConv2d
-from pesq import pesq
-from joblib import Parallel, delayed
-import numpy as np
+from stft import pad_stft_input, mag_pha_stft, mag_pha_istft
 
 def get_padding(kernel_size, dilation=1):
     return int((kernel_size*dilation - dilation)/2)
@@ -319,38 +313,136 @@ class PhaseDecoder(nn.Module):
         return x
 
 
-class PrimeKnetv2(nn.Module):
+class PrimeKnetv2_mapping(nn.Module):
     def __init__(self, 
-                 h,
+                 win_len,
+                 hop_len,
+                 fft_len,
+                 dense_channel,
+                 sigmoid_beta,
+                 compress_factor,
                  num_tsblock=4
                  ):
-        super(PrimeKnetv2, self).__init__()
-        self.fft_len = h.n_fft
-        self.dense_channel = h.dense_channel
+        super(PrimeKnetv2_mapping, self).__init__()
+        self.win_len = win_len
+        self.hop_len = hop_len
+        self.fft_len = fft_len
+        self.dense_channel = dense_channel
+        self.sigmoid_beta = sigmoid_beta
+        self.compress_factor = compress_factor
         self.num_tsblock = num_tsblock
-        self.dense_encoder = DenseEncoder(h.dense_channel, in_channel=2)
+        self.dense_encoder = DenseEncoder(dense_channel, in_channel=2)
         self.LKFCAnet = nn.ModuleList([])
         for i in range(num_tsblock):
-            self.LKFCAnet.append(TS_BLOCK(h.dense_channel))
-        self.mask_decoder = MaskDecoder(h.dense_channel, h.n_fft, h.beta, out_channel=1)
-        self.phase_decoder = PhaseDecoder(h.dense_channel, out_channel=1)
+            self.LKFCAnet.append(TS_BLOCK(dense_channel))
+        self.mask_decoder = MaskDecoder(dense_channel, fft_len, sigmoid_beta, out_channel=1)
+        self.phase_decoder = PhaseDecoder(dense_channel, out_channel=1)
 
-    def forward(self, noisy_mag, noisy_pha):
+    def forward(self, inputs):
 
-        noisy_mag = noisy_mag.unsqueeze(-1).permute(0, 3, 2, 1) # [B, 1, T, F]
-        noisy_pha = noisy_pha.unsqueeze(-1).permute(0, 3, 2, 1) # [B, 1, T, F]
+        in_len = inputs.size(-1)
+        padded_inputs = pad_stft_input(inputs, 
+                                       n_fft=self.fft_len,
+                                       hop_size=self.hop_len
+                                       ).squeeze(1)
 
-        x = torch.cat((noisy_mag, noisy_pha), dim=1) # [B, 2, T, F]
+        mag, pha, com = mag_pha_stft(padded_inputs, 
+                                     n_fft=self.fft_len,
+                                     hop_size=self.hop_len,
+                                     win_size=self.win_len,
+                                     compress_factor=self.compress_factor,
+                                     center=False
+                                     )
+        
+        mag = mag.unsqueeze(-1).permute(0, 3, 2, 1) # [B, 1, T, F]
+        pha = pha.unsqueeze(-1).permute(0, 3, 2, 1) # [B, 1, T, F]
+        x = torch.cat((mag, pha), dim=1) # [B, 2, T, F]
 
         x = self.dense_encoder(x)
 
         for i in range(self.num_tsblock):
             x = self.LKFCAnet[i](x)
         
-        denoised_mag = (noisy_mag * self.mask_decoder(x)).permute(0, 3, 2, 1).squeeze(-1)
+        mag = self.mask_decoder(x).permute(0, 3, 2, 1).squeeze(-1)
+        pha = self.phase_decoder(x).permute(0, 3, 2, 1).squeeze(-1)
+        
+        output_wav = mag_pha_istft(mag, pha,
+                                   n_fft=self.fft_len,
+                                   hop_size=self.hop_len,
+                                   win_size=self.win_len,
+                                   compress_factor=self.compress_factor,
+                                   center=True
+                                   )
+        
+        output_wav = output_wav.unsqueeze(1)
+        output_wav = output_wav[..., :in_len]
+
+        return output_wav
+
+class PrimeKnetv2_masking(nn.Module):
+    def __init__(self, 
+                 win_len,
+                 hop_len,
+                 fft_len,
+                 dense_channel,
+                 sigmoid_beta,
+                 compress_factor,
+                 num_tsblock=4
+                 ): 
+        super(PrimeKnetv2_masking, self).__init__()
+        self.win_len = win_len
+        self.hop_len = hop_len
+        self.fft_len = fft_len
+        self.dense_channel = dense_channel
+        self.sigmoid_beta = sigmoid_beta
+        self.compress_factor = compress_factor
+        self.num_tsblock = num_tsblock
+        self.dense_encoder = DenseEncoder(dense_channel, in_channel=2)
+        self.LKFCAnet = nn.ModuleList([])
+        for i in range(num_tsblock):
+            self.LKFCAnet.append(TS_BLOCK(dense_channel))
+        self.mask_decoder = MaskDecoder(dense_channel, fft_len, sigmoid_beta, out_channel=1)
+        self.phase_decoder = PhaseDecoder(dense_channel, out_channel=1)
+
+
+
+    def forward(self, inputs):
+        in_len = inputs.size(-1)
+        padded_inputs = pad_stft_input(inputs, 
+                                       n_fft=self.fft_len,
+                                       hop_size=self.hop_len
+                                       ).squeeze(1)
+        
+        mag, pha, com = mag_pha_stft(padded_inputs, 
+                                     n_fft=self.fft_len,
+                                     hop_size=self.hop_len,
+                                     win_size=self.win_len,
+                                     compress_factor=self.compress_factor,
+                                     center=False
+                                     )
+        
+        mag = mag.unsqueeze(-1).permute(0, 3, 2, 1) # [B, 1, T, F]
+        pha = pha.unsqueeze(-1).permute(0, 3, 2, 1) # [B, 1, T, F]
+        x = torch.cat((mag, pha), dim=1) # [B, 2, T, F]
+        x = self.dense_encoder(x)
+
+        for i in range(self.num_tsblock):
+            x = self.LKFCAnet[i](x)
+        
+        mask = self.mask_decoder(x)
+
+        denoised_mag = (mag * mask).permute(0, 3, 2, 1).squeeze(-1)
         denoised_pha = self.phase_decoder(x).permute(0, 3, 2, 1).squeeze(-1)
         
-        denoised_com = torch.stack((denoised_mag*torch.cos(denoised_pha),
-                                    denoised_mag*torch.sin(denoised_pha)), dim=-1)
+        output_wav = mag_pha_istft(denoised_mag, denoised_pha,
+                                   n_fft=self.fft_len,
+                                   hop_size=self.hop_len,
+                                   win_size=self.win_len,
+                                   compress_factor=self.compress_factor,
+                                   center=True
+                                   )
         
-        return denoised_mag, denoised_pha, denoised_com
+        output_wav = output_wav.unsqueeze(1)
+        output_wav = output_wav[..., :in_len]
+
+        return output_wav
