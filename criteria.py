@@ -54,6 +54,7 @@ class SpectralLoss(torch.nn.Module):
         x_mag, x_pha, x_com = mag_pha_stft(x, self.fft_size, self.hop_size, self.win_length, compress_factor=self.compress_factor, center=True)
         y_mag, y_pha, y_com = mag_pha_stft(y, self.fft_size, self.hop_size, self.win_length, compress_factor=self.compress_factor, center=True)
 
+        
         loss_lmag = F.l1_loss(torch.log(x_mag + 1e-8), torch.log(y_mag + 1e-8))
         loss_conv = torch.norm(x_mag - y_mag, p="fro") / torch.norm(y_mag, p="fro")
         loss_comp = F.mse_loss(x_com, y_com)

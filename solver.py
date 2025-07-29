@@ -410,9 +410,9 @@ class Solver(object):
                             logprog.append(**{f"{key}_Loss": format(value, "4.5f")})
                     self.writer.add_scalar("valid/Loss", loss_all.item(), epoch * len(data_loader) + i)
         
-        if self.scheduler is not None:
+        if self.scheduler is not None and not valid:
             self.scheduler.step()
-        if self.scheduler_disc is not None:
+        if self.scheduler_disc is not None and not valid:
             self.scheduler_disc.step()
         
         # Return the average loss over the entire epoch
