@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 
 class LearnableSigmoid(nn.Module):
@@ -14,7 +13,7 @@ class LearnableSigmoid(nn.Module):
         return self.beta * torch.sigmoid(self.slope * x)
 
 class MetricGAN_Discriminator(nn.Module):
-    def __init__(self, ndf, in_channel=2):
+    def __init__(self, ndf=16, in_channel=2):
         super().__init__()
         self.layers = nn.Sequential(
             nn.utils.spectral_norm(

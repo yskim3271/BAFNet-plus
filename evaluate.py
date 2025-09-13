@@ -7,11 +7,10 @@
 import torch
 import nlptutti as sarmetric
 import numpy as np
-from pesq import pesq
-from pystoi import stoi
-from metric_helper import wss, llr, SSNR, trim_mos
-from utils import bold, LogProgress
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
+from compute_metrics import compute_metrics
+from stft import mag_pha_stft, mag_pha_istft
+from utils import bold, LogProgress
 
 
 def get_stts(args, logger, enhanced):
@@ -46,48 +45,7 @@ def get_stts(args, logger, enhanced):
     
     return cer, wer
 
-
-    
-## Code modified from https://github.com/wooseok-shin/MetricGAN-plus-pytorch/tree/main
-def compute_metrics(target_wav, pred_wav, fs=16000):
-    
-    Stoi = stoi(target_wav, pred_wav, fs, extended=False)
-    Pesq = pesq(ref=target_wav, deg=pred_wav, fs=fs)
-        
-    alpha = 0.95
-    ## Compute WSS measure
-    wss_dist_vec = wss(target_wav, pred_wav, 16000)
-    wss_dist_vec = sorted(wss_dist_vec, reverse=False)
-    wss_dist     = np.mean(wss_dist_vec[:int(round(len(wss_dist_vec) * alpha))])
-    
-    ## Compute LLR measure
-    LLR_dist = llr(target_wav, pred_wav, 16000)
-    LLR_dist = sorted(LLR_dist, reverse=False)
-    LLRs     = LLR_dist
-    LLR_len  = round(len(LLR_dist) * alpha)
-    llr_mean = np.mean(LLRs[:LLR_len])
-    
-    ## Compute the SSNR
-    snr_mean, segsnr_mean = SSNR(target_wav, pred_wav, 16000)
-    segSNR = np.mean(segsnr_mean)
-    
-    ## Csig
-    Csig = 3.093 - 1.029 * llr_mean + 0.603 * Pesq - 0.009 * wss_dist
-    Csig = float(trim_mos(Csig))
-    
-    ## Cbak
-    Cbak = 1.634 + 0.478 * Pesq - 0.007 * wss_dist + 0.063 * segSNR
-    Cbak = trim_mos(Cbak)
-
-    ## Covl
-    Covl = 1.594 + 0.805 * Pesq - 0.512 * llr_mean - 0.007 * wss_dist
-    Covl = trim_mos(Covl)
-    
-    return Pesq, Stoi, Csig, Cbak, Covl
-
-
-
-def evaluate(args, model, data_loader_list, logger, epoch=None):
+def evaluate(args, model, data_loader_list, logger, epoch=None, stft_args=None):
     
 
     prefix = f"Epoch {epoch+1}, " if epoch is not None else ""
@@ -100,37 +58,37 @@ def evaluate(args, model, data_loader_list, logger, epoch=None):
         results  = []
         with torch.no_grad():
             for data in iterator:
-                tm, noisy_am, clean_am, id, text = data
+                bcs, noisy_acs, clean_acs, id, text = data
                 
-                if args.model.input_type == "am":
-                    clean_am_hat = model(noisy_am.to(args.device))
-                elif args.model.input_type == "tm":
-                    clean_am_hat = model(tm.to(args.device))
-                elif args.model.input_type == "am+tm":
-                    clean_am_hat = model(tm.to(args.device), noisy_am.to(args.device))
-                else:
-                    raise ValueError("Invalid model input type argument")
+                if args.model.input_type == "acs":
+                    input = mag_pha_stft(noisy_acs, **stft_args)[2].to(args.device)
+                elif args.model.input_type == "bcs":
+                    input = mag_pha_stft(bcs, **stft_args)[2].to(args.device)
+                elif args.model.input_type == "acs+bcs":
+                    input = mag_pha_stft(bcs, **stft_args)[2].to(args.device), mag_pha_stft(noisy_acs, **stft_args)[2].to(args.device)
 
-                clean_am_hat = clean_am_hat.squeeze().cpu().numpy()
-                clean_am = clean_am.squeeze().cpu().numpy()
-                
-                if clean_am_hat.shape[0] > clean_am.shape[0]:
-                    leftover = clean_am_hat.shape[0] - clean_am.shape[0]
-                    clean_am_hat = clean_am_hat[leftover//2:-leftover//2]
-                elif clean_am_hat.shape[0] < clean_am.shape[0]:
-                    raise ValueError("Enhanced signal is shorter than clean signal")
+                clean_mag_hat, clean_pha_hat, clean_com_hat = model(input)
 
-                enhanced.append((clean_am_hat, text[0]))
-                results.append(compute_metrics(clean_am, clean_am_hat))
+                clean_hat = mag_pha_istft(clean_mag_hat, clean_pha_hat, **stft_args)
+
+                clean_acs = clean_acs.squeeze().detach().cpu().numpy()
+                clean_hat = clean_hat.squeeze().detach().cpu().numpy()
+                if len(clean_acs) != len(clean_hat):
+                    length = min(len(clean_acs), len(clean_hat))
+                    clean_acs = clean_acs[0:length]
+                    clean_hat = clean_hat[0:length]
+
+                enhanced.append((clean_hat, text[0]))
+                results.append(compute_metrics(clean_acs, clean_hat))
         
-        results = np.array(results)
-        pesq, stoi, csig, cbak, covl = np.mean(results, axis=0)
+        pesq, csig, cbak, covl, segSNR, stoi = np.mean(results, axis=0)
         metrics[f'{snr}dB'] = {
             "pesq": pesq,
             "stoi": stoi,
             "csig": csig,
             "cbak": cbak,
-            "covl": covl
+            "covl": covl,
+            "segSNR": segSNR
         }
         logger.info(bold(f"{prefix}Performance on {snr}dB: PESQ={pesq:.4f}, STOI={stoi:.4f}, CSIG={csig:.4f}, CBAK={cbak:.4f}, COVL={covl:.4f}"))
                 

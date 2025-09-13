@@ -1,6 +1,6 @@
 model_lib: mpnet
-model_class: MPNet_masking
-input_type: am
+model_class: MPNet
+input_type: acs
 
 param:
   win_len: 400
@@ -11,4 +11,4 @@ param:
   sigmoid_beta: 2.0
   numb_attention_heads: 4
   num_tsblocks: 4
-
+  infer_type: masking

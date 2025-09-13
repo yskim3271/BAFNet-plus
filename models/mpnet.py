@@ -218,7 +218,7 @@ class TSTransformerBlock(nn.Module):
         return x
 
 
-class MPNet_mapping(nn.Module):
+class MPNet(nn.Module):
     def __init__(self, 
                  win_len,
                  hop_len,
@@ -227,9 +227,10 @@ class MPNet_mapping(nn.Module):
                  dense_channel=64,
                  sigmoid_beta=2.0,
                  numb_attention_heads=4,
-                 num_tsblocks=4
+                 num_tsblocks=4,
+                 infer_type='masking'
                  ):
-        super(MPNet_mapping, self).__init__()
+        super(MPNet, self).__init__()
         self.win_len = win_len
         self.hop_len = hop_len
         self.fft_len = fft_len
@@ -239,6 +240,8 @@ class MPNet_mapping(nn.Module):
         self.numb_attention_heads = numb_attention_heads
         self.num_tscblocks = num_tsblocks
         self.dense_encoder = DenseEncoder(dense_channel=dense_channel, in_channel=2)
+        self.infer_type = infer_type
+        assert infer_type in ['masking', 'mapping'], 'infer_type must be either masking or mapping'
 
         self.TSTransformer = nn.ModuleList([])
         for i in range(num_tsblocks):
@@ -272,7 +275,11 @@ class MPNet_mapping(nn.Module):
         for i in range(self.num_tscblocks):
             x = self.TSTransformer[i](x)
         
-        mag = self.mask_decoder(x)
+        if self.infer_type == 'masking':
+            mag = (mag * self.mask_decoder(x))
+        elif self.infer_type == 'mapping':
+            mag = self.mask_decoder(x)
+            
         pha = self.phase_decoder(x)
 
         output_wav = mag_pha_istft(mag, pha,
@@ -286,78 +293,3 @@ class MPNet_mapping(nn.Module):
         output_wav = output_wav[..., :in_len]
 
         return output_wav
-
-
-class MPNet_masking(nn.Module):
-    def __init__(self, 
-                 win_len,
-                 hop_len,
-                 fft_len,
-                 compress_factor=1.0,
-                 dense_channel=64,
-                 sigmoid_beta=2.0,
-                 numb_attention_heads=4,
-                 num_tsblocks=4
-                 ):
-        super(MPNet_masking, self).__init__()
-        self.win_len = win_len
-        self.hop_len = hop_len
-        self.fft_len = fft_len
-        self.compress_factor = compress_factor
-        self.dense_channel = dense_channel
-        self.sigmoid_beta = sigmoid_beta
-        self.numb_attention_heads = numb_attention_heads
-        self.num_tscblocks = num_tsblocks
-        self.dense_encoder = DenseEncoder(dense_channel=dense_channel, in_channel=2)
-
-        self.TSTransformer = nn.ModuleList([])
-        for i in range(num_tsblocks):
-            self.TSTransformer.append(TSTransformerBlock(dense_channel, numb_attention_heads=numb_attention_heads))
-
-        self.mask_decoder = MaskDecoder(fft_len=fft_len, 
-                                        dense_channel=dense_channel, 
-                                        sigmoid_beta=sigmoid_beta, 
-                                        out_channel=1)
-        self.phase_decoder = PhaseDecoder(dense_channel, out_channel=1)
-
-    def forward(self, inputs, lens=False):
-        
-        in_len = inputs.size(-1)
-        padded_inputs = pad_stft_input(inputs, 
-                                       n_fft=self.fft_len,
-                                       hop_size=self.hop_len
-                                       ).squeeze(1)
-        
-        mag, pha, com = mag_pha_stft(padded_inputs, 
-                                     n_fft=self.fft_len,
-                                     hop_size=self.hop_len,
-                                     win_size=self.win_len,
-                                     compress_factor=self.compress_factor,
-                                     center=False
-                                     )
-
-        x = torch.stack((mag, pha), dim=-1).permute(0, 3, 2, 1) # [B, 2, T, F]
-        x = self.dense_encoder(x)
-
-        for i in range(self.num_tscblocks):
-            x = self.TSTransformer[i](x)
-        
-        mask = self.mask_decoder(x)
-
-        denoised_mag = mag * mask
-        denoised_pha = self.phase_decoder(x)
-
-        output_wav = mag_pha_istft(denoised_mag, denoised_pha,
-                                   n_fft=self.fft_len,
-                                   hop_size=self.hop_len,
-                                   win_size=self.win_len,
-                                   compress_factor=self.compress_factor,
-                                   center=True
-                                   )
-        output_wav = output_wav.unsqueeze(1)
-        output_wav = output_wav[..., :in_len]
-        
-        if lens == True:
-            return mask, output_wav
-        else:
-            return output_wav

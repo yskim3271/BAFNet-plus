@@ -1,33 +1,71 @@
-# Copyright (c) Facebook, Inc. and its affiliates.
-# All rights reserved.
-#
-# This source code is licensed under the license found in the
-# LICENSE file in the root directory of this source tree.
-# author: adefossez
-
 import os
-import logging
-from contextlib import contextmanager
 import time
 import torch
-from librosa.filters import mel as librosa_mel_fn
-    
-def mel_spectrogram(y, n_fft=1024, num_mels=80, sampling_rate=16000, hop_length=256, win_length=1024, fmin=0, fmax=8000, device='cpu'):
-    mel = librosa_mel_fn(sr= sampling_rate, n_fft= n_fft, n_mels= num_mels, fmin= fmin, fmax= fmax)
-    mel_basis = torch.from_numpy(mel).float().to(device)
-    hann_window = torch.hann_window(win_length).to(device)
-    
-    y = torch.nn.functional.pad(y, (int((n_fft - hop_length) / 2), int((n_fft - hop_length) / 2)), mode='reflect')
-    
-    stft = torch.view_as_real(torch.stft(y, n_fft, hop_length=hop_length, win_length=win_length, window=hann_window,
-                              center=False, normalized=False, onesided=True, return_complex=True))
-    
-    spec = torch.sqrt(stft.pow(2).sum(-1) + 1e-9)
-    
-    mel_spec = torch.matmul(mel_basis, spec)
-    log_mel_spec = torch.log(torch.clamp(mel_spec, min=1e-5))
-    
-    return log_mel_spec
+import numpy as np
+import logging
+from joblib import Parallel, delayed
+from contextlib import contextmanager
+import atexit
+from pesq import pesq
+
+def anti_wrapping_function(x):
+    return torch.abs(x - torch.round(x / (2 * np.pi)) * 2 * np.pi)
+
+def phase_losses(phase_r, phase_g):
+    ip_loss = torch.mean(anti_wrapping_function(phase_r - phase_g))
+    gd_loss = torch.mean(anti_wrapping_function(torch.diff(phase_r, dim=1) - torch.diff(phase_g, dim=1)))
+    iaf_loss = torch.mean(anti_wrapping_function(torch.diff(phase_r, dim=2) - torch.diff(phase_g, dim=2)))
+
+    return ip_loss + gd_loss + iaf_loss
+
+# Reusable joblib Parallel pool (loky backend)
+_JOBLIB_PARALLEL = None
+_JOBLIB_WORKERS = None
+
+def _get_joblib_parallel(workers: int):
+    """Return a reusable joblib Parallel instance; recreate if worker size changed."""
+    global _JOBLIB_PARALLEL, _JOBLIB_WORKERS
+    if _JOBLIB_PARALLEL is None or _JOBLIB_WORKERS != workers:
+        # Terminate existing pool if present (best-effort; uses private API)
+        if _JOBLIB_PARALLEL is not None:
+            try:
+                _JOBLIB_PARALLEL._terminate_pool()
+            except Exception:
+                pass
+        _JOBLIB_PARALLEL = Parallel(n_jobs=workers, backend="loky", prefer="processes")
+        _JOBLIB_WORKERS = workers
+    return _JOBLIB_PARALLEL
+
+@atexit.register
+def _shutdown_joblib_parallel():
+    """Ensure the global joblib Parallel pool is terminated at interpreter exit."""
+    global _JOBLIB_PARALLEL
+    if _JOBLIB_PARALLEL is not None:
+        try:
+            _JOBLIB_PARALLEL._terminate_pool()
+        except Exception:
+            pass
+        _JOBLIB_PARALLEL = None
+
+
+def batch_pesq(clean, noisy, workers=8, normalize=True):
+    # Reuse a single loky process pool to avoid frequent creation/cleanup cycles
+    parallel = _get_joblib_parallel(workers)
+    pesq_score = parallel(delayed(pesq_loss)(c, n) for c, n in zip(clean, noisy))
+    pesq_score = np.array(pesq_score)
+    if -1 in pesq_score:
+        return None
+    if normalize:
+        pesq_score = (pesq_score - 1) / 3.5
+    return torch.FloatTensor(pesq_score)
+
+def pesq_loss(clean, noisy, sr=16000):
+    try:
+        pesq_score = pesq(sr, clean, noisy, "wb")
+    except:
+        # error can happen due to silent period
+        pesq_score = -1
+    return pesq_score
 
 
 def copy_state(state):

@@ -1,6 +1,6 @@
 model_lib: bafnet
 model_class: BAFNet
-input_type: am+tm
+input_type: acs+bcs
 
 param:
   win_len: 400
@@ -9,35 +9,6 @@ param:
   conv_depth: 4
   conv_channels: 16
   conv_kernel_size: 7
-
-  args_mapping:
-    model_lib: mapping
-    model_class: mapping
-    param:
-      hidden: [128, 256, 512, 1024, 1024]
-      kernel_size: 8
-      kernel_size_2: 8
-      stride: [2, 2, 4, 4, 4]
-      depthwise_conv_kernel_size: 15
-      seq_module_depth: 4
-      dropout: 0.1
-      normalize: true
-      concat: true
-      spconv: true
-
-  args_masking:
-    model_lib: masking
-    model_class: masking
-    param:
-      win_len: 400
-      hop_len: 100
-      fft_len: 400
-      hidden: [16, 32, 64]
-      TSCB_numb: 2
-      ffn_dim: 16
-      depthwise_conv_kernel_size: 15
-      dropout: 0.2
-      use_group_norm: true
 
   checkpoint_mapping:
   checkpoint_masking:

@@ -5,7 +5,7 @@ import torchaudio
 import math
 import numpy as np
 from torch.nn.utils.rnn import pad_sequence
-
+from torchcodec.decoders import AudioDecoder
 from scipy import signal
 
 def tailor_dB_FS(y, target_dB_FS=-25, eps=1e-6):
@@ -117,7 +117,9 @@ class TAPSnoisytdataset:
             assert (index < len(self.noise_list)), f"Index out of range: {index} vs {len(self.noise_list)}"
             noise_file = self.noise_list[index]
             # Load the noise file
-            noise, sr = torchaudio.load(noise_file)
+            noise = AudioDecoder(noise_file).get_all_samples()
+            sr = noise.sample_rate
+            noise = noise.data
             # Check sampling rate compatibility
             assert sr == self.sampling_rate, f"Sampling rate mismatch: {sr} vs {self.sampling_rate}"
             # Repeat the noise if needed to match target length, then truncate
@@ -128,7 +130,9 @@ class TAPSnoisytdataset:
             while remaining_length > 0:
                 # Choose a random noise file
                 noise_file = self._random_select_from(self.noise_list)
-                noise_new_added, sr = torchaudio.load(noise_file)
+                noise_new_added = AudioDecoder(noise_file).get_all_samples()
+                sr = noise_new_added.sample_rate
+                noise_new_added = noise_new_added.data
                 # Check sampling rate compatibility
                 assert sr == self.sampling_rate, f"Sampling rate mismatch: {sr} vs {self.sampling_rate}"
                 
@@ -225,7 +229,10 @@ class TAPSnoisytdataset:
                 rir_file = self._random_select_from(self.rir_list)
             
             # Load the RIR
-            rir, _ = torchaudio.load(rir_file)
+            rir = AudioDecoder(rir_file).get_all_samples()
+            sr = rir.sample_rate
+            rir = rir.data
+            assert sr == self.sampling_rate, f"Sampling rate mismatch: {sr} vs {self.sampling_rate}"
             # If there are multiple channels in RIR, select first channel if deterministic else randomly
             if rir.ndim > 1:
                 if self.deterministic:
@@ -324,7 +331,7 @@ class Audioset:
                 wav = np.pad(wav, (0, num_frames - wav.shape[-1]), 'constant')
                 
             # Add channel dimension
-            wav = np.expand_dims(wav, axis=0)
+            # wav = np.expand_dims(wav, axis=0)
                         
             if self.with_text:
                 return wav, id, text

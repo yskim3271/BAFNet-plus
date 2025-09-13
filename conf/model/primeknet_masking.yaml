@@ -1,6 +1,6 @@
-model_lib: primeKnet
-model_class: PrimeKnet_mapping
-input_type: tm
+model_lib: primeknet
+model_class: PrimeKnet
+input_type: acs
 
 param:
   win_len: 400
@@ -10,4 +10,5 @@ param:
   dense_channel: 64
   sigmoid_beta: 2.0
   num_tsblock: 4
+  infer_type: masking
 
