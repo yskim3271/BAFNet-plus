@@ -105,9 +105,9 @@ class TAPSnoisytdataset:
     
     def _select_noise(self, target_length, index=None):
         # Start with an empty tensor for noise
-        noise = torch.zeros((1, 0), dtype=torch.float32)
+        noise = torch.zeros((0,), dtype=torch.float32)
         # Create a silence tensor to insert between noises if needed
-        silence = torch.zeros((1, int(self.silence_length * self.sampling_rate)), dtype=torch.float32)
+        silence = torch.zeros(int(self.silence_length * self.sampling_rate), dtype=torch.float32)
         # Track how many samples are still needed
         remaining_length = target_length
 
@@ -120,10 +120,14 @@ class TAPSnoisytdataset:
             noise = AudioDecoder(noise_file).get_all_samples()
             sr = noise.sample_rate
             noise = noise.data
+            # Ensure mono (1D) by selecting first channel deterministically if multi-channel
+            if noise.ndim > 1:
+                noise = noise[0, :]
             # Check sampling rate compatibility
             assert sr == self.sampling_rate, f"Sampling rate mismatch: {sr} vs {self.sampling_rate}"
             # Repeat the noise if needed to match target length, then truncate
-            noise = noise.repeat(1, math.ceil(target_length / noise.shape[-1]))[:, :target_length]
+            repeat_times = math.ceil(target_length / noise.shape[-1])
+            noise = noise.repeat(repeat_times)[:target_length]
         
         else:
             # Keep adding random noise files and silence until the total length is reached
@@ -133,6 +137,10 @@ class TAPSnoisytdataset:
                 noise_new_added = AudioDecoder(noise_file).get_all_samples()
                 sr = noise_new_added.sample_rate
                 noise_new_added = noise_new_added.data
+                # Ensure mono (1D). Randomly select a channel if multi-channel
+                if noise_new_added.ndim > 1:
+                    ch_idx = random.randint(0, noise_new_added.shape[0] - 1)
+                    noise_new_added = noise_new_added[ch_idx, :]
                 # Check sampling rate compatibility
                 assert sr == self.sampling_rate, f"Sampling rate mismatch: {sr} vs {self.sampling_rate}"
                 
@@ -191,8 +199,8 @@ class TAPSnoisytdataset:
             assert self.shift % 2 == 0 and t > 0
             offset = random.randint(0, self.shift)
             # Cut both tm and am with the chosen offset
-            am = am[..., offset:offset+t]
-            tm = tm[..., offset:offset+t]
+            am = am[offset:offset+t]
+            tm = tm[offset:offset+t]
         
         am = torch.tensor(am, dtype=torch.float32)
         tm = torch.tensor(tm, dtype=torch.float32)            

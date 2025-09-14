@@ -14,6 +14,7 @@ from models.discriminator import MetricGAN_Discriminator
 import shutil
 from data import TAPSnoisytdataset, StepSampler
 from solver import Solver
+from utils import shutdown_metrics_pool
 
 torch.backends.cudnn.benchmark = True
 
@@ -222,6 +223,7 @@ def run(args):
         device=device
     )
     solver.train()
+    shutdown_metrics_pool()
     sys.exit(0)
 
 def _main(args):
@@ -245,10 +247,12 @@ def main(args):
         _main(args)
     except KeyboardInterrupt:
         logger.info("Training stopped by user")
+        shutdown_metrics_pool()
         kill_child_processes()
         sys.exit(0)
     except Exception as e:
         logger.exception(f"Error occurred in main: {str(e)}")
+        shutdown_metrics_pool()
         kill_child_processes()
         sys.exit(1)
 

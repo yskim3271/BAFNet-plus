@@ -47,6 +47,10 @@ def _shutdown_joblib_parallel():
             pass
         _JOBLIB_PARALLEL = None
 
+def shutdown_metrics_pool():
+    # Ensure the global pool/executor is gracefully shutdown
+    _shutdown_joblib_parallel()
+
 
 def batch_pesq(clean, noisy, workers=8, normalize=True):
     # Reuse a single loky process pool to avoid frequent creation/cleanup cycles
