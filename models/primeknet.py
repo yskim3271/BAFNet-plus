@@ -74,11 +74,12 @@ def get_padding_2d(kernel_size, dilation=(1, 1)):
     return (int((kernel_size[0]*dilation[0] - dilation[0])/2), int((kernel_size[1]*dilation[1] - dilation[1])/2))
 
 class CausalConv1d(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, dilation=1, groups=1, bias=True):
+    def __init__(self, in_channels, out_channels, kernel_size, padding, stride=1, dilation=1, groups=1, bias=True):
         super(CausalConv1d, self).__init__()
-        self.padding = (kernel_size - 1) * dilation
+        self.padding = padding * 2
         self.conv = nn.Conv1d(in_channels, out_channels, kernel_size,
                               padding=0,
+                              stride=stride,
                               dilation=dilation,
                               groups=groups,
                               bias=bias)
@@ -88,13 +89,14 @@ class CausalConv1d(nn.Module):
         return self.conv(x)
 
 class CausalConv2d(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, dilation=(1, 1), groups=1, bias=True):
+    def __init__(self, in_channels, out_channels, kernel_size, padding, stride=1, dilation=(1, 1), groups=1, bias=True):
         super(CausalConv2d, self).__init__()
-        time_padding = (kernel_size[0] - 1) * dilation[0]
-        freq_padding = get_padding(kernel_size[1], dilation[1])
+        time_padding = padding[0] * 2
+        freq_padding = padding[1]
         self.padding = (freq_padding, freq_padding, time_padding, 0)
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size,
                               padding=0,
+                              stride=stride,
                               dilation=dilation,
                               groups=groups,
                               bias=bias)

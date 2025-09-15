@@ -5,7 +5,6 @@ import torchaudio
 import math
 import numpy as np
 from torch.nn.utils.rnn import pad_sequence
-from torchcodec.decoders import AudioDecoder
 from scipy import signal
 
 def tailor_dB_FS(y, target_dB_FS=-25, eps=1e-6):
@@ -117,14 +116,16 @@ class TAPSnoisytdataset:
             assert (index < len(self.noise_list)), f"Index out of range: {index} vs {len(self.noise_list)}"
             noise_file = self.noise_list[index]
             # Load the noise file
-            noise = AudioDecoder(noise_file).get_all_samples()
-            sr = noise.sample_rate
-            noise = noise.data
+            waveform, sr = torchaudio.load(noise_file)
             # Ensure mono (1D) by selecting first channel deterministically if multi-channel
-            if noise.ndim > 1:
-                noise = noise[0, :]
+            if waveform.ndim > 1 and waveform.shape[0] > 1:
+                waveform = waveform[0, :]
+            else:
+                waveform = waveform.squeeze()
             # Check sampling rate compatibility
             assert sr == self.sampling_rate, f"Sampling rate mismatch: {sr} vs {self.sampling_rate}"
+            # Ensure dtype float32
+            noise = waveform.to(dtype=torch.float32)
             # Repeat the noise if needed to match target length, then truncate
             repeat_times = math.ceil(target_length / noise.shape[-1])
             noise = noise.repeat(repeat_times)[:target_length]
@@ -134,15 +135,16 @@ class TAPSnoisytdataset:
             while remaining_length > 0:
                 # Choose a random noise file
                 noise_file = self._random_select_from(self.noise_list)
-                noise_new_added = AudioDecoder(noise_file).get_all_samples()
-                sr = noise_new_added.sample_rate
-                noise_new_added = noise_new_added.data
+                waveform, sr = torchaudio.load(noise_file)
                 # Ensure mono (1D). Randomly select a channel if multi-channel
-                if noise_new_added.ndim > 1:
-                    ch_idx = random.randint(0, noise_new_added.shape[0] - 1)
-                    noise_new_added = noise_new_added[ch_idx, :]
+                if waveform.ndim > 1 and waveform.shape[0] > 1:
+                    ch_idx = random.randint(0, waveform.shape[0] - 1)
+                    waveform = waveform[ch_idx, :]
+                else:
+                    waveform = waveform.squeeze()
                 # Check sampling rate compatibility
                 assert sr == self.sampling_rate, f"Sampling rate mismatch: {sr} vs {self.sampling_rate}"
+                noise_new_added = waveform.to(dtype=torch.float32)
                 
                 # Concatenate the newly loaded noise to the existing noise
                 noise = torch.cat((noise, noise_new_added), dim=-1)
@@ -237,17 +239,18 @@ class TAPSnoisytdataset:
                 rir_file = self._random_select_from(self.rir_list)
             
             # Load the RIR
-            rir = AudioDecoder(rir_file).get_all_samples()
-            sr = rir.sample_rate
-            rir = rir.data
+            rir_waveform, sr = torchaudio.load(rir_file)
             assert sr == self.sampling_rate, f"Sampling rate mismatch: {sr} vs {self.sampling_rate}"
             # If there are multiple channels in RIR, select first channel if deterministic else randomly
-            if rir.ndim > 1:
+            if rir_waveform.ndim > 1 and rir_waveform.shape[0] > 1:
                 if self.deterministic:
-                    rir = rir[0, :]
+                    rir_waveform = rir_waveform[0, :]
                 else:
-                    rir_idx = random.randint(0, rir.shape[0] - 1)
-                    rir = rir[rir_idx, :]
+                    rir_idx = random.randint(0, rir_waveform.shape[0] - 1)
+                    rir_waveform = rir_waveform[rir_idx, :]
+            else:
+                rir_waveform = rir_waveform.squeeze()
+            rir = rir_waveform.to(dtype=torch.float32)
             
             # Convolve the clean speech with the RIR to add reverberation
             am = signal.fftconvolve(am.squeeze(), rir.squeeze().numpy(), mode='full')[:am.shape[-1]]
