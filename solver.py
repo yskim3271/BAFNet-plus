@@ -123,7 +123,7 @@ class Solver(object):
                 self.writer = SummaryWriter(log_dir=dst_tb_dir)
                         
             # loads the checkpoint file from disk
-            ckpt_path = os.path.join(self.continue_from, 'states.th')
+            ckpt_path = os.path.join(self.continue_from, 'checkpoint.th')
             if not os.path.exists(ckpt_path):
                 raise FileNotFoundError(f"Checkpoint file {ckpt_path} not found.")
             self.logger.info(f"Loading checkpoint from {ckpt_path}")
@@ -137,6 +137,7 @@ class Solver(object):
             scheduler_disc_state = package.get('scheduler_disc', None)
             self.best_loss = package.get('best_loss', 0.0)
             self.best_state = package.get('best_state', None)
+            self.history = package.get('history', [])
                     
             self.model.load_state_dict(model_state)
             self.optim.load_state_dict(optim_state)

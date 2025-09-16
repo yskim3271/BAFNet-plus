@@ -7,6 +7,10 @@ import numpy as np
 from torch.nn.utils.rnn import pad_sequence
 from scipy import signal
 
+import warnings
+
+warnings.filterwarnings("ignore", category=UserWarning)
+
 def tailor_dB_FS(y, target_dB_FS=-25, eps=1e-6):
     # Calculate the root mean square (RMS) of the audio signal
     rms = torch.sqrt(torch.mean(y ** 2))
