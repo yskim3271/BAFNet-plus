@@ -4,11 +4,11 @@ defaults:
   - override hydra/hydra_logging: colorlog
 
 dset:
-  noise_dir: /home/yskim/workspace/dataset/datasets_fullband/noise_fullband_16k
+  noise_dir: /home/work/yskim/dataset/datasets_fullband/noise_fullband_16k
   noise_train: dataset/noise_train.txt 
   noise_valid: dataset/noise_dev.txt 
   noise_test: dataset/noise_test.txt
-  rir_dir: /home/yskim/workspace/dataset/datasets_fullband/impulse_responses_16k
+  rir_dir: /home/work/yskim/dataset/datasets_fullband/impulse_responses_16k
   rir_train: dataset/rir_train.txt 
   rir_valid: dataset/rir_dev.txt
   rir_test: dataset/rir_test.txt
