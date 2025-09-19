@@ -36,22 +36,6 @@ def _get_joblib_parallel(workers: int):
         _JOBLIB_WORKERS = workers
     return _JOBLIB_PARALLEL
 
-@atexit.register
-def _shutdown_joblib_parallel():
-    """Ensure the global joblib Parallel pool is terminated at interpreter exit."""
-    global _JOBLIB_PARALLEL
-    if _JOBLIB_PARALLEL is not None:
-        try:
-            _JOBLIB_PARALLEL._terminate_pool()
-        except Exception:
-            pass
-        _JOBLIB_PARALLEL = None
-
-def shutdown_metrics_pool():
-    # Ensure the global pool/executor is gracefully shutdown
-    _shutdown_joblib_parallel()
-
-
 def batch_pesq(clean, noisy, workers=8, normalize=True):
     # Reuse a single loky process pool to avoid frequent creation/cleanup cycles
     parallel = _get_joblib_parallel(workers)

@@ -2,6 +2,7 @@ outputs
 transcripts
 checkpoint
 run.sh
+run2.sh
 sandbox.py
 backup
 output.log
