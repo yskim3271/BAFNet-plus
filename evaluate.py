@@ -123,7 +123,7 @@ if __name__=="__main__":
     parser.add_argument("--rir_test", type=str, required=True, help="List of RIR files for testing.")
     parser.add_argument("--test_augment_numb", type=int, default=2, help="Number of test augmentations. default is 2")
     parser.add_argument("--snr_step", nargs="+", type=int, required=True, help="Signal to noise ratio. default is 0 dB")
-    parser.add_argument("--reverb_proportion", type=float, default=0.5, help="Reverberation proportion. default is 0.5")
+    parser.add_argument("--reverb_proportion", type=float, default=0.0, help="Reverberation proportion. default is 0.5")
     parser.add_argument("--target_dB_FS", type=float, default=-25, help="Target dB FS. default is -25")
     parser.add_argument("--target_dB_FS_floating_value", type=float, default=0, help="Target dB FS floating value. default is 0")
     parser.add_argument("--silence_length", type=float, default=0.2, help="Silence length. default is 0.2")
@@ -151,19 +151,19 @@ if __name__=="__main__":
     logger = logging.getLogger(__name__)
     
     conf = OmegaConf.load(args.model_config)
-    conf.model = OmegaConf.load(args.model_config)
     conf.device = device
     conf.eval_stt = args.eval_stt
     
-    model_args = os.path.basename(args.model_config)
-    model_name = conf.model_name
-    module = importlib.import_module("models."+ model_name)
+    model_args = conf.model
+    model_lib = model_args.model_lib
+    model_name = model_args.model_class
+    module = importlib.import_module("models."+ model_lib)
     model_class = getattr(module, model_name)
     
-    model = model_class(**conf.param).to(device)
+    model = model_class(**model_args.param).to(device)
     chkpt = torch.load(os.path.join(chkpt_dir, chkpt_file), map_location=device)
     model.load_state_dict(chkpt['model'])
-    tm_only = conf.input_type == "tm"
+    tm_only = model_args.input_type == "tm"
     
     testset = load_dataset("yskim3271/Throat_and_Acoustic_Pairing_Speech_Dataset", split="test")
     testset_list = [testset] * args.test_augment_numb
@@ -173,6 +173,13 @@ if __name__=="__main__":
 
     noise_test_list = [os.path.join(args.noise_dir, line.strip()) for line in open(args.noise_test, "r")]
     rir_test_list = [os.path.join(args.rir_dir, line.strip()) for line in open(args.rir_test, "r")]
+
+    stft_args = {
+        "n_fft": model_args.param.fft_len,
+        "hop_size": model_args.param.hop_len,
+        "win_size": model_args.param.win_len,
+        "compress_factor": model_args.param.compress_factor
+    }
 
     for fixed_snr in args.snr_step:
         ev_dataset = TAPSnoisytdataset(
@@ -201,7 +208,7 @@ if __name__=="__main__":
         ev_loader_list[f"{fixed_snr}"] = ev_loader
 
     logger.info(f"Model: {model_name}")
-    logger.info(f"Input type: {conf.input_type}")
+    logger.info(f"Input type: {model_args.input_type}")
     logger.info(f"Checkpoint: {chkpt_dir}")
     logger.info(f"Device: {device}")
     
@@ -209,4 +216,5 @@ if __name__=="__main__":
             model=model,
             data_loader_list=ev_loader_list,
             logger=logger,
-            epoch=None)
+            epoch=None,
+            stft_args=stft_args)
