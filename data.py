@@ -32,7 +32,7 @@ def is_clipped(y, clipping_threshold=0.999):
     # Check if any sample in the signal exceeds the clipping threshold
     return torch.any(torch.abs(y) > clipping_threshold)
 
-class TAPSnoisytdataset:
+class Noise_Augmented_Dataset:
     def __init__(self, 
                  datapair_list,
                  noise_list,
@@ -49,7 +49,7 @@ class TAPSnoisytdataset:
                  with_id=False,
                  with_text=False,
                  deterministic=False,
-                 tm_only=False,
+                 tm_only=False
                  ):
         # Initialize variables with constructor arguments
         self.datapair_list = datapair_list

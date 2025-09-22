@@ -97,12 +97,20 @@ def run(args):
         scheduler = torch.optim.lr_scheduler.ExponentialLR(optim, gamma=args.lr_decay, last_epoch=-1)
         scheduler_disc = torch.optim.lr_scheduler.ExponentialLR(optim_disc, gamma=args.lr_decay, last_epoch=-1)
 
-    # Load dataset from Huggingface
-    taps_dataset = load_dataset("yskim3271/Throat_and_Acoustic_Pairing_Speech_Dataset")
 
-    trainset = taps_dataset['train']
-    validset = taps_dataset['dev']
-    testset = taps_dataset['test']
+
+    # Load dataset from Huggingface
+    dset = args.dset.get("raw_dataset", "TAPS")
+    if dset == "TAPS":
+        _dataset = load_dataset("yskim3271/Throat_and_Acoustic_Pairing_Speech_Dataset")
+    elif dset == "Vibravox":
+        _dataset = load_dataset("yskim3271/vibravox_16k")
+
+    trainset = _dataset['train']
+    validset = _dataset['dev']
+    testset = _dataset['test']
+
+
     testset_list = [testset] * args.dset.test_augment_numb
     testset = concatenate_datasets(testset_list)
     
@@ -116,7 +124,7 @@ def run(args):
     tm_only = args.model.input_type == "tm"
 
     # Set up dataset and dataloader
-    tr_dataset = TAPSnoisytdataset(
+    tr_dataset = Noise_Augmented_Dataset(
         datapair_list=trainset,
         noise_list=noise_train_list,
         rir_list=rir_train_list,
@@ -141,7 +149,7 @@ def run(args):
     )
         
     # Set up validation and test dataset and dataloader
-    va_dataset = TAPSnoisytdataset(
+    va_dataset = Noise_Augmented_Dataset(
         datapair_list= validset,
         noise_list= noise_valid_list,
         rir_list= rir_valid_list,
@@ -166,7 +174,7 @@ def run(args):
     tt_loader_list = {}
     
     for fixed_snr in args.test_noise.snr_step:
-        ev_dataset = TAPSnoisytdataset(
+        ev_dataset = Noise_Augmented_Dataset(
             datapair_list= testset,
             noise_list= noise_test_list,
             rir_list= rir_test_list,

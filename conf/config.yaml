@@ -4,6 +4,7 @@ defaults:
   - override hydra/hydra_logging: colorlog
 
 dset:
+  raw_dataset: TAPS
   noise_dir: /home/work/yskim/dataset/datasets_fullband/noise_fullband_16k
   noise_train: dataset/noise_train.txt 
   noise_valid: dataset/noise_dev.txt 
