@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 from datasets import load_dataset, concatenate_datasets
 from models.discriminator import MetricGAN_Discriminator
 import shutil
-from data import TAPSnoisytdataset, StepSampler
+from data import Noise_Augmented_Dataset, StepSampler
 from solver import Solver
 
 torch.backends.cudnn.benchmark = True
@@ -100,7 +100,7 @@ def run(args):
 
 
     # Load dataset from Huggingface
-    dset = args.dset.get("raw_dataset", "TAPS")
+    dset = args.get("dataset", "TAPS")
     if dset == "TAPS":
         _dataset = load_dataset("yskim3271/Throat_and_Acoustic_Pairing_Speech_Dataset")
     elif dset == "Vibravox":
