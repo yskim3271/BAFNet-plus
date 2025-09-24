@@ -2,14 +2,13 @@ defaults:
   - _self_
   - override hydra/job_logging: colorlog
   - override hydra/hydra_logging: colorlog
-
 dataset: TAPS
 dset:
-  noise_dir: /home/yskim//workspace/dataset/datasets_fullband/noise_fullband_16k
+  noise_dir: /home/user114/yunsik/dataset/datasets_fullband/noise_fullband_16k
   noise_train: dataset/noise_train.txt 
   noise_valid: dataset/noise_dev.txt 
   noise_test: dataset/noise_test.txt
-  rir_dir: /home/yskim//workspace/dataset/datasets_fullband/impulse_responses_16k
+  rir_dir: /home/user114/yunsik/dataset/datasets_fullband/impulse_responses_16k
   rir_train: dataset/rir_train.txt 
   rir_valid: dataset/rir_dev.txt
   rir_test: dataset/rir_test.txt
@@ -63,9 +62,9 @@ eval_stt: true
 # Loss related
 loss:
   time: 0.0
-  magnitude: 0.9
-  phase: 0.3
-  complex: 0.1
+  magnitude: 1
+  phase: 0.0
+  complex: 0.0
   consistency: 0.05
   metric: 0.05
 

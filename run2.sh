@@ -1,6 +1,6 @@
 # chmod +x ./run2.sh
-# nohup ./run2.sh > output1.log 2>&1 &
+# nohup ./run2.sh > output2.log 2>&1 &
 
-echo Masking Model Causal
-echo train.py +model=primeknet_masking model.param.causal=True model.param.dense_depth=3 continue_from=/home/work/yskim/BAFNet-plus/outputs/2025-09-15_18-47-09
-python train.py +model=primeknet_masking model.param.causal=True model.param.dense_depth=3 continue_from=/home/work/yskim/BAFNet-plus/outputs/2025-09-15_18-47-09
+echo Mapping Model
+echo python train.py --config-name=config_mapping +model=primeknet_mapping dataset=TAPS loss.time=1.0
+CUDA_VISIBLE_DEVICES=1 python train.py --config-name=config_mapping +model=primeknet_mapping dataset=TAPS loss.time=1.0
