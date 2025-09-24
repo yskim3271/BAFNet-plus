@@ -284,7 +284,7 @@ class Solver(object):
 
                 logprog.append(**{f"Disc_Loss": format(loss_disc.item(), "4.5f")})
 
-            loss_time = F.mse_loss(clean_hat, clean_acs)
+            loss_time = F.mse_loss(clean_acs[:,:clean_hat.size(-1)], clean_hat)
             loss_magnitude = F.mse_loss(clean_mag, clean_mag_hat)
             loss_phase = phase_losses(clean_pha, clean_pha_hat)
             loss_complex = F.mse_loss(clean_com, clean_com_hat) * 2
