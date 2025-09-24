@@ -6,64 +6,81 @@ from stft import mag_pha_to_complex
 # ==================================================================================
 # Causal Real-Time Model: Receptive Field and Streaming Parameters Calculation
 #
-# Acknowledgment: The initial analysis has been refined based on the insight that
-# the `TS_BLOCK_Stream` processes time and frequency axes independently.
-# The following calculation for the time-axis receptive field considers *only*
-# the modules that operate along the time dimension.
+# Note: `TS_BLOCK` processes time and frequency axes independently. The following
+# receptive-field (RF) analysis considers ONLY modules operating along the time axis.
 #
-# ----------------------------------------------------------------------------------
-# 1. Receptive Field Calculation (in Spectrogram Frames)
+# Symbols
+#   k_ds  : time-axis kernel of DS_DDB's causal conv (fixed to 3 in this code)
+#   D     : dilations in DS_DDB time convs = [1, 2, 4, 8]
+#   N_ts  : num_tsblock (number of TS_BLOCKs in LKFCAnet)
+#   N_tb  : time_block_num (number of LKFCA_Block in a TS_BLOCK's time path)
+#   k_dw  : time_dw_kernel_size (depthwise conv kernel in LKFCA_Block's time path)
+#   K_g   : max(time_block_kernel) if GCGFN is used in time path; otherwise 1
+#           (i.e., setting time_block_kernel=[1] OR removing GCGFN ⇒ K_g = 1)
 #
-# The total receptive field along the time axis is a sum of contributions from
-# the Encoder, the time-processing blocks within LKFCAnet, and the Decoder.
+# -----------------------------------------------------------------------------
+# 1) Receptive Field in Spectrogram Frames (time axis)
 #
-# (1) RF of DS_DDB_Stream (in Encoder & Decoder):
-#     - This module contains 4 layers of `CausalConv2d` with a time-axis kernel of 3
-#       and dilations of [1, 2, 4, 8].
-#     - Formula for a stack of causal dilated convolutions: 1 + sum((k-1)*d)
-#     - RF_ds_ddb = 1 + (3-1)*1 + (3-1)*2 + (3-1)*4 + (3-1)*8 = 31 frames.
+# (1) Encoder/Decoder DS_DDB (time axis only)
+#     - 4 causal dilated depthwise conv layers with k_ds=3 and D=[1,2,4,8]
+#     - RF for a stack of causal dilated convs:
+#           RF_ds_ddb = 1 + Σ (k_ds - 1) * d  for d ∈ D
+#                    = 1 + (3 - 1) * (1 + 2 + 4 + 8)
+#                    = 31 frames
 #
-# (2) RF of LKFCAnet (Time-processing part ONLY):
-#     - LKFCAnet consists of `num_tsblock` (default=4) `TS_BLOCK_Stream` modules.
-#     - Each `TS_BLOCK_Stream` contains a `time` block and a `freq` block. For the
-#       time-axis receptive field, we ONLY consider the `time` block.
-#     - The `time` block contains 2 sequential `LKFCA_Block_Stream` modules.
-#     - Thus, `num_tsblock * 2` (i.e., 8) `LKFCA_Block_Stream` modules are applied
-#       sequentially along the time axis.
+# (2) LKFCAnet (time path ONLY)
+#     - Total number of time LKFCA_Blocks in series:  N = N_ts * N_tb
+#     - One LKFCA_Block (time path) applies: depthwise conv (k_dw) → GCGFN (largest kernel K_g)
+#       Components with 1×1 kernels / gating / pooling do NOT expand RF beyond what
+#       the causal convs already cover.
+#     - RF of one LKFCA_Block (time):
+#           RF_block = k_dw + K_g - 1
 #
-#     - RF of a single LKFCA_Block_Stream:
-#         - This block applies a `dwconv` (kernel=3) and a `GCGFNStream` sequentially.
-#         - `GCGFNStream` uses parallel convolutions, so its RF is determined by the
-#           largest kernel in `kernel_list`.
-#         - RF_lkfca_block = RF_dwconv + RF_gcgfn - 1
-#                         = 3 + max(kernel_list) - 1 = max(kernel_list) + 2 frames.
-#         - With default kernel_list=[3, 11, 23, 31], RF_lkfca_block = 31 + 2 = 33 frames.
+#     - RF of LKFCAnet time path (N blocks in series):
+#           RF_lkfcanet_time = 1 + N * (RF_block - 1)
+#                            = 1 + (N_ts * N_tb) * ( (k_dw + K_g - 1) - 1 )
+#                            = 1 + (N_ts * N_tb) * (k_dw + K_g - 2)
 #
-#     - Total RF for the time-part of LKFCAnet (stack of 8 blocks):
-#         - RF_lkfcanet_time = 1 + (num_tsblock * 2) * (RF_lkfca_block - 1)
-#         - RF_lkfcanet_time = 1 + 8 * (33 - 1) = 257 frames.
+#     - Special cases:
+#         • If time_block_kernel = [1] (i.e., K_g=1), then RF_block = k_dw.
+#         • If GCGFN is removed from the time path, set K_g = 1 (same as above).
 #
-# (3) Total Model Receptive Field (Time-axis):
-#     - The total RF is the sum of receptive fields of the sequential components.
-#     - Formula: RF_total = RF_encoder + (RF_lkfcanet_time - 1) + (RF_decoder - 1)
-#     - RF_total = RF_ds_ddb + (RF_lkfcanet_time - 1) + (RF_ds_ddb - 1)
-#     - RF_total = 31 + (257 - 1) + (31 - 1) = 31 + 256 + 30 = 317 frames.
+# (3) Total model RF along time axis (Encoder → LKFCAnet(time) → Decoder):
+#       RF_total_frames = RF_ds_ddb + (RF_lkfcanet_time - 1) + (RF_ds_ddb - 1)
+#                       = 2*RF_ds_ddb + RF_lkfcanet_time - 2
+#                       = 2*31 + [ 1 + (N_ts * N_tb)*(k_dw + K_g - 2) ] - 2
+#                       = 61 + (N_ts * N_tb)*(k_dw + K_g - 2)
 #
-# ----------------------------------------------------------------------------------
-# 2. Receptive Field Calculation (in Audio Samples)
+# -----------------------------------------------------------------------------
+# 2) Receptive Field in Audio Samples
 #
-#     - Formula: RF_samples = (RF_frames - 1) * hop_len + win_len
-#     - Using default parameters (win_len=400, hop_len=100):
-#     - RF_samples = (317 - 1) * 100 + 400 = 31600 + 400 = 32,000 samples.
+#   RF_samples = (RF_total_frames - 1) * hop_len + win_len
 #
-# At a 16kHz sampling rate, this is a 2-second receptive field (32000 / 16000).
+#   Example (defaults in this code):
+#     - win_len=400, hop_len=100, N_ts=4, N_tb=2
+#     a) Default kernels: k_dw=3, K_g=max([3,11,23,31])=31
+#        RF_block = 3 + 31 - 1 = 33
+#        RF_lkfcanet_time = 1 + (4*2)*(33 - 1) = 257
+#        RF_total_frames  = 31 + (257 - 1) + (31 - 1) = 317
+#        RF_samples = (317 - 1) * 100 + 400 = 32,000  (≈ 2.0 s @16 kHz)
 #
-# ----------------------------------------------------------------------------------
-# 3. Streaming Implementation Guidelines (Unchanged)
+#     b) Minimal time kernels: time_block_kernel=[1] (or remove GCGFN ⇒ K_g=1), k_dw=3
+#        RF_block = 3
+#        RF_lkfcanet_time = 1 + (4*2)*(3 - 1) = 17
+#        RF_total_frames  = 31 + (17 - 1) + (31 - 1) = 77
+#        RF_samples = (77 - 1) * 100 + 400 = 8,000   (≈ 0.5 s @16 kHz)
 #
-# - Window Size (Chunk Size): Min input size is 32,000 samples.
-# - Hop Size (Processing Step): e.g., 100 samples for minimum latency.
-# - Latency: The algorithmic latency is at least 2 seconds.
+#     c) Extreme minimal: time_block_kernel=[1] and k_dw=1
+#        RF_block = 1
+#        RF_lkfcanet_time = 1 + (4*2)*(1 - 1) = 1
+#        RF_total_frames  = 31 + (1 - 1) + (31 - 1) = 61
+#        RF_samples = (61 - 1) * 100 + 400 = 6,400   (≈ 0.4 s @16 kHz)
+#
+# -----------------------------------------------------------------------------
+# 3) Streaming Guidelines (unchanged idea; numbers depend on your params)
+#   - Minimal chunk size in samples should cover RF_samples.
+#   - Processing hop can remain hop_len for lowest algorithmic step.
+#   - Algorithmic latency is at least (win_len) and practically bounded by RF.
 # ==================================================================================
 
 
@@ -187,7 +204,7 @@ class GCGFN(nn.Module):
         return x
 
 class LKFCA_Block(nn.Module):
-    def __init__(self, in_channels=64, kernel_list=[3, 11, 23, 31], causal=False):
+    def __init__(self, in_channels=64, dw_kernel_size=3, kernel_list=[3, 11, 23, 31], causal=False):
         super().__init__()
 
         dw_channel = in_channels * 2
@@ -199,7 +216,7 @@ class LKFCA_Block(nn.Module):
 
         self.pwconv1 = nn.Conv1d(in_channels=in_channels, out_channels=dw_channel, kernel_size=1, padding=0, stride=1,
                                groups=1, bias=True)
-        self.dwconv = conv_fn(in_channels=dw_channel, out_channels=dw_channel, kernel_size=3, padding=1, stride=1,
+        self.dwconv = conv_fn(in_channels=dw_channel, out_channels=dw_channel, kernel_size=dw_kernel_size, padding=get_padding(dw_kernel_size), stride=1,
                                groups=dw_channel, bias=True)
         self.pwconv2 = nn.Conv1d(in_channels=dw_channel // 2, out_channels=in_channels, kernel_size=1, padding=0, stride=1,
                                groups=1, bias=True)
@@ -236,6 +253,7 @@ class TS_BLOCK(nn.Module):
                  dense_channel=64, 
                  time_block_num=2, 
                  freq_block_num=2, 
+                 time_dw_kernel_size=3,
                  time_block_kernel=[3, 11, 23, 31], 
                  freq_block_kernel=[3, 11, 23, 31],
                  causal=False
@@ -244,10 +262,10 @@ class TS_BLOCK(nn.Module):
         self.dense_channel = dense_channel
         self.causal = causal
         self.time = nn.Sequential(
-            *[LKFCA_Block(dense_channel, time_block_kernel, causal=causal) for _ in range(time_block_num)],
+            *[LKFCA_Block(in_channels=dense_channel, dw_kernel_size=time_dw_kernel_size, kernel_list=time_block_kernel, causal=causal) for _ in range(time_block_num)],
         )
         self.freq = nn.Sequential(
-            *[LKFCA_Block(dense_channel, freq_block_kernel, causal=causal) for _ in range(freq_block_num)],
+            *[LKFCA_Block(in_channels=dense_channel, dw_kernel_size=3, kernel_list=freq_block_kernel, causal=causal) for _ in range(freq_block_num)],
         )
         self.beta = nn.Parameter(torch.zeros((1, 1, dense_channel, 1)), requires_grad=True)
         self.gamma = nn.Parameter(torch.zeros((1, 1, dense_channel, 1)), requires_grad=True)
@@ -383,6 +401,7 @@ class PrimeKnet(nn.Module):
                  compress_factor,
                  dense_depth=4,
                  num_tsblock=4,
+                 time_dw_kernel_size=3,
                  time_block_kernel=[3, 11, 23, 31],
                  freq_block_kernel=[3, 11, 23, 31],
                  time_block_num=2,
@@ -406,7 +425,7 @@ class PrimeKnet(nn.Module):
         self.dense_encoder = DenseEncoder(dense_channel, in_channel=2, depth=dense_depth, causal=causal)
         self.LKFCAnet = nn.ModuleList([])
         for i in range(num_tsblock):
-            self.LKFCAnet.append(TS_BLOCK(dense_channel, time_block_num, freq_block_num, time_block_kernel, freq_block_kernel, causal=causal))
+            self.LKFCAnet.append(TS_BLOCK(dense_channel, time_block_num, freq_block_num, time_dw_kernel_size, time_block_kernel, freq_block_kernel, causal=causal))
         self.mask_decoder = MaskDecoder(dense_channel, fft_len, sigmoid_beta, out_channel=1, depth=dense_depth, causal=causal)
         self.phase_decoder = PhaseDecoder(dense_channel, out_channel=1, depth=dense_depth, causal=causal)
 

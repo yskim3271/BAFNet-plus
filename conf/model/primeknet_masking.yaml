@@ -11,6 +11,7 @@ param:
   sigmoid_beta: 2.0
   num_tsblock: 4
   dense_depth: 4
+  time_dw_kernel_size: 3
   time_block_kernel: [3, 11, 23, 31]
   freq_block_kernel: [3, 11, 23, 31]
   time_block_num: 2
