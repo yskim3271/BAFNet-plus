@@ -1,9 +1,9 @@
 dataset: TAPS
-noise_dir: /workspace/dataset/datasets_fullband/noise_fullband_16k
+noise_dir: /home/yskim/workspace/dataset/datasets_fullband/noise_fullband_16k
 noise_train: dataset/taps/noise_train.txt 
 noise_valid: dataset/taps/noise_dev.txt 
 noise_test: dataset/taps/noise_test.txt
-rir_dir: /workspace/dataset/datasets_fullband/impulse_responses_16k
+rir_dir: /home/yskim/workspace/dataset/datasets_fullband/impulse_responses_16k
 rir_train: dataset/taps/rir_train.txt 
 rir_valid: dataset/taps/rir_dev.txt
 rir_test: dataset/taps/rir_test.txt
