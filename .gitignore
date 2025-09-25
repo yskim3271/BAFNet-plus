@@ -1,3 +1,4 @@
+conf/dset/*.yaml
 conf/dset
 outputs
 run.sh
