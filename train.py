@@ -97,10 +97,9 @@ def run(args):
         scheduler = torch.optim.lr_scheduler.ExponentialLR(optim, gamma=args.lr_decay, last_epoch=-1)
         scheduler_disc = torch.optim.lr_scheduler.ExponentialLR(optim_disc, gamma=args.lr_decay, last_epoch=-1)
 
-
-
     # Load dataset from Huggingface
-    dset = args.get("dataset", "TAPS")
+    dset = args.dset.get("dataset", "TAPS")
+    logger.info(f"Dataset selected: {dset}")
     if dset == "TAPS":
         _dataset = load_dataset("yskim3271/Throat_and_Acoustic_Pairing_Speech_Dataset")
     elif dset == "Vibravox":
@@ -147,6 +146,7 @@ def run(args):
         num_workers=args.num_workers,
         pin_memory=True
     )
+
         
     # Set up validation and test dataset and dataloader
     va_dataset = Noise_Augmented_Dataset(
@@ -237,7 +237,7 @@ def _main(args):
     logger = setup_logger("main")
 
     for key, value in args.dset.items():
-        if isinstance(value, str):
+        if isinstance(value, str) and key != "dataset":
             args.dset[key] = hydra.utils.to_absolute_path(value)
 
     logger.info("For logs, checkpoints and samples check %s", os.getcwd())
