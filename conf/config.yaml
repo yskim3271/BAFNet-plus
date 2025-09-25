@@ -3,18 +3,6 @@ defaults:
   - override hydra/job_logging: colorlog
   - override hydra/hydra_logging: colorlog
 
-dataset: TAPS
-dset:
-  noise_dir: /home/yskim//workspace/dataset/datasets_fullband/noise_fullband_16k
-  noise_train: dataset/noise_train.txt 
-  noise_valid: dataset/noise_dev.txt 
-  noise_test: dataset/noise_test.txt
-  rir_dir: /home/yskim//workspace/dataset/datasets_fullband/impulse_responses_16k
-  rir_train: dataset/rir_train.txt 
-  rir_valid: dataset/rir_dev.txt
-  rir_test: dataset/rir_test.txt
-  test_augment_numb: 2
-
 # Dataset related
 sampling_rate: 16000
 segment: 64000
@@ -24,7 +12,6 @@ n_fft: 400
 hop_size: 100
 win_size: 400
 compress_factor: 0.3
-
 
 # noise augmentation for train
 train_noise:
@@ -79,9 +66,6 @@ betas: [0.8, 0.99]
 device: cuda
 num_prints: 10
 num_workers: 5
-ddp:
-  master_addr: localhost
-  master_port: 12355
 
 continue_from: 
 samples_dir: samples
@@ -95,10 +79,8 @@ seed: 2039
 hydra:
   run:
     dir: ./outputs/${now:%Y-%m-%d_%H-%M-%S}
-
   job:
     chdir: true
-
   job_logging:
     handlers:
       file:

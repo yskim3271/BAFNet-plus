@@ -1,0 +1,9 @@
+noise_dir: /home/yskim/workspace/dataset/datasets_fullband/noise_fullband_16k
+noise_train: dataset/vibravox/noise_train.txt 
+noise_valid: dataset/vibravox/noise_dev.txt 
+noise_test: dataset/vibravox/noise_test.txt
+rir_dir: /home/yskim/workspace/dataset/datasets_fullband/impulse_responses_16k
+rir_train: dataset/vibravox/rir_train.txt 
+rir_valid: dataset/vibravox/rir_dev.txt
+rir_test: dataset/vibravox/rir_test.txt
+test_augment_numb: 1

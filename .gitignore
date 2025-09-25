@@ -1,18 +1,9 @@
 outputs
-transcripts
-checkpoint
 run.sh
 run2.sh
-sandbox.py
-backup
 output.log
 output*.log
-evaluate.sh
 test.py
 
 *pycache*
 *.pyc
-
-# Git filter scripts
-clean_config_paths.sh
-smudge_config_paths.sh
