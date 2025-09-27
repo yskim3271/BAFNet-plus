@@ -228,6 +228,24 @@ class Solver(object):
         self.logger.info("-" * 70)
         self.writer.close()
 
+    def _get_input(self, noisy_acs, bcs):
+        if self.input_type == "acs+bcs":
+            in_bc_mag, in_bc_pha, _ = mag_pha_stft(bcs, **self.stft_args).to(self.device)
+            in_ac_mag, in_ac_pha, _ = mag_pha_stft(noisy_acs, **self.stft_args).to(self.device)
+
+            in_bc_mag_pha = torch.stack([in_bc_mag, in_bc_pha], dim=-1)
+            in_ac_mag_pha = torch.stack([in_ac_mag, in_ac_pha], dim=-1)
+            return (in_bc_mag_pha, in_ac_mag_pha)
+        else:
+            if self.input_type == "acs":
+                in_mag, in_pha, _ = mag_pha_stft(noisy_acs, **self.stft_args).to(self.device)
+                
+            elif self.input_type == "bcs":
+                in_mag, in_pha, _ = mag_pha_stft(bcs, **self.stft_args).to(self.device)
+            else:
+                raise ValueError(f"Invalid input type: {self.input_type}")
+            return torch.stack([in_mag, in_pha], dim=-1)
+
     def _run_one_step(self, epoch, valid=False):
         
         total_loss = 0.0
@@ -241,13 +259,8 @@ class Solver(object):
         for i, data in enumerate(logprog):
             
             bcs, noisy_acs, clean_acs = data
-            if self.input_type == "acs":
-                input = mag_pha_stft(noisy_acs, **self.stft_args)[2].to(self.device)
-            elif self.input_type == "bcs":
-                input = mag_pha_stft(bcs, **self.stft_args)[2].to(self.device)
-            elif self.input_type == "acs+bcs":
-                input = mag_pha_stft(bcs, **self.stft_args)[2].to(self.device), \
-                        mag_pha_stft(noisy_acs, **self.stft_args)[2].to(self.device)
+            
+            input = self._get_input(noisy_acs, bcs)
 
             clean_mag, clean_pha, clean_com = mag_pha_stft(clean_acs, **self.stft_args)
             clean_acs = clean_acs.to(self.device)

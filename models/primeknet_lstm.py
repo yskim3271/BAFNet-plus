@@ -144,7 +144,34 @@ class LayerNorm1d(nn.Module):
 
     def forward(self, x):
         return LayerNormFunction.apply(x, self.weight, self.bias, self.eps)
+
+
+class LSTMFN(nn.Module):
+    def __init__(self, in_channel=64, hidden_size=64, layer_num=2):
+        super().__init__()
+        self.in_channel = in_channel
+        self.hidden_size = hidden_size
+        self.layer_num = layer_num
+
+        self.proj_first = nn.Conv1d(self.in_channel, self.hidden_size, kernel_size=1)
+        self.proj_last = nn.Conv1d(self.hidden_size, self.in_channel, kernel_size=1)
+        self.norm = LayerNorm1d(self.in_channel)
+        self.scale = nn.Parameter(torch.zeros((1, self.in_channel, 1)), requires_grad=True)
+
+        self.lstm = nn.LSTM(hidden_size, hidden_size, layer_num, batch_first=True, bidirectional=False)
+        self.lstm.flatten_parameters()
+
+
+    def forward(self, x):
+        shortcut = x.clone()
+        x = self.norm(x)
+        x = self.proj_first(x)
+        print(x.shape)
+        x = self.lstm(x)[0]
+        x = self.proj_last(x) * self.scale + shortcut
+        return x
     
+
 class GCGFN(nn.Module):
     def __init__(self, in_channel=64, kernel_list=[3, 11, 23, 31], causal=False):
         super().__init__()
@@ -159,10 +186,8 @@ class GCGFN(nn.Module):
         else:
             conv_fn = nn.Conv1d
 
-        self.proj_first = nn.Sequential(
-            nn.Conv1d(self.in_channel, self.mid_channel, kernel_size=1))
-        self.proj_last = nn.Sequential(
-            nn.Conv1d(self.mid_channel, self.in_channel, kernel_size=1))
+        self.proj_first = nn.Conv1d(self.in_channel, self.mid_channel, kernel_size=1)
+        self.proj_last = nn.Conv1d(self.mid_channel, self.in_channel, kernel_size=1)
         self.norm = LayerNorm1d(self.in_channel)
         self.scale = nn.Parameter(torch.zeros((1, self.in_channel, 1)), requires_grad=True)
 
