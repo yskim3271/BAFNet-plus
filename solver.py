@@ -250,7 +250,6 @@ class Solver(object):
                         mag_pha_stft(noisy_acs, **self.stft_args)[2].to(self.device)
 
             clean_mag, clean_pha, clean_com = mag_pha_stft(clean_acs, **self.stft_args)
-            clean_acs = clean_acs.to(self.device)
             clean_mag = clean_mag.to(self.device)
             clean_pha = clean_pha.to(self.device)
             clean_com = clean_com.to(self.device)
@@ -284,7 +283,6 @@ class Solver(object):
 
                 logprog.append(**{f"Disc_Loss": format(loss_disc.item(), "4.5f")})
 
-            loss_time = F.mse_loss(clean_acs[:,:clean_hat.size(-1)], clean_hat)
             loss_magnitude = F.mse_loss(clean_mag, clean_mag_hat)
             loss_phase = phase_losses(clean_pha, clean_pha_hat)
             loss_complex = F.mse_loss(clean_com, clean_com_hat) * 2
@@ -294,7 +292,6 @@ class Solver(object):
             loss_metric = F.mse_loss(metric_g.flatten(), one_labels)
 
             loss_gen = loss_metric * self.loss.metric + \
-                    loss_time * self.loss.time + \
                     loss_complex * self.loss.complex + \
                     loss_consistency * self.loss.consistency + \
                     loss_magnitude * self.loss.magnitude + \
@@ -306,13 +303,12 @@ class Solver(object):
                 self.optim.step()
 
             loss_dict = {
-                "Magnitude_Loss": loss_magnitude.item() if self.loss.magnitude > 0 else 0.0,
-                "Phase_Loss": loss_phase.item() if self.loss.phase > 0 else 0.0,
-                "Complex_Loss": loss_complex.item() if self.loss.complex > 0 else 0.0,
-                "Consistency_Loss": loss_consistency.item() if self.loss.consistency > 0 else 0.0,
-                "Time_Loss": loss_time.item() if self.loss.time > 0 else 0.0,
-                "Metric_Loss": loss_metric.item() if self.loss.metric > 0 else 0.0,
-                "Gen_Loss": loss_gen.item() if self.loss.metric > 0 else 0.0
+                "Magnitude_Loss": loss_magnitude.item(),
+                "Phase_Loss": loss_phase.item(),
+                "Complex_Loss": loss_complex.item(),
+                "Consistency_Loss": loss_consistency.item(),
+                "Metric_Loss": loss_metric.item(),
+                "Gen_Loss": loss_gen.item()
             }
 
             for k, v in loss_dict.items():

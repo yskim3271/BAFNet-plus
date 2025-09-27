@@ -49,7 +49,6 @@ eval_stt: true
 
 # Loss related
 loss:
-  time: 0.0
   magnitude: 0.9
   phase: 0.3
   complex: 0.1
