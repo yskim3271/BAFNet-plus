@@ -3,18 +3,16 @@ model_class: PrimeKnet
 input_type: acs
 
 param:
-  win_len: 400
-  hop_len: 100
   fft_len: 400
-  compress_factor: 0.3
   dense_channel: 64
   sigmoid_beta: 2.0
-  num_tsblock: 4
   dense_depth: 3
-  freq_block_kernel: [3, 11, 23, 31]
+  num_tsblock: 4
+  time_block_num: 2
   lstm_layers: 2
   lstm_hidden_size: 64
+  freq_block_kernel: [3, 11, 23, 31]
   freq_block_num: 2
-  causal: True
   infer_type: masking
+  causal: True
 

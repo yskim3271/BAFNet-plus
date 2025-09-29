@@ -1,6 +1,17 @@
+"""PrimeKnet model and building blocks (PyTorch).
+
+This module implements the PrimeKnet architecture components for speech/noise
+spectrogram processing. It contains causal/non-causal convolution wrappers,
+normalization utilities, feature blocks, and the end-to-end model.
+
+"""
+
+from typing import List, Tuple
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch import Tensor
 from stft import mag_pha_to_complex
 
 # ==================================================================================
@@ -66,53 +77,47 @@ from stft import mag_pha_to_complex
 # - Latency: The algorithmic latency is at least 2 seconds.
 # ==================================================================================
 
+def get_padding(kernel_size: int, dilation: int = 1) -> int:
+    return int((kernel_size * dilation - dilation) / 2)
 
-def get_padding(kernel_size, dilation=1):
-    return int((kernel_size*dilation - dilation)/2)
 
-def get_padding_2d(kernel_size, dilation=(1, 1)):
-    return (int((kernel_size[0]*dilation[0] - dilation[0])/2), int((kernel_size[1]*dilation[1] - dilation[1])/2))
+def get_padding_2d(
+    kernel_size: Tuple[int, int], dilation: Tuple[int, int] = (1, 1)
+) -> Tuple[int, int]:
+    return (
+        int((kernel_size[0] * dilation[0] - dilation[0]) / 2),
+        int((kernel_size[1] * dilation[1] - dilation[1]) / 2),
+    )
 
 class CausalConv1d(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, padding, stride=1, dilation=1, groups=1, bias=True):
-        super(CausalConv1d, self).__init__()
-        self.padding = padding * 2
-        self.conv = nn.Conv1d(in_channels, out_channels, kernel_size,
-                              padding=0,
-                              stride=stride,
-                              dilation=dilation,
-                              groups=groups,
-                              bias=bias)
-
-    def forward(self, x):
-        x = F.pad(x, [self.padding, 0])
-        return self.conv(x)
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+        self.padding = kwargs.get('padding', 0) * 2
+        kwargs['padding'] = 0
+        self.conv = nn.Conv1d(*args, **kwargs)
+    
+    def forward(self, x: Tensor) -> Tensor:
+        return self.conv(F.pad(x, [self.padding, 0]))
 
 class CausalConv2d(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, padding, stride=1, dilation=(1, 1), groups=1, bias=True):
-        super(CausalConv2d, self).__init__()
-        time_padding = padding[0] * 2
-        freq_padding = padding[1]
-        self.padding = (freq_padding, freq_padding, time_padding, 0)
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size,
-                              padding=0,
-                              stride=stride,
-                              dilation=dilation,
-                              groups=groups,
-                              bias=bias)
-
-    def forward(self, x):
-        x = F.pad(x, self.padding)
-        return self.conv(x)
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+        padding = kwargs.get('padding', 0)
+        self.padding = (padding[1], padding[1], padding[0]*2, 0)
+        kwargs['padding'] = 0
+        self.conv = nn.Conv2d(*args, **kwargs)
+    
+    def forward(self, x: Tensor) -> Tensor:
+        return self.conv(F.pad(x, self.padding))
 
 class SimpleGate(nn.Module):
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
         x1, x2 = x.chunk(2, dim=1)
         return x1 * x2
 
 class LayerNormFunction(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, x, weight, bias, eps):
+    def forward(ctx, x: Tensor, weight: Tensor, bias: Tensor, eps: float) -> Tensor:
         ctx.eps = eps
         B, C, T = x.size()
         mu = x.mean(1, keepdim=True)
@@ -121,8 +126,9 @@ class LayerNormFunction(torch.autograd.Function):
         ctx.save_for_backward(y, var, weight)
         y = weight.view(1, C, 1) * y + bias.view(1, C, 1)
         return y
+
     @staticmethod
-    def backward(ctx, grad_output):
+    def backward(ctx, grad_output: Tensor):
         eps = ctx.eps
 
         B, C, T = grad_output.size()
@@ -136,203 +142,222 @@ class LayerNormFunction(torch.autograd.Function):
             dim=0), None
 
 class LayerNorm1d(nn.Module):
-    def __init__(self, channels, eps=1e-6):
+    def __init__(self, channels: int, eps: float = 1e-6) -> None:
         super(LayerNorm1d, self).__init__()
         self.register_parameter('weight', nn.Parameter(torch.ones(channels)))
         self.register_parameter('bias', nn.Parameter(torch.zeros(channels)))
         self.eps = eps
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
         return LayerNormFunction.apply(x, self.weight, self.bias, self.eps)
 
 
-class LSTMFN(nn.Module):
-    def __init__(self, in_channel=64, hidden_size=64, layer_num=2):
+class LSTM_Group_Feature_Network(nn.Module):
+    def __init__(
+        self,
+        in_channel: int = 64,
+        hidden_size: int = 64,
+        layer_num: int = 2,
+        causal: bool = False,
+    ) -> None:
         super().__init__()
-        self.in_channel = in_channel
-        self.hidden_size = hidden_size
-        self.layer_num = layer_num
 
-        self.proj_first = nn.Conv1d(self.in_channel, self.hidden_size, kernel_size=1)
-        self.proj_last = nn.Conv1d(self.hidden_size, self.in_channel, kernel_size=1)
-        self.norm = LayerNorm1d(self.in_channel)
-        self.scale = nn.Parameter(torch.zeros((1, self.in_channel, 1)), requires_grad=True)
+        self.proj_conv1 = nn.Conv1d(in_channel, hidden_size, kernel_size=1)
+        self.proj_conv2 = nn.Conv1d(hidden_size, in_channel, kernel_size=1)
+        self.norm = LayerNorm1d(in_channel)
+        self.beta = nn.Parameter(torch.zeros((1, in_channel, 1)), requires_grad=True)
 
         self.lstm = nn.LSTM(hidden_size, hidden_size, layer_num, batch_first=True, bidirectional=False)
-        self.lstm.flatten_parameters()
 
-
-    def forward(self, x):
-        shortcut = x.clone()
+    def forward(self, x: Tensor) -> Tensor:
+        skip = x
         x = self.norm(x)
-        x = self.proj_first(x)
-        print(x.shape)
+        x = self.proj_conv1(x)
+        x = x.permute(0, 2, 1)
         x = self.lstm(x)[0]
-        x = self.proj_last(x) * self.scale + shortcut
+        x = x.permute(0, 2, 1)
+        x = self.proj_conv2(x) * self.beta + skip
+
         return x
     
 
-class GCGFN(nn.Module):
-    def __init__(self, in_channel=64, kernel_list=[3, 11, 23, 31], causal=False):
+class Group_Prime_Kernel_FFN(nn.Module):
+    def __init__(
+        self,
+        in_channel: int = 64,
+        kernel_list: List[int] = [3, 11, 23, 31],
+        causal: bool = False,
+    ) -> None:
         super().__init__()
-        self.in_channel = in_channel
+        
+        mid_channel = in_channel * len(kernel_list)
+        conv_fn = CausalConv1d if causal else nn.Conv1d
+
         self.expand_ratio = len(kernel_list)
-        self.mid_channel = self.in_channel * self.expand_ratio
         self.kernel_list = kernel_list
-        self.causal = causal
+        self.norm = LayerNorm1d(in_channel)
+        self.proj_conv1 = nn.Conv1d(in_channel, mid_channel, kernel_size=1)
+        self.proj_conv2 = nn.Conv1d(mid_channel, in_channel, kernel_size=1)
+        self.beta = nn.Parameter(torch.zeros((1, in_channel, 1)), requires_grad=True)
 
-        if causal:
-            conv_fn = CausalConv1d
-        else:
-            conv_fn = nn.Conv1d
-
-        self.proj_first = nn.Conv1d(self.in_channel, self.mid_channel, kernel_size=1)
-        self.proj_last = nn.Conv1d(self.mid_channel, self.in_channel, kernel_size=1)
-        self.norm = LayerNorm1d(self.in_channel)
-        self.scale = nn.Parameter(torch.zeros((1, self.in_channel, 1)), requires_grad=True)
-
-        for kernel_size in self.kernel_list:
-            setattr(self, f"attn_{kernel_size}", nn.Sequential(
-                conv_fn(self.in_channel, self.in_channel, kernel_size=kernel_size, groups=self.in_channel, padding=get_padding(kernel_size)),
-                nn.Conv1d(self.in_channel, self.in_channel, kernel_size=1)
-            ))
-            setattr(self, f"conv_{kernel_size}", conv_fn(self.in_channel, self.in_channel, kernel_size=kernel_size, padding=get_padding(kernel_size), groups=self.in_channel))
+        for kernel_size in kernel_list:
+            setattr(self, f"attn_{kernel_size}", 
+                nn.Sequential(
+                    conv_fn(in_channel, in_channel, kernel_size=kernel_size, groups=in_channel, padding=get_padding(kernel_size)),
+                    nn.Conv1d(in_channel, in_channel, kernel_size=1)))
+            setattr(self, f"conv_{kernel_size}", 
+                conv_fn(in_channel, in_channel, kernel_size=kernel_size, padding=get_padding(kernel_size), groups=in_channel))
     
-    def forward(self, x):
-        shortcut = x.clone()
+    def forward(self, x: Tensor) -> Tensor:
+        skip = x
         x = self.norm(x)
-        x = self.proj_first(x)
+        x = self.proj_conv1(x)
         
         x_chunks = list(torch.chunk(x, self.expand_ratio, dim=1))
         for i in range(self.expand_ratio):
             x_chunks[i] = getattr(self, f"attn_{self.kernel_list[i]}")(x_chunks[i]) * getattr(self, f"conv_{self.kernel_list[i]}")(x_chunks[i])
 
         x = torch.cat(x_chunks, dim=1)
-        x = self.proj_last(x) * self.scale + shortcut
+        x = self.proj_conv2(x) * self.beta + skip
         return x
 
-class LKFCA_Block(nn.Module):
-    def __init__(self, in_channels=64, kernel_list=[3, 11, 23, 31], causal=False):
+class Channel_Attention_Block(nn.Module):
+    def __init__(
+        self,
+        in_channel: int = 64,
+        dw_kernel_size: int = 3,
+        causal: bool = False,
+    ) -> None:
         super().__init__()
 
-        dw_channel = in_channels * 2
+        conv_fn = CausalConv1d if causal else nn.Conv1d
 
-        if causal:
-            conv_fn = CausalConv1d
-        else:
-            conv_fn = nn.Conv1d
-
-        self.pwconv1 = nn.Conv1d(in_channels=in_channels, out_channels=dw_channel, kernel_size=1, padding=0, stride=1,
-                               groups=1, bias=True)
-        self.dwconv = conv_fn(in_channels=dw_channel, out_channels=dw_channel, kernel_size=3, padding=1, stride=1,
-                               groups=dw_channel, bias=True)
-        self.pwconv2 = nn.Conv1d(in_channels=dw_channel // 2, out_channels=in_channels, kernel_size=1, padding=0, stride=1,
-                               groups=1, bias=True)
-
-        self.sca = nn.Sequential(
-            nn.AdaptiveAvgPool1d(1),
-            nn.Conv1d(in_channels=dw_channel // 2, out_channels=dw_channel // 2, kernel_size=1, padding=0, stride=1,
-                      groups=1, bias=True),
+        self.norm = LayerNorm1d(in_channel)
+        self.gate = nn.Sequential(
+            nn.Conv1d(in_channel, in_channel*2, kernel_size=1, padding=0, groups=1),
+            conv_fn(in_channel*2, in_channel*2, kernel_size=dw_kernel_size, padding=get_padding(dw_kernel_size), groups=in_channel*2),
+            SimpleGate(),
         )
+        self.channel_attn = nn.Sequential(
+            nn.AdaptiveAvgPool1d(1),
+            nn.Conv1d(in_channel, in_channel, kernel_size=1, padding=0, groups=1),
+        )
+        self.pwconv = nn.Conv1d(in_channel, in_channel, kernel_size=1, padding=0, groups=1)
+        self.beta = nn.Parameter(torch.zeros((1, in_channel, 1)), requires_grad=True)
 
-        self.sg = SimpleGate()
-        self.norm1 = LayerNorm1d(in_channels)
-        self.beta = nn.Parameter(torch.zeros((1, in_channels, 1)), requires_grad=True)
-        self.GCGFN = GCGFN(in_channels, kernel_list, causal=causal)
-
-
-    def forward(self, x):
-
-        inp2 = x
-        x = self.norm1(inp2)
-        x = self.pwconv1(x)
-        x = self.dwconv(x)
-        x = self.sg(x)
-        x = x * self.sca(x)
-        x = self.pwconv2(x)
-
-        inp3 = inp2 + x * self.beta
-        x = self.GCGFN(inp3)
-
+    def forward(self, x: Tensor) -> Tensor:
+        skip = x
+        x = self.norm(x)
+        x = self.gate(x)
+        x = x * self.channel_attn(x)
+        x = self.pwconv(x)
+        x = skip + x * self.beta
         return x
 
-class TS_BLOCK(nn.Module):
-    def __init__(self, 
-                 dense_channel=64, 
-                 lstm_layers=2,
-                 lstm_hidden_size=64,
-                 freq_block_num=2, 
-                 freq_block_kernel=[3, 11, 23, 31],
-                 causal=False
-                 ):
+class Two_Stage_Block(nn.Module):
+    def __init__(
+        self,
+        dense_channel: int = 64,
+        time_block_num: int = 2,
+        lstm_layers: int = 2,
+        lstm_hidden_size: int = 64,
+        freq_block_num: int = 2,
+        freq_block_kernel: List[int] = [3, 11, 23, 31],
+        causal: bool = False,
+    ) -> None:
         super().__init__()
         self.dense_channel = dense_channel
         self.causal = causal
-        self.lstm = nn.LSTM(dense_channel, lstm_hidden_size, lstm_layers, batch_first=True, bidirectional=False)
-        self.freq = nn.Sequential(
-            *[LKFCA_Block(dense_channel, freq_block_kernel, causal=causal) for _ in range(freq_block_num)],
-        )
-        self.beta = nn.Parameter(torch.zeros((1, 1, 1, dense_channel)), requires_grad=True)
-        self.gamma = nn.Parameter(torch.zeros((1, 1, dense_channel, 1)), requires_grad=True)
-        self.lstm.flatten_parameters()
         
-    def forward(self, x):
-        b, c, t, f = x.size()
-        x = x.permute(0, 3, 2, 1).contiguous().view(b*f, t, c) 
+        time_stage = nn.ModuleList([])
+        freq_stage = nn.ModuleList([])
+        
+        for i in range(time_block_num):
+            time_stage.append(
+                nn.Sequential(
+                    Channel_Attention_Block(dense_channel, dw_kernel_size=1, causal=causal),
+                    LSTM_Group_Feature_Network(dense_channel, lstm_hidden_size, lstm_layers, causal=causal),
+                )
+            )
+        for i in range(freq_block_num):
+            freq_stage.append(
+                nn.Sequential(
+                    Channel_Attention_Block(dense_channel, dw_kernel_size=3, causal=causal),
+                    Group_Prime_Kernel_FFN(dense_channel, freq_block_kernel, causal=causal),
+                )
+            )
+        self.time_stage = nn.Sequential(*time_stage)
+        self.freq_stage = nn.Sequential(*freq_stage)
 
-        x = self.lstm(x)[0] + x * self.beta
-        x = x.view(b, f, t, c).permute(0, 2, 3, 1).contiguous().view(b*t, c, f)
+        self.beta_t = nn.Parameter(torch.zeros((1, dense_channel, 1)), requires_grad=True)
+        self.beta_f = nn.Parameter(torch.zeros((1, dense_channel, 1)), requires_grad=True)
+        
+    def forward(self, x: Tensor) -> Tensor:
 
-        x = self.freq(x) + x * self.gamma
-        x = x.view(b, t, c, f).permute(0, 2, 1, 3)
+        B, C, T, F = x.size()
+        x = x.permute(0, 3, 1, 2).contiguous().view(B * F, C, T)
+
+        x = self.time_stage(x) + x * self.beta_t
+        x = x.view(B, F, C, T).permute(0, 3, 2, 1).contiguous().view(B * T, C, F)
+
+        x = self.freq_stage(x) + x * self.beta_f
+        x = x.view(B, T, C, F).permute(0, 2, 1, 3)
         return x
 
 class LearnableSigmoid_2d(nn.Module):
-    def __init__(self, in_features, beta=1):
+    def __init__(self, in_features: int, beta: float = 1) -> None:
         super().__init__()
         self.beta = beta
         self.slope = nn.Parameter(torch.ones(in_features, 1))
         self.slope.requiresGrad = True
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
         return self.beta * torch.sigmoid(self.slope * x)
 
 class DS_DDB(nn.Module):
-    def __init__(self, dense_channel, kernel_size=(3, 3), depth=4, causal=False):
+    def __init__(
+        self,
+        dense_channel: int,
+        kernel_size: Tuple[int, int] = (3, 3),
+        depth: int = 4,
+        causal: bool = False,
+    ) -> None:
         super().__init__()
-        self.dense_channel = dense_channel
-        self.depth = depth
-        self.causal = causal
+        
+        conv_fn = CausalConv2d if causal else nn.Conv2d
+
         self.dense_block = nn.ModuleList([])
-        if causal:
-            conv_fn = CausalConv2d
-        else:
-            conv_fn = nn.Conv2d
+
         for i in range(depth):
             dil = 2 ** i
             dense_conv = nn.Sequential(
-                conv_fn(dense_channel*(i+1), dense_channel*(i+1), kernel_size, dilation=(dil, 1), 
-                        padding=get_padding_2d(kernel_size, (dil, 1)), groups=dense_channel*(i+1), bias=True),
-                nn.Conv2d(in_channels=dense_channel*(i+1), out_channels=dense_channel, kernel_size=1, padding=0, stride=1, groups=1,
-                          bias=True),
+                conv_fn(dense_channel*(i+1), dense_channel*(i+1), kernel_size=kernel_size, dilation=(dil, 1), 
+                        padding=get_padding_2d(kernel_size, (dil, 1)), groups=dense_channel*(i+1)),
+                nn.Conv2d(dense_channel*(i+1), dense_channel, kernel_size=1, padding=0),
                 nn.InstanceNorm2d(dense_channel, affine=True),
                 nn.PReLU(dense_channel)
             )
             self.dense_block.append(dense_conv)
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
         skip = x
-        for i in range(self.depth):
-            x = self.dense_block[i](skip)
+        for block in self.dense_block:
+            x = block(skip)
             skip = torch.cat([x, skip], dim=1)
         return x
 
 class DenseEncoder(nn.Module):
-    def __init__(self, dense_channel, in_channel, depth=4, causal=False):
+    def __init__(
+        self,
+        dense_channel: int,
+        in_channel: int,
+        depth: int = 4,
+        causal: bool = False,
+    ) -> None:
         super().__init__()
         self.dense_channel = dense_channel
         self.dense_conv_1 = nn.Sequential(
-            nn.Conv2d(in_channel, dense_channel, (1, 1)),
+            nn.Conv2d(in_channel, dense_channel, kernel_size=1),
             nn.InstanceNorm2d(dense_channel, affine=True),
             nn.PReLU(dense_channel))
         self.dense_block = DS_DDB(dense_channel, depth=depth, causal=causal)
@@ -341,33 +366,35 @@ class DenseEncoder(nn.Module):
             nn.InstanceNorm2d(dense_channel, affine=True),
             nn.PReLU(dense_channel))
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
         x = self.dense_conv_1(x)
         x = self.dense_block(x)
         x = self.dense_conv_2(x)
         return x
 
 class MaskDecoder(nn.Module):
-    def __init__(self, 
-                 dense_channel,
-                 n_fft,
-                 sigmoid_beta,
-                 out_channel=1,
-                 depth=4,
-                 causal=False):
+    def __init__(
+        self,
+        dense_channel: int,
+        n_fft: int,
+        sigmoid_beta: float,
+        out_channel: int = 1,
+        depth: int = 4,
+        causal: bool = False,
+    ) -> None:
         super().__init__()
         self.n_fft = n_fft
         self.dense_block = DS_DDB(dense_channel, depth=depth, causal=causal)
         self.mask_conv = nn.Sequential(
             nn.ConvTranspose2d(dense_channel, dense_channel, (1, 3), (1, 2)),
-            nn.Conv2d(dense_channel, out_channel, (1, 1)),
+            nn.Conv2d(dense_channel, out_channel, kernel_size=1),
             nn.InstanceNorm2d(out_channel, affine=True),
             nn.PReLU(out_channel),
-            nn.Conv2d(out_channel, out_channel, (1, 1))
+            nn.Conv2d(out_channel, out_channel, kernel_size=1)
         )
         self.lsigmoid = LearnableSigmoid_2d(n_fft//2+1, beta=sigmoid_beta)
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
         x = self.dense_block(x)
         x = self.mask_conv(x)
         x = x.permute(0, 3, 2, 1).squeeze(-1)
@@ -375,11 +402,13 @@ class MaskDecoder(nn.Module):
         return x
 
 class PhaseDecoder(nn.Module):
-    def __init__(self, 
-                 dense_channel, 
-                 out_channel=1,
-                 depth=4,
-                 causal=False):
+    def __init__(
+        self,
+        dense_channel: int,
+        out_channel: int = 1,
+        depth: int = 4,
+        causal: bool = False,
+    ) -> None:
         super().__init__()
         self.dense_block = DS_DDB(dense_channel, depth=depth, causal=causal)
         self.phase_conv = nn.Sequential(
@@ -387,10 +416,10 @@ class PhaseDecoder(nn.Module):
             nn.InstanceNorm2d(dense_channel, affine=True),
             nn.PReLU(dense_channel)
         )
-        self.phase_conv_r = nn.Conv2d(dense_channel, out_channel, (1, 1))
-        self.phase_conv_i = nn.Conv2d(dense_channel, out_channel, (1, 1))
+        self.phase_conv_r = nn.Conv2d(dense_channel, out_channel, kernel_size=1)
+        self.phase_conv_i = nn.Conv2d(dense_channel, out_channel, kernel_size=1)
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
         x = self.dense_block(x)
         x = self.phase_conv(x)
         x_r = self.phase_conv_r(x)
@@ -399,43 +428,40 @@ class PhaseDecoder(nn.Module):
         return x
 
 class PrimeKnet(nn.Module):
-    def __init__(self, 
-                 win_len, 
-                 hop_len, 
-                 fft_len, 
-                 dense_channel, 
-                 sigmoid_beta, 
-                 compress_factor,
-                 dense_depth=4,
-                 num_tsblock=4,
-                 lstm_layers=2,
-                 lstm_hidden_size=64,
-                 freq_block_kernel=[3, 11, 23, 31],
-                 freq_block_num=2,
-                 infer_type='masking',
-                 causal=False
-                 ):
+    def __init__(
+        self,
+        fft_len: int,
+        dense_channel: int,
+        sigmoid_beta: float,
+        dense_depth: int = 4,
+        num_tsblock: int = 4,
+        time_block_num: int = 2,
+        lstm_layers: int = 2,
+        lstm_hidden_size: int = 64,
+        freq_block_kernel: List[int] = [3, 11, 23, 31],
+        freq_block_num: int = 2,
+        infer_type: str = 'masking',
+        causal: bool = False,
+    ) -> None:
         super().__init__()
-        self.win_len = win_len
-        self.hop_len = hop_len
-        self.fft_len = fft_len
-        self.dense_channel = dense_channel
-        self.dense_depth = dense_depth
-        self.sigmoid_beta = sigmoid_beta
-        self.compress_factor = compress_factor
-        self.num_tsblock = num_tsblock
-        self.causal = causal
-        self.infer_type = infer_type
         assert infer_type in ['masking', 'mapping'], 'infer_type must be either masking or mapping'
 
         self.dense_encoder = DenseEncoder(dense_channel, in_channel=2, depth=dense_depth, causal=causal)
-        self.LKFCAnet = nn.ModuleList([])
-        for i in range(num_tsblock):
-            self.LKFCAnet.append(TS_BLOCK(dense_channel, lstm_layers, lstm_hidden_size, freq_block_num, freq_block_kernel, causal=causal))
+        self.sequence_block = nn.Sequential(
+            *[Two_Stage_Block(
+                dense_channel=dense_channel,
+                time_block_num=time_block_num,
+                lstm_layers=lstm_layers,
+                lstm_hidden_size=lstm_hidden_size,
+                freq_block_num=freq_block_num,
+                freq_block_kernel=freq_block_kernel,
+                causal=causal
+            ) for _ in range(num_tsblock)]
+        )
         self.mask_decoder = MaskDecoder(dense_channel, fft_len, sigmoid_beta, out_channel=1, depth=dense_depth, causal=causal)
         self.phase_decoder = PhaseDecoder(dense_channel, out_channel=1, depth=dense_depth, causal=causal)
 
-    def forward(self, noisy_com):
+    def forward(self, noisy_com: Tensor) -> Tuple[Tensor, Tensor, Tensor]:
         # Input shape: [B, F, T, 2]
 
         real = noisy_com[:, :, :, 0]
@@ -449,10 +475,9 @@ class PrimeKnet(nn.Module):
 
         x = torch.cat((mag, pha), dim=1) # [B, 2, T, F]
 
-        x = self.dense_encoder(x)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+        x = self.dense_encoder(x)
 
-        for i in range(self.num_tsblock):
-            x = self.LKFCAnet[i](x)
+        x = self.sequence_block(x)
         
         denoised_mag = (mag * self.mask_decoder(x)).permute(0, 3, 2, 1).squeeze(-1)
         denoised_pha = self.phase_decoder(x).permute(0, 3, 2, 1).squeeze(-1)
