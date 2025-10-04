@@ -1,4 +1,4 @@
-model_lib: primeknet
+model_lib: primeknet_wotime
 model_class: PrimeKnet
 input_type: acs
 
@@ -13,6 +13,6 @@ param:
   dense_depth: 4
   freq_block_kernel: [3, 11, 23, 31]
   freq_block_num: 2
-  causal: false
+  causal: true
   infer_type: masking
 
