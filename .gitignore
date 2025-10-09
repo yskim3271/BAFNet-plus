@@ -1,11 +1,93 @@
-conf/dset/*.yaml
-conf/dset
-outputs
-run.sh
-run2.sh
-output.log
-output*.log
-test.py
-
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 *pycache*
 *.pyc
+
+# PyTorch
+*.pth
+*.pt
+*.ckpt
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
+
+# Virtual environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Hydra
+outputs/
+multirun/
+.hydra/
+
+# Tensorboard
+tensorbd/
+runs/
+lightning_logs/
+
+# Data
+dataset/*.wav
+dataset/*.flac
+dataset/*.mp3
+*.wav
+*.flac
+*.mp3
+
+# Logs
+*.log
+*.out
+*.err
+output*.log
+
+# Temporary files
+*.tmp
+*.temp
+samples/
+checkpoints/
+
+# System
+.nfs*
+Thumbs.db
+
+# Project specific
+run.sh
+run2.sh
+
+# Claude code cli config
+.claude/
+.claude-config.json
+*.claude
