@@ -108,7 +108,7 @@ if __name__=="__main__":
     import logging.config
     import argparse
     import importlib
-    from data import TAPSnoisytdataset
+    from data import Noise_Augmented_Dataset
     from omegaconf import OmegaConf
     from torch.utils.data import DataLoader
     from datasets import load_dataset, concatenate_datasets
@@ -117,6 +117,7 @@ if __name__=="__main__":
     parser.add_argument("--model_config", type=str, required=True, help="Path to the model config file.")
     parser.add_argument("--chkpt_dir", type=str, default='.', help="Path to the checkpoint directory. default is current directory")
     parser.add_argument("--chkpt_file", type=str, default="best.th", help="Checkpoint file name. default is best.th")
+    parser.add_argument("--dataset", type=str, default="taps", choices=["taps", "vibravox"], help="Dataset to use: taps or vibravox. default is taps")
     parser.add_argument("--noise_dir", type=str, required=True, help="Path to the noise directory.")
     parser.add_argument("--noise_test", type=str, required=True, help="List of noise files for testing.")
     parser.add_argument("--rir_dir", type=str, required=True, help="Path to the RIR directory.")
@@ -164,8 +165,15 @@ if __name__=="__main__":
     chkpt = torch.load(os.path.join(chkpt_dir, chkpt_file), map_location=device)
     model.load_state_dict(chkpt['model'])
     tm_only = model_args.input_type == "tm"
-    
-    testset = load_dataset("yskim3271/Throat_and_Acoustic_Pairing_Speech_Dataset", split="test")
+
+    # Load dataset based on user selection
+    if args.dataset.lower() == "taps":
+        testset = load_dataset("yskim3271/Throat_and_Acoustic_Pairing_Speech_Dataset", split="test")
+    elif args.dataset.lower() == "vibravox":
+        testset = load_dataset("yskim3271/vibravox_16k", split="test")
+    else:
+        raise ValueError(f"Unknown dataset: {args.dataset}")
+
     testset_list = [testset] * args.test_augment_numb
     testset = concatenate_datasets(testset_list)
     
@@ -182,7 +190,7 @@ if __name__=="__main__":
     }
 
     for fixed_snr in args.snr_step:
-        ev_dataset = TAPSnoisytdataset(
+        ev_dataset = Noise_Augmented_Dataset(
             datapair_list= testset,
             noise_list= noise_test_list,
             rir_list= rir_test_list,
@@ -207,6 +215,7 @@ if __name__=="__main__":
 
         ev_loader_list[f"{fixed_snr}"] = ev_loader
 
+    logger.info(f"Dataset: {args.dataset}")
     logger.info(f"Model: {model_name}")
     logger.info(f"Input type: {model_args.input_type}")
     logger.info(f"Checkpoint: {chkpt_dir}")

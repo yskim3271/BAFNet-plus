@@ -278,8 +278,8 @@ class Noise_Augmented_Dataset:
         
         # Randomly adjust the overall level within a floating value range
         noisy_target_dB_FS = random.randint(
-            self.target_dB_FS - self.target_dB_FS_floating_value, 
-            self.target_dB_FS + self.target_dB_FS_floating_value
+            int(self.target_dB_FS - self.target_dB_FS_floating_value),
+            int(self.target_dB_FS + self.target_dB_FS_floating_value)
         )
         
         # Scale noisy and clean signals with the new target dB FS
@@ -360,11 +360,11 @@ class StepSampler(torch.utils.data.Sampler):
         # Save the total length and sampling step
         self.step = step
         self.length = length
-        
+
     def __iter__(self):
         # Return indices at intervals of step
         return iter(range(0, self.length, self.step))
-    
+
     def __len__(self):
         # Length is how many indices we can produce based on the step
         return self.length // self.step
