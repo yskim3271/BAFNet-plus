@@ -47,7 +47,7 @@ def run(args):
     np.random.seed(args.seed)
     
     # Set device
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
     model_args = args.model
     model_lib = model_args.model_lib

@@ -249,23 +249,25 @@ class LKFCA_Block(nn.Module):
         return x
 
 class TS_BLOCK(nn.Module):
-    def __init__(self, 
-                 dense_channel=64, 
-                 time_block_num=2, 
-                 freq_block_num=2, 
+    def __init__(self,
+                 dense_channel=64,
+                 time_block_num=2,
+                 freq_block_num=2,
                  time_dw_kernel_size=3,
-                 time_block_kernel=[3, 11, 23, 31], 
+                 time_block_kernel=[3, 11, 23, 31],
                  freq_block_kernel=[3, 11, 23, 31],
                  causal=False
                  ):
         super().__init__()
         self.dense_channel = dense_channel
         self.causal = causal
+        # Time stage: use causal parameter as provided
         self.time = nn.Sequential(
             *[LKFCA_Block(in_channels=dense_channel, dw_kernel_size=time_dw_kernel_size, kernel_list=time_block_kernel, causal=causal) for _ in range(time_block_num)],
         )
+        # Frequency stage: always non-causal (frequency axis has no causal meaning)
         self.freq = nn.Sequential(
-            *[LKFCA_Block(in_channels=dense_channel, dw_kernel_size=3, kernel_list=freq_block_kernel, causal=causal) for _ in range(freq_block_num)],
+            *[LKFCA_Block(in_channels=dense_channel, dw_kernel_size=3, kernel_list=freq_block_kernel, causal=False) for _ in range(freq_block_num)],
         )
         self.beta = nn.Parameter(torch.zeros((1, 1, dense_channel, 1)), requires_grad=True)
         self.gamma = nn.Parameter(torch.zeros((1, 1, dense_channel, 1)), requires_grad=True)

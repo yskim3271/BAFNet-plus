@@ -90,21 +90,6 @@ def get_padding(kernel_size, dilation=1):
 def get_padding_2d(kernel_size, dilation=(1, 1)):
     return (int((kernel_size[0]*dilation[0] - dilation[0])/2), int((kernel_size[1]*dilation[1] - dilation[1])/2))
 
-class CausalConv1d(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, padding, stride=1, dilation=1, groups=1, bias=True):
-        super(CausalConv1d, self).__init__()
-        self.padding = padding * 2
-        self.conv = nn.Conv1d(in_channels, out_channels, kernel_size,
-                              padding=0,
-                              stride=stride,
-                              dilation=dilation,
-                              groups=groups,
-                              bias=bias)
-
-    def forward(self, x):
-        x = F.pad(x, [self.padding, 0])
-        return self.conv(x)
-
 class CausalConv2d(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, padding, stride=1, dilation=(1, 1), groups=1, bias=True):
         super(CausalConv2d, self).__init__()
@@ -163,18 +148,12 @@ class LayerNorm1d(nn.Module):
         return LayerNormFunction.apply(x, self.weight, self.bias, self.eps)
     
 class GCGFN(nn.Module):
-    def __init__(self, in_channel=64, kernel_list=[3, 11, 23, 31], causal=False):
+    def __init__(self, in_channel=64, kernel_list=[3, 11, 23, 31]):
         super().__init__()
         self.in_channel = in_channel
         self.expand_ratio = len(kernel_list)
         self.mid_channel = self.in_channel * self.expand_ratio
         self.kernel_list = kernel_list
-        self.causal = causal
-
-        if causal:
-            conv_fn = CausalConv1d
-        else:
-            conv_fn = nn.Conv1d
 
         self.proj_first = nn.Sequential(
             nn.Conv1d(self.in_channel, self.mid_channel, kernel_size=1))
@@ -185,10 +164,10 @@ class GCGFN(nn.Module):
 
         for kernel_size in self.kernel_list:
             setattr(self, f"attn_{kernel_size}", nn.Sequential(
-                conv_fn(self.in_channel, self.in_channel, kernel_size=kernel_size, groups=self.in_channel, padding=get_padding(kernel_size)),
+                nn.Conv1d(self.in_channel, self.in_channel, kernel_size=kernel_size, groups=self.in_channel, padding=get_padding(kernel_size)),
                 nn.Conv1d(self.in_channel, self.in_channel, kernel_size=1)
             ))
-            setattr(self, f"conv_{kernel_size}", conv_fn(self.in_channel, self.in_channel, kernel_size=kernel_size, padding=get_padding(kernel_size), groups=self.in_channel))
+            setattr(self, f"conv_{kernel_size}", nn.Conv1d(self.in_channel, self.in_channel, kernel_size=kernel_size, padding=get_padding(kernel_size), groups=self.in_channel))
     
     def forward(self, x):
         shortcut = x.clone()
@@ -204,19 +183,14 @@ class GCGFN(nn.Module):
         return x
 
 class LKFCA_Block(nn.Module):
-    def __init__(self, in_channels=64, dw_kernel_size=3, kernel_list=[3, 11, 23, 31], causal=False):
+    def __init__(self, in_channels=64, dw_kernel_size=3, kernel_list=[3, 11, 23, 31]):
         super().__init__()
 
         dw_channel = in_channels * 2
 
-        if causal:
-            conv_fn = CausalConv1d
-        else:
-            conv_fn = nn.Conv1d
-
         self.pwconv1 = nn.Conv1d(in_channels=in_channels, out_channels=dw_channel, kernel_size=1, padding=0, stride=1,
                                groups=1, bias=True)
-        self.dwconv = conv_fn(in_channels=dw_channel, out_channels=dw_channel, kernel_size=dw_kernel_size, padding=get_padding(dw_kernel_size), stride=1,
+        self.dwconv = nn.Conv1d(in_channels=dw_channel, out_channels=dw_channel, kernel_size=dw_kernel_size, padding=get_padding(dw_kernel_size), stride=1,
                                groups=dw_channel, bias=True)
         self.pwconv2 = nn.Conv1d(in_channels=dw_channel // 2, out_channels=in_channels, kernel_size=1, padding=0, stride=1,
                                groups=1, bias=True)
@@ -230,7 +204,7 @@ class LKFCA_Block(nn.Module):
         self.sg = SimpleGate()
         self.norm1 = LayerNorm1d(in_channels)
         self.beta = nn.Parameter(torch.zeros((1, in_channels, 1)), requires_grad=True)
-        self.GCGFN = GCGFN(in_channels, kernel_list, causal=causal)
+        self.GCGFN = GCGFN(in_channels, kernel_list)
 
 
     def forward(self, x):
@@ -249,17 +223,15 @@ class LKFCA_Block(nn.Module):
         return x
 
 class TS_BLOCK(nn.Module):
-    def __init__(self, 
-                 dense_channel=64, 
-                 freq_block_num=2, 
-                 freq_block_kernel=[3, 11, 23, 31],
-                 causal=False
+    def __init__(self,
+                 dense_channel=64,
+                 freq_block_num=2,
+                 freq_block_kernel=[3, 11, 23, 31]
                  ):
         super().__init__()
         self.dense_channel = dense_channel
-        self.causal = causal
         self.freq = nn.Sequential(
-            *[LKFCA_Block(in_channels=dense_channel, dw_kernel_size=3, kernel_list=freq_block_kernel, causal=causal) for _ in range(freq_block_num)],
+            *[LKFCA_Block(in_channels=dense_channel, dw_kernel_size=3, kernel_list=freq_block_kernel) for _ in range(freq_block_num)],
         )
         self.gamma = nn.Parameter(torch.zeros((1, 1, dense_channel, 1)), requires_grad=True)
     def forward(self, x):
@@ -412,7 +384,7 @@ class PrimeKnet(nn.Module):
         self.dense_encoder = DenseEncoder(dense_channel, in_channel=2, depth=dense_depth, causal=causal)
         self.LKFCAnet = nn.ModuleList([])
         for i in range(num_tsblock):
-            self.LKFCAnet.append(TS_BLOCK(dense_channel, freq_block_num, freq_block_kernel, causal=causal))
+            self.LKFCAnet.append(TS_BLOCK(dense_channel, freq_block_num, freq_block_kernel))
         self.mask_decoder = MaskDecoder(dense_channel, fft_len, sigmoid_beta, out_channel=1, depth=dense_depth, causal=causal)
         self.phase_decoder = PhaseDecoder(dense_channel, out_channel=1, depth=dense_depth, causal=causal)
 

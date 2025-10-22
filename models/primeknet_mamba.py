@@ -98,16 +98,6 @@ def get_padding_2d(
         int((kernel_size[1] * dilation[1] - dilation[1]) / 2),
     )
 
-class CausalConv1d(nn.Module):
-    def __init__(self, *args, **kwargs):
-        super().__init__()
-        self.padding = kwargs.get('padding', 0) * 2
-        kwargs['padding'] = 0
-        self.conv = nn.Conv1d(*args, **kwargs)
-    
-    def forward(self, x: Tensor) -> Tensor:
-        return self.conv(F.pad(x, [self.padding, 0]))
-
 class CausalConv2d(nn.Module):
     def __init__(self, *args, **kwargs):
         super().__init__()
@@ -169,7 +159,6 @@ class Mamba_Group_Feature_Network(nn.Module):
         d_state: int = 16,
         d_conv: int = 4,
         expand: int = 2,
-        causal: bool = False,
     ) -> None:
         super().__init__()
 
@@ -203,12 +192,10 @@ class Group_Prime_Kernel_FFN(nn.Module):
         self,
         in_channel: int = 64,
         kernel_list: List[int] = [3, 11, 23, 31],
-        causal: bool = False,
     ) -> None:
         super().__init__()
-        
+
         mid_channel = in_channel * len(kernel_list)
-        conv_fn = CausalConv1d if causal else nn.Conv1d
 
         self.expand_ratio = len(kernel_list)
         self.kernel_list = kernel_list
@@ -218,12 +205,12 @@ class Group_Prime_Kernel_FFN(nn.Module):
         self.beta = nn.Parameter(torch.zeros((1, in_channel, 1)), requires_grad=True)
 
         for kernel_size in kernel_list:
-            setattr(self, f"attn_{kernel_size}", 
+            setattr(self, f"attn_{kernel_size}",
                 nn.Sequential(
-                    conv_fn(in_channel, in_channel, kernel_size=kernel_size, groups=in_channel, padding=get_padding(kernel_size)),
+                    nn.Conv1d(in_channel, in_channel, kernel_size=kernel_size, groups=in_channel, padding=get_padding(kernel_size)),
                     nn.Conv1d(in_channel, in_channel, kernel_size=1)))
-            setattr(self, f"conv_{kernel_size}", 
-                conv_fn(in_channel, in_channel, kernel_size=kernel_size, padding=get_padding(kernel_size), groups=in_channel))
+            setattr(self, f"conv_{kernel_size}",
+                nn.Conv1d(in_channel, in_channel, kernel_size=kernel_size, padding=get_padding(kernel_size), groups=in_channel))
     
     def forward(self, x: Tensor) -> Tensor:
         skip = x
@@ -243,16 +230,13 @@ class Channel_Attention_Block(nn.Module):
         self,
         in_channel: int = 64,
         dw_kernel_size: int = 3,
-        causal: bool = False,
     ) -> None:
         super().__init__()
-
-        conv_fn = CausalConv1d if causal else nn.Conv1d
 
         self.norm = LayerNorm1d(in_channel)
         self.gate = nn.Sequential(
             nn.Conv1d(in_channel, in_channel*2, kernel_size=1, padding=0, groups=1),
-            conv_fn(in_channel*2, in_channel*2, kernel_size=dw_kernel_size, padding=get_padding(dw_kernel_size), groups=in_channel*2),
+            nn.Conv1d(in_channel*2, in_channel*2, kernel_size=dw_kernel_size, padding=get_padding(dw_kernel_size), groups=in_channel*2),
             SimpleGate(),
         )
         self.channel_attn = nn.Sequential(
@@ -282,35 +266,33 @@ class Two_Stage_Block(nn.Module):
         mamba_expand: int = 2,
         freq_block_num: int = 2,
         freq_block_kernel: List[int] = [3, 11, 23, 31],
-        causal: bool = False,
     ) -> None:
         super().__init__()
         self.dense_channel = dense_channel
-        self.causal = causal
 
         time_stage = nn.ModuleList([])
         freq_stage = nn.ModuleList([])
 
-
+        # Time stage: dw_kernel_size=1 hardcoded (RF=1)
         for _ in range(time_block_num):
             time_stage.append(
                 nn.Sequential(
-                    Channel_Attention_Block(dense_channel, dw_kernel_size=1, causal=causal),
+                    Channel_Attention_Block(dense_channel, dw_kernel_size=1),
                     Mamba_Group_Feature_Network(
                         dense_channel,
                         hidden_size=mamba_hidden_size,
                         d_state=mamba_d_state,
                         d_conv=mamba_d_conv,
                         expand=mamba_expand,
-                        causal=causal,
                     ),
                 )
             )
+        # Frequency stage: standard kernel size
         for i in range(freq_block_num):
             freq_stage.append(
                 nn.Sequential(
-                    Channel_Attention_Block(dense_channel, dw_kernel_size=3, causal=causal),
-                    Group_Prime_Kernel_FFN(dense_channel, freq_block_kernel, causal=causal),
+                    Channel_Attention_Block(dense_channel, dw_kernel_size=3),
+                    Group_Prime_Kernel_FFN(dense_channel, freq_block_kernel),
                 )
             )
         self.time_stage = nn.Sequential(*time_stage)
@@ -486,7 +468,6 @@ class PrimeKnet(nn.Module):
                 mamba_expand=mamba_expand,
                 freq_block_num=freq_block_num,
                 freq_block_kernel=freq_block_kernel,
-                causal=causal
             ) for _ in range(num_tsblock)]
         )
         self.mask_decoder = MaskDecoder(dense_channel, fft_len, sigmoid_beta, out_channel=1, depth=dense_depth, causal=causal)
