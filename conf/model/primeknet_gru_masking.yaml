@@ -9,7 +9,7 @@ param:
   dense_depth: 3
   num_tsblock: 4
   time_block_num: 2
-  gru_layers: 2
+  gru_layers: 1
   gru_hidden_size: 64
   freq_block_kernel: [3, 11, 23, 31]
   freq_block_num: 2
