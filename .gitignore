@@ -94,3 +94,6 @@ run2.sh
 
 # Docs
 docs/
+
+# Backup
+_backup/

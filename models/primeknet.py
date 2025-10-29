@@ -1,3 +1,5 @@
+from typing import List
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -162,8 +164,8 @@ class LayerNorm1d(nn.Module):
     def forward(self, x):
         return LayerNormFunction.apply(x, self.weight, self.bias, self.eps)
     
-class GCGFN(nn.Module):
-    def __init__(self, in_channel=64, kernel_list=[3, 11, 23, 31], causal=False):
+class Group_Prime_Kernel_FFN(nn.Module):
+    def __init__(self, in_channel: int = 64, kernel_list: List[int] = [3, 11, 23, 31], causal: bool = False):
         super().__init__()
         self.in_channel = in_channel
         self.expand_ratio = len(kernel_list)
@@ -189,12 +191,12 @@ class GCGFN(nn.Module):
                 nn.Conv1d(self.in_channel, self.in_channel, kernel_size=1)
             ))
             setattr(self, f"conv_{kernel_size}", conv_fn(self.in_channel, self.in_channel, kernel_size=kernel_size, padding=get_padding(kernel_size), groups=self.in_channel))
-    
+
     def forward(self, x):
         shortcut = x.clone()
         x = self.norm(x)
         x = self.proj_first(x)
-        
+
         x_chunks = list(torch.chunk(x, self.expand_ratio, dim=1))
         for i in range(self.expand_ratio):
             x_chunks[i] = getattr(self, f"attn_{self.kernel_list[i]}")(x_chunks[i]) * getattr(self, f"conv_{self.kernel_list[i]}")(x_chunks[i])
@@ -203,8 +205,8 @@ class GCGFN(nn.Module):
         x = self.proj_last(x) * self.scale + shortcut
         return x
 
-class LKFCA_Block(nn.Module):
-    def __init__(self, in_channels=64, dw_kernel_size=3, kernel_list=[3, 11, 23, 31], causal=False):
+class Channel_Attention_Block(nn.Module):
+    def __init__(self, in_channels: int = 64, dw_kernel_size: int = 3, causal: bool = False):
         super().__init__()
 
         dw_channel = in_channels * 2
@@ -214,72 +216,82 @@ class LKFCA_Block(nn.Module):
         else:
             conv_fn = nn.Conv1d
 
+        self.norm = LayerNorm1d(in_channels)
         self.pwconv1 = nn.Conv1d(in_channels=in_channels, out_channels=dw_channel, kernel_size=1, padding=0, stride=1,
                                groups=1, bias=True)
-        self.dwconv = conv_fn(in_channels=dw_channel, out_channels=dw_channel, kernel_size=dw_kernel_size, padding=get_padding(dw_kernel_size), stride=1,
-                               groups=dw_channel, bias=True)
-        self.pwconv2 = nn.Conv1d(in_channels=dw_channel // 2, out_channels=in_channels, kernel_size=1, padding=0, stride=1,
-                               groups=1, bias=True)
-
+        self.dwconv = conv_fn(in_channels=dw_channel, out_channels=dw_channel, kernel_size=dw_kernel_size,
+                              padding=get_padding(dw_kernel_size), stride=1, groups=dw_channel, bias=True)
+        self.sg = SimpleGate()
         self.sca = nn.Sequential(
             nn.AdaptiveAvgPool1d(1),
             nn.Conv1d(in_channels=dw_channel // 2, out_channels=dw_channel // 2, kernel_size=1, padding=0, stride=1,
                       groups=1, bias=True),
         )
-
-        self.sg = SimpleGate()
-        self.norm1 = LayerNorm1d(in_channels)
+        self.pwconv2 = nn.Conv1d(in_channels=dw_channel // 2, out_channels=in_channels, kernel_size=1, padding=0, stride=1,
+                               groups=1, bias=True)
         self.beta = nn.Parameter(torch.zeros((1, in_channels, 1)), requires_grad=True)
-        self.GCGFN = GCGFN(in_channels, kernel_list, causal=causal)
-
 
     def forward(self, x):
-
-        inp2 = x
-        x = self.norm1(inp2)
+        skip = x
+        x = self.norm(x)
         x = self.pwconv1(x)
         x = self.dwconv(x)
         x = self.sg(x)
         x = x * self.sca(x)
         x = self.pwconv2(x)
-
-        inp3 = inp2 + x * self.beta
-        x = self.GCGFN(inp3)
-
+        x = skip + x * self.beta
         return x
 
 class TS_BLOCK(nn.Module):
-    def __init__(self,
-                 dense_channel=64,
-                 time_block_num=2,
-                 freq_block_num=2,
-                 time_dw_kernel_size=3,
-                 time_block_kernel=[3, 11, 23, 31],
-                 freq_block_kernel=[3, 11, 23, 31],
-                 causal=False
-                 ):
+    def __init__(
+        self,
+        dense_channel: int = 64,
+        time_block_num: int = 2,
+        freq_block_num: int = 2,
+        time_dw_kernel_size: int = 3,
+        time_block_kernel: List[int] = [3, 11, 23, 31],
+        freq_block_kernel: List[int] = [3, 11, 23, 31],
+        causal: bool = False
+    ):
         super().__init__()
         self.dense_channel = dense_channel
-        self.causal = causal
+
+        time_stage = nn.ModuleList([])
+        freq_stage = nn.ModuleList([])
+
         # Time stage: use causal parameter as provided
-        self.time = nn.Sequential(
-            *[LKFCA_Block(in_channels=dense_channel, dw_kernel_size=time_dw_kernel_size, kernel_list=time_block_kernel, causal=causal) for _ in range(time_block_num)],
-        )
+        for _ in range(time_block_num):
+            time_stage.append(
+                nn.Sequential(
+                    Channel_Attention_Block(in_channels=dense_channel, dw_kernel_size=time_dw_kernel_size, causal=causal),
+                    Group_Prime_Kernel_FFN(in_channel=dense_channel, kernel_list=time_block_kernel, causal=causal),
+                )
+            )
+
         # Frequency stage: always non-causal (frequency axis has no causal meaning)
-        self.freq = nn.Sequential(
-            *[LKFCA_Block(in_channels=dense_channel, dw_kernel_size=3, kernel_list=freq_block_kernel, causal=False) for _ in range(freq_block_num)],
-        )
-        self.beta = nn.Parameter(torch.zeros((1, 1, dense_channel, 1)), requires_grad=True)
-        self.gamma = nn.Parameter(torch.zeros((1, 1, dense_channel, 1)), requires_grad=True)
+        for _ in range(freq_block_num):
+            freq_stage.append(
+                nn.Sequential(
+                    Channel_Attention_Block(in_channels=dense_channel, dw_kernel_size=3, causal=False),
+                    Group_Prime_Kernel_FFN(in_channel=dense_channel, kernel_list=freq_block_kernel, causal=False),
+                )
+            )
+
+        self.time_stage = nn.Sequential(*time_stage)
+        self.freq_stage = nn.Sequential(*freq_stage)
+
+        self.beta_t = nn.Parameter(torch.zeros((1, dense_channel, 1)), requires_grad=True)
+        self.beta_f = nn.Parameter(torch.zeros((1, dense_channel, 1)), requires_grad=True)
+
     def forward(self, x):
-        b, c, t, f = x.size()
-        x = x.permute(0, 3, 1, 2).contiguous().view(b*f, c, t) 
+        B, C, T, F = x.size()
+        x = x.permute(0, 3, 1, 2).contiguous().view(B * F, C, T)
 
-        x = self.time(x) + x * self.beta
-        x = x.view(b, f, c, t).permute(0, 3, 2, 1).contiguous().view(b*t, c, f)
+        x = self.time_stage(x) + x * self.beta_t
+        x = x.view(B, F, C, T).permute(0, 3, 2, 1).contiguous().view(B * T, C, F)
 
-        x = self.freq(x) + x * self.gamma
-        x = x.view(b, t, c, f).permute(0, 2, 1, 3)
+        x = self.freq_stage(x) + x * self.beta_f
+        x = x.view(B, T, C, F).permute(0, 2, 1, 3)
         return x
 
 class LearnableSigmoid_2d(nn.Module):
@@ -425,9 +437,9 @@ class PrimeKnet(nn.Module):
         assert infer_type in ['masking', 'mapping'], 'infer_type must be either masking or mapping'
 
         self.dense_encoder = DenseEncoder(dense_channel, in_channel=2, depth=dense_depth, causal=causal)
-        self.LKFCAnet = nn.ModuleList([])
-        for i in range(num_tsblock):
-            self.LKFCAnet.append(TS_BLOCK(dense_channel, time_block_num, freq_block_num, time_dw_kernel_size, time_block_kernel, freq_block_kernel, causal=causal))
+        self.sequence_block = nn.Sequential(
+            *[TS_BLOCK(dense_channel, time_block_num, freq_block_num, time_dw_kernel_size, time_block_kernel, freq_block_kernel, causal=causal) for _ in range(num_tsblock)]
+        )
         self.mask_decoder = MaskDecoder(dense_channel, fft_len, sigmoid_beta, out_channel=1, depth=dense_depth, causal=causal)
         self.phase_decoder = PhaseDecoder(dense_channel, out_channel=1, depth=dense_depth, causal=causal)
 
@@ -445,11 +457,10 @@ class PrimeKnet(nn.Module):
 
         x = torch.cat((mag, pha), dim=1) # [B, 2, T, F]
 
-        x = self.dense_encoder(x)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+        x = self.dense_encoder(x)
 
-        for i in range(self.num_tsblock):
-            x = self.LKFCAnet[i](x)
-        
+        x = self.sequence_block(x)
+
         denoised_mag = (mag * self.mask_decoder(x)).permute(0, 3, 2, 1).squeeze(-1)
         denoised_pha = self.phase_decoder(x).permute(0, 3, 2, 1).squeeze(-1)
         
