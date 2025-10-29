@@ -91,3 +91,6 @@ run2.sh
 .claude/
 .claude-config.json
 *.claude
+
+# Docs
+docs/
