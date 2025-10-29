@@ -65,7 +65,9 @@ class AsymmetricConv2d(nn.Module):
         if isinstance(padding, int):
             padding = (padding, padding)
 
-        time_pad_total = padding[0]
+        # Note: padding[0] from get_padding_2d is single-side padding
+        # Total padding for both sides = padding[0] * 2 (same as CausalConv2d logic)
+        time_pad_total = padding[0] * 2
         freq_pad = padding[1]
 
         # Split time padding according to ratio
