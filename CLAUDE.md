@@ -10,14 +10,14 @@ pip install -r requirements.txt
 pip install -e ".[dev]"
 
 # Train model
-CUDA_VISIBLE_DEVICES=0 python train.py +model=primeknet_gru_masking +dset=taps
+CUDA_VISIBLE_DEVICES=0 python -m src.train +model=primeknet_gru_masking +dset=taps
 
 # Resume training
-python train.py +model=primeknet_gru_masking +dset=taps \
+python -m src.train +model=primeknet_gru_masking +dset=taps \
   continue_from=outputs/checkpoint_dir
 
 # Run inference
-python enhance.py --chkpt_dir outputs/model_dir --chkpt_file best.th \
+python -m src.enhance --chkpt_dir outputs/model_dir --chkpt_file best.th \
   --noise_dir /path/to/noise --rir_dir /path/to/rir \
   --snr 0 --output_dir samples
 ```
@@ -80,13 +80,16 @@ def mag_pha_to_complex(mag: Tensor, pha: Tensor) -> Tensor:
 ## Important Files
 
 ### Core Files
-- `train.py`: Main training entry point using Hydra
-- `solver.py`: Training loop implementation (Solver class)
-- `data.py`: Dataset and data augmentation logic
-- `models/primeknet.py`, `models/primeknet_gru.py`: Model architectures
-- `stft.py`: STFT/iSTFT utilities
-- `evaluate.py`: Evaluation script with metrics
-- `enhance.py`: Inference script
+- `src/train.py`: Main training entry point using Hydra
+- `src/enhance.py`: Inference script
+- `src/evaluate.py`: Evaluation script with metrics
+- `src/compute_metrics.py`: Metric computation utilities
+- `src/solver.py`: Training loop implementation (Solver class)
+- `src/data.py`: Dataset and data augmentation logic
+- `src/stft.py`: STFT/iSTFT utilities
+- `src/utils.py`: Utility functions
+- `src/models/primeknet.py`: Model architectures
+- `tools/track_experiment.py`: Experiment tracking tool
 
 ### Configuration
 - `conf/config.yaml`: Base configuration
@@ -141,7 +144,7 @@ pytest tests/test_stft.py::TestSTFT::test_mag_pha_to_complex_shape -v
 pytest tests/test_models.py::TestPrimeKnet -v
 
 # Test with coverage
-pytest tests/test_models.py -v --cov=models --cov-report=term-missing
+pytest tests/test_models.py -v --cov=src.models --cov-report=term-missing
 
 # Test with verbose output and stop on first failure
 pytest tests/ -vsx
@@ -151,37 +154,54 @@ pytest tests/ -vsx
 
 ```
 BAFNet-plus/
-├── conf/                   # Hydra configurations
-├── models/                 # Model implementations
-├── tests/                  # Unit tests
-├── dataset/                # Dataset file lists
-├── outputs/                # Training outputs (auto-generated)
-├── docs/                   # Documentation
-├── train.py                # Training entry point
-├── enhance.py              # Inference script
-├── evaluate.py             # Evaluation script
-├── data.py                 # Dataset implementation
-├── solver.py               # Training loop
-└── stft.py                 # STFT utilities
+├── README.md               # Project overview
+├── CLAUDE.md              # Development guide (this file)
+├── WORKFLOW.md            # Experiment tracking guide
+├── requirements.txt       # Python dependencies
+├── src/                   # Source code (library + scripts)
+│   ├── data.py           # Dataset and data augmentation
+│   ├── solver.py         # Training loop (Solver class)
+│   ├── stft.py           # STFT/iSTFT utilities
+│   ├── utils.py          # Utility functions
+│   ├── train.py          # Training entry point
+│   ├── enhance.py        # Inference script
+│   ├── evaluate.py       # Evaluation script
+│   ├── compute_metrics.py # Metric computation
+│   └── models/           # Model architectures
+├── tools/                 # Utility tools
+│   └── track_experiment.py # Experiment tracking
+├── conf/                  # Hydra configurations
+├── dataset/               # Dataset file lists
+├── tests/                 # Unit tests
+├── outputs/               # Training outputs (auto-generated)
+└── results/               # Experiment tracking results
+    ├── experiments.csv   # All experiment data
+    ├── EXPERIMENTS.md    # Summary tables
+    └── plots/            # Visualization plots
 ```
 
 ## Common Tasks
 
 ### Adding a New Model
-1. Create `models/your_model.py` with model class
+1. Create `src/models/your_model.py` with model class
 2. Add configuration in `conf/model/your_model.yaml`
 3. Add unit tests in `tests/test_models.py`
 4. Test: `pytest tests/test_models.py::TestYourModel -v`
 
 ### Modifying Training Loop
-1. Edit `solver.py` (Solver class)
+1. Edit `src/solver.py` (Solver class)
 2. Update relevant tests in `tests/`
 3. Run: `make test`
 
 ### Adding New Loss Function
-1. Add implementation to `utils.py` or `solver.py`
+1. Add implementation to `src/utils.py` or `src/solver.py`
 2. Update loss configuration in `conf/config.yaml`
 3. Add unit test for the loss function
+
+### Tracking Experiments
+1. After training completes, run: `python tools/track_experiment.py --update`
+2. Check results in `results/EXPERIMENTS.md` and `results/plots/`
+3. See `WORKFLOW.md` for detailed experiment tracking guide
 
 ### Debugging Training
 1. Check TensorBoard logs: `tensorboard --logdir outputs/your_run/tensorbd`

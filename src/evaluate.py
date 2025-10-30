@@ -4,13 +4,20 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 # author: yunsik kim
+import sys
+from pathlib import Path
+
+# Add project root to Python path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
 import torch
 import nlptutti as sarmetric
 import numpy as np
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
-from compute_metrics import compute_metrics
-from stft import mag_pha_stft, mag_pha_istft
-from utils import bold, LogProgress
+from .compute_metrics import compute_metrics
+from .stft import mag_pha_stft, mag_pha_istft
+from .utils import bold, LogProgress
 
 
 def get_stts(args, logger, enhanced):
@@ -107,8 +114,8 @@ if __name__=="__main__":
     import logging
     import logging.config
     import argparse
-    import importlib
-    from data import Noise_Augmented_Dataset
+    from src.data import Noise_Augmented_Dataset
+    from src.utils import load_model, load_checkpoint, parse_file_list, get_stft_args_from_config
     from omegaconf import OmegaConf
     from torch.utils.data import DataLoader
     from datasets import load_dataset, concatenate_datasets
@@ -157,13 +164,11 @@ if __name__=="__main__":
     
     model_args = conf.model
     model_lib = model_args.model_lib
-    model_name = model_args.model_class
-    module = importlib.import_module("models."+ model_lib)
-    model_class = getattr(module, model_name)
-    
-    model = model_class(**model_args.param).to(device)
-    chkpt = torch.load(os.path.join(chkpt_dir, chkpt_file), map_location=device)
-    model.load_state_dict(chkpt['model'])
+    model_class_name = model_args.model_class
+
+    # Load model and checkpoint using utility functions
+    model = load_model(model_lib, model_class_name, model_args.param, device)
+    model = load_checkpoint(model, chkpt_dir, chkpt_file, device)
     tm_only = model_args.input_type == "tm"
 
     # Load dataset based on user selection
@@ -179,15 +184,12 @@ if __name__=="__main__":
     
     ev_loader_list = {}
 
-    noise_test_list = [os.path.join(args.noise_dir, line.strip()) for line in open(args.noise_test, "r")]
-    rir_test_list = [os.path.join(args.rir_dir, line.strip()) for line in open(args.rir_test, "r")]
+    # Parse file lists using utility function
+    noise_test_list = parse_file_list(args.noise_dir, args.noise_test)
+    rir_test_list = parse_file_list(args.rir_dir, args.rir_test)
 
-    stft_args = {
-        "n_fft": model_args.param.fft_len,
-        "hop_size": model_args.param.hop_len,
-        "win_size": model_args.param.win_len,
-        "compress_factor": model_args.param.compress_factor
-    }
+    # Prepare STFT args using utility function
+    stft_args = get_stft_args_from_config(model_args)
 
     for fixed_snr in args.snr_step:
         ev_dataset = Noise_Augmented_Dataset(

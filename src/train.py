@@ -1,8 +1,13 @@
 import os
 import sys
+from pathlib import Path
+
+# Add project root to Python path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
 import logging
 import psutil
-import importlib
 import hydra
 import random
 import torch
@@ -10,10 +15,11 @@ import numpy as np
 from omegaconf import OmegaConf
 from torch.utils.data import DataLoader
 from datasets import load_dataset, concatenate_datasets
-from models.discriminator import MetricGAN_Discriminator
+from src.models.discriminator import MetricGAN_Discriminator
 import shutil
-from data import Noise_Augmented_Dataset, StepSampler
-from solver import Solver
+from src.data import Noise_Augmented_Dataset, StepSampler
+from src.solver import Solver
+from src.utils import load_model, parse_file_list
 
 torch.backends.cudnn.benchmark = True
 
@@ -32,9 +38,6 @@ def setup_logger(name):
     logging.config.dictConfig(OmegaConf.to_container(hydra_conf.hydra.job_logging, resolve=True))
     return logging.getLogger(name)
 
-def parse_list(dir, file):
-    return [os.path.join(dir, line.strip()) for line in open(file, "r")]
-
 def run(args):
         
     # Create and initialize logger
@@ -51,25 +54,22 @@ def run(args):
     
     model_args = args.model
     model_lib = model_args.model_lib
-    model_class = model_args.model_class
-    
-    # import model library
-    module = importlib.import_module("models." + model_lib)
-    model_class = getattr(module, model_class)
-    
-    model = model_class(**model_args.param)
-    model = model.to(device)
+    model_class_name = model_args.model_class
+
+    # Load model using utility function
+    model = load_model(model_lib, model_class_name, model_args.param, device)
 
     # Calculate and log the total number of parameters and model size
-    logger.info(f"Selected model: {model_lib}.{model_class}")
+    logger.info(f"Selected model: {model_lib}.{model_class_name}")
     total_params = sum(p.numel() for p in model.parameters())
     model_params = (total_params) / 1000000
     logger.info(f"Model's parameters: {model_params:.2f} M")
 
     if args.save_code:
         # Use hydra.utils.to_absolute_path to get the correct path
-        project_root = os.path.dirname(hydra.utils.to_absolute_path(__file__))
-        src = os.path.join(project_root, "models", f"{model_lib}.py")
+        scripts_dir = os.path.dirname(hydra.utils.to_absolute_path(__file__))
+        project_root = os.path.dirname(scripts_dir)
+        src = os.path.join(project_root, "src", "models", f"{model_lib}.py")
         dest = f"./{model_lib}.py"
         
         if os.path.exists(src):
@@ -113,12 +113,12 @@ def run(args):
     testset_list = [testset] * args.dset.test_augment_numb
     testset = concatenate_datasets(testset_list)
     
-    noise_train_list = parse_list(args.dset.noise_dir, args.dset.noise_train)
-    noise_valid_list = parse_list(args.dset.noise_dir, args.dset.noise_valid)
-    noise_test_list = parse_list(args.dset.noise_dir, args.dset.noise_test)
-    rir_train_list = parse_list(args.dset.rir_dir, args.dset.rir_train)
-    rir_valid_list = parse_list(args.dset.rir_dir, args.dset.rir_valid)
-    rir_test_list = parse_list(args.dset.rir_dir, args.dset.rir_test)
+    noise_train_list = parse_file_list(args.dset.noise_dir, args.dset.noise_train)
+    noise_valid_list = parse_file_list(args.dset.noise_dir, args.dset.noise_valid)
+    noise_test_list = parse_file_list(args.dset.noise_dir, args.dset.noise_test)
+    rir_train_list = parse_file_list(args.dset.rir_dir, args.dset.rir_train)
+    rir_valid_list = parse_file_list(args.dset.rir_dir, args.dset.rir_valid)
+    rir_test_list = parse_file_list(args.dset.rir_dir, args.dset.rir_test)
     
     tm_only = args.model.input_type == "tm"
 
@@ -245,7 +245,7 @@ def _main(args):
 
     run(args)
 
-@hydra.main(config_path="conf", config_name="config", version_base="1.3")
+@hydra.main(config_path="../conf", config_name="config", version_base="1.3")
 def main(args):
     logger = setup_logger("main")
     try:

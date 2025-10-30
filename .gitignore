@@ -1,55 +1,15 @@
-# Python
+# Python cache
 __pycache__/
 *.py[cod]
 *$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-pip-wheel-metadata/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-*pycache*
-*.pyc
 
-# PyTorch
+# PyTorch checkpoints
 *.pth
 *.pt
 *.ckpt
+*.th
 
-# Jupyter Notebook
-.ipynb_checkpoints
-*.ipynb
-
-# Virtual environments
-venv/
-env/
-ENV/
-env.bak/
-venv.bak/
-
-# IDEs
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.DS_Store
-
-# Hydra
+# Hydra outputs
 outputs/
 multirun/
 .hydra/
@@ -59,41 +19,39 @@ tensorbd/
 runs/
 lightning_logs/
 
-# Data
-dataset/*.wav
-dataset/*.flac
-dataset/*.mp3
-*.wav
-*.flac
-*.mp3
-
 # Logs
 *.log
 *.out
 *.err
-output*.log
 
-# Temporary files
-*.tmp
-*.temp
+
+# Don't Change Below This Line (Private)
+# Temporary inference/evaluation outputs
 samples/
 checkpoints/
 
-# System
-.nfs*
-Thumbs.db
+# Private backup
+_backup/
 
-# Project specific
+# Config files for dataset paths
+conf/dset/
+
+# Private run scripts
 run.sh
-run2.sh
 
-# Claude code cli config
-.claude/
-.claude-config.json
+# Claude cli config
 *.claude
 
-# Docs
+# Private Docs
 docs/
+CLAUDE.md
 
-# Backup
-_backup/
+# Private tests
+tests/
+
+# Private results
+results/
+
+# Private workflows
+tools/
+

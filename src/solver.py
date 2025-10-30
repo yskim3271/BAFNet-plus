@@ -5,9 +5,9 @@ import torch
 import torch.nn.functional as F
 
 from torch.utils.tensorboard import SummaryWriter
-from evaluate import evaluate
-from stft import mag_pha_istft, mag_pha_stft
-from utils import copy_state, swap_state,  \
+from .evaluate import evaluate
+from .stft import mag_pha_istft, mag_pha_stft
+from .utils import copy_state, swap_state,  \
                   batch_pesq, phase_losses, LogProgress, pull_metric
             
 

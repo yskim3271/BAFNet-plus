@@ -77,7 +77,7 @@ seed: 2039
 # Hydra config
 hydra:
   run:
-    dir: ./outputs/${now:%Y-%m-%d_%H-%M-%S}
+    dir: ./results/experiments/${now:%Y-%m-%d_%H-%M-%S}
   job:
     chdir: true
   job_logging:

@@ -3,7 +3,7 @@ from typing import List
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from stft import mag_pha_to_complex
+from src.stft import mag_pha_to_complex
 
 # ==================================================================================
 # Causal Real-Time Model: Receptive Field and Streaming Parameters Calculation
@@ -123,6 +123,96 @@ class CausalConv2d(nn.Module):
     def forward(self, x):
         x = F.pad(x, self.padding)
         return self.conv(x)
+
+class AsymmetricConv2d(nn.Module):
+    """
+    2D convolution with asymmetric time-axis padding.
+
+    This module enables flexible control over the receptive field by allowing
+    different amounts of padding on the left (past) and right (future) of the
+    time axis, while maintaining symmetric padding on the frequency axis.
+
+    Args:
+        in_channels (int): Number of input channels
+        out_channels (int): Number of output channels
+        kernel_size (tuple): Convolution kernel size (time, freq)
+        padding (tuple): Total padding per axis (time_padding, freq_padding)
+        padding_ratio (tuple): How to split time padding (left_ratio, right_ratio)
+            - (1.0, 0.0): Fully causal (all padding on left/past)
+            - (0.5, 0.5): Symmetric (equal padding on both sides)
+            - (0.8, 0.2): Asymmetric (80% left/past, 20% right/future)
+        stride (int): Convolution stride
+        dilation (tuple): Dilation rate for time and frequency axes
+        groups (int): Number of groups for grouped convolution
+        bias (bool): Whether to use bias
+
+    Note:
+        - Frequency axis always uses symmetric padding (no causal meaning)
+        - Padding format for F.pad: (left, right, top, bottom)
+        - Time axis corresponds to the height dimension (top/bottom in F.pad)
+
+    Example:
+        >>> conv = AsymmetricConv2d(64, 64, (3, 3), padding=(4, 1),
+        ...                          padding_ratio=(0.75, 0.25))
+        >>> # time_padding=4: left=3, right=1 (75%:25% split)
+        >>> # freq_padding=1: symmetric padding
+    """
+    def __init__(self, in_channels, out_channels, kernel_size, padding,
+                 padding_ratio=(1.0, 0.0), stride=1, dilation=(1, 1),
+                 groups=1, bias=True):
+        super(AsymmetricConv2d, self).__init__()
+        # padding[0] is the symmetric padding value (one-side)
+        # For full RF preservation, total padding = padding[0] * 2
+        # This matches CausalConv2d interface where time_padding = padding[0] * 2
+        time_padding_total = padding[0] * 2
+        freq_padding = padding[1]
+        left_ratio, right_ratio = padding_ratio
+
+        # Validate padding ratio
+        assert abs(left_ratio + right_ratio - 1.0) < 1e-6, \
+            f"padding_ratio must sum to 1.0, got {left_ratio + right_ratio}"
+        assert 0.0 <= left_ratio <= 1.0 and 0.0 <= right_ratio <= 1.0, \
+            f"padding_ratio values must be in [0, 1], got ({left_ratio}, {right_ratio})"
+
+        # Distribute time padding according to ratio
+        time_padding_left = round(time_padding_total * left_ratio)
+        time_padding_right = round(time_padding_total * right_ratio)
+
+        # Verify rounding preserves total (important for correctness)
+        actual_total = time_padding_left + time_padding_right
+        if actual_total != time_padding_total:
+            # Adjust right padding to ensure exact total
+            time_padding_right = time_padding_total - time_padding_left
+
+        assert time_padding_left + time_padding_right == time_padding_total, \
+            f"Padding split failed: {time_padding_left} + {time_padding_right} != {time_padding_total}"
+
+        # F.pad format: (left, right, top, bottom)
+        # Time axis: top=left (past), bottom=right (future)
+        # Freq axis: left, right (symmetric)
+        self.padding = (freq_padding, freq_padding,
+                       time_padding_left, time_padding_right)
+
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size,
+                             padding=0,
+                             stride=stride,
+                             dilation=dilation,
+                             groups=groups,
+                             bias=bias)
+
+        # Store for inspection/debugging
+        self.padding_ratio = padding_ratio
+        self.time_padding_left = time_padding_left
+        self.time_padding_right = time_padding_right
+
+    def forward(self, x):
+        x = F.pad(x, self.padding)
+        return self.conv(x)
+
+    def __repr__(self):
+        return (f"{self.__class__.__name__}("
+                f"padding_ratio={self.padding_ratio}, "
+                f"time_padding=({self.time_padding_left}, {self.time_padding_right}))")
 
 class SimpleGate(nn.Module):
     def forward(self, x):
@@ -305,23 +395,61 @@ class LearnableSigmoid_2d(nn.Module):
         return self.beta * torch.sigmoid(self.slope * x)
 
 class DS_DDB(nn.Module):
-    def __init__(self, dense_channel, kernel_size=(3, 3), depth=4, causal=False):
+    """
+    Dense Dilated Depthwise Block with asymmetric padding support.
+
+    Args:
+        dense_channel: Number of dense channels
+        kernel_size: Convolution kernel size (time, freq)
+        depth: Number of dilated layers (default: 4)
+        causal: Use causal padding (backward compatibility, deprecated)
+        padding_ratio: (left_ratio, right_ratio) for asymmetric padding on time axis
+            - If provided, overrides causal parameter
+            - (1.0, 0.0): Fully causal
+            - (0.5, 0.5): Symmetric
+            - Custom ratios: Asymmetric (e.g., (0.8333, 0.1667) for R=5)
+
+    Note: For backward compatibility, causal=True sets padding_ratio=(1.0, 0.0)
+    """
+    def __init__(self, dense_channel, kernel_size=(3, 3), depth=4, causal=False, padding_ratio=None):
         super().__init__()
         self.dense_channel = dense_channel
         self.depth = depth
-        self.causal = causal
         self.dense_block = nn.ModuleList([])
-        if causal:
-            conv_fn = CausalConv2d
+
+        # Handle padding_ratio logic
+        if padding_ratio is not None:
+            # Explicit padding_ratio provided
+            self.padding_ratio = padding_ratio
+            use_asymmetric = True
+        elif causal:
+            # Backward compatibility: causal=True → fully causal
+            self.padding_ratio = (1.0, 0.0)
+            use_asymmetric = True
         else:
-            conv_fn = nn.Conv2d
+            # causal=False → use standard symmetric Conv2d
+            self.padding_ratio = None
+            use_asymmetric = False
+
+        # Select convolution function
+        if use_asymmetric:
+            conv_fn = lambda in_ch, out_ch, ks, dil, pad, groups, bias: AsymmetricConv2d(
+                in_ch, out_ch, ks, padding=pad, padding_ratio=self.padding_ratio,
+                dilation=dil, groups=groups, bias=bias
+            )
+        else:
+            conv_fn = lambda in_ch, out_ch, ks, dil, pad, groups, bias: nn.Conv2d(
+                in_ch, out_ch, ks, padding=pad, dilation=dil, groups=groups, bias=bias
+            )
+
         for i in range(depth):
             dil = 2 ** i
+            padding = get_padding_2d(kernel_size, (dil, 1))
             dense_conv = nn.Sequential(
-                conv_fn(dense_channel*(i+1), dense_channel*(i+1), kernel_size, dilation=(dil, 1), 
-                        padding=get_padding_2d(kernel_size, (dil, 1)), groups=dense_channel*(i+1), bias=True),
-                nn.Conv2d(in_channels=dense_channel*(i+1), out_channels=dense_channel, kernel_size=1, padding=0, stride=1, groups=1,
-                          bias=True),
+                conv_fn(dense_channel*(i+1), dense_channel*(i+1), kernel_size,
+                       dil=(dil, 1), pad=padding, groups=dense_channel*(i+1), bias=True),
+                nn.Conv2d(in_channels=dense_channel*(i+1), out_channels=dense_channel,
+                         kernel_size=1, padding=0, stride=1, groups=1, bias=True),
                 nn.InstanceNorm2d(dense_channel, affine=True),
                 nn.PReLU(dense_channel)
             )
@@ -335,14 +463,26 @@ class DS_DDB(nn.Module):
         return x
 
 class DenseEncoder(nn.Module):
-    def __init__(self, dense_channel, in_channel, depth=4, causal=False):
+    """
+    Dense Encoder with optional asymmetric padding.
+
+    Args:
+        dense_channel: Number of dense channels
+        in_channel: Number of input channels
+        depth: Depth of DS_DDB (default: 4)
+        causal: Use causal padding (backward compatibility)
+        padding_ratio: (left_ratio, right_ratio) for asymmetric padding
+            - If None, uses causal parameter for backward compatibility
+            - If provided, overrides causal parameter
+    """
+    def __init__(self, dense_channel, in_channel, depth=4, causal=False, padding_ratio=None):
         super().__init__()
         self.dense_channel = dense_channel
         self.dense_conv_1 = nn.Sequential(
             nn.Conv2d(in_channel, dense_channel, (1, 1)),
             nn.InstanceNorm2d(dense_channel, affine=True),
             nn.PReLU(dense_channel))
-        self.dense_block = DS_DDB(dense_channel, depth=depth, causal=causal)
+        self.dense_block = DS_DDB(dense_channel, depth=depth, causal=causal, padding_ratio=padding_ratio)
         self.dense_conv_2 = nn.Sequential(
             nn.Conv2d(dense_channel, dense_channel, (1, 3), (1, 2)),
             nn.InstanceNorm2d(dense_channel, affine=True),
@@ -355,16 +495,31 @@ class DenseEncoder(nn.Module):
         return x
 
 class MaskDecoder(nn.Module):
-    def __init__(self, 
+    """
+    Mask Decoder with optional asymmetric padding.
+
+    Args:
+        dense_channel: Number of dense channels
+        n_fft: FFT size
+        sigmoid_beta: Beta parameter for learnable sigmoid
+        out_channel: Number of output channels (default: 1)
+        depth: Depth of DS_DDB (default: 4)
+        causal: Use causal padding (backward compatibility)
+        padding_ratio: (left_ratio, right_ratio) for asymmetric padding
+            - If None, uses causal parameter for backward compatibility
+            - If provided, overrides causal parameter
+    """
+    def __init__(self,
                  dense_channel,
                  n_fft,
                  sigmoid_beta,
                  out_channel=1,
                  depth=4,
-                 causal=False):
+                 causal=False,
+                 padding_ratio=None):
         super().__init__()
         self.n_fft = n_fft
-        self.dense_block = DS_DDB(dense_channel, depth=depth, causal=causal)
+        self.dense_block = DS_DDB(dense_channel, depth=depth, causal=causal, padding_ratio=padding_ratio)
         self.mask_conv = nn.Sequential(
             nn.ConvTranspose2d(dense_channel, dense_channel, (1, 3), (1, 2)),
             nn.Conv2d(dense_channel, out_channel, (1, 1)),
@@ -382,13 +537,26 @@ class MaskDecoder(nn.Module):
         return x
 
 class PhaseDecoder(nn.Module):
-    def __init__(self, 
-                 dense_channel, 
+    """
+    Phase Decoder with optional asymmetric padding.
+
+    Args:
+        dense_channel: Number of dense channels
+        out_channel: Number of output channels (default: 1)
+        depth: Depth of DS_DDB (default: 4)
+        causal: Use causal padding (backward compatibility)
+        padding_ratio: (left_ratio, right_ratio) for asymmetric padding
+            - If None, uses causal parameter for backward compatibility
+            - If provided, overrides causal parameter
+    """
+    def __init__(self,
+                 dense_channel,
                  out_channel=1,
                  depth=4,
-                 causal=False):
+                 causal=False,
+                 padding_ratio=None):
         super().__init__()
-        self.dense_block = DS_DDB(dense_channel, depth=depth, causal=causal)
+        self.dense_block = DS_DDB(dense_channel, depth=depth, causal=causal, padding_ratio=padding_ratio)
         self.phase_conv = nn.Sequential(
             nn.ConvTranspose2d(dense_channel, dense_channel, (1, 3), (1, 2)),
             nn.InstanceNorm2d(dense_channel, affine=True),
@@ -406,12 +574,34 @@ class PhaseDecoder(nn.Module):
         return x
 
 class PrimeKnet(nn.Module):
-    def __init__(self, 
-                 win_len, 
-                 hop_len, 
-                 fft_len, 
-                 dense_channel, 
-                 sigmoid_beta, 
+    """
+    PrimeKnet with asymmetric padding support for latency control.
+
+    Args:
+        encoder_padding_ratio: (left_ratio, right_ratio) for encoder asymmetric padding
+            - None: Use causal parameter (backward compatibility)
+            - (1.0, 0.0): Fully causal (6.25ms latency)
+            - (0.8333, 0.1667): R=5, 37.5ms latency
+            - (0.5, 0.5): Symmetric (100ms latency)
+        decoder_padding_ratio: (left_ratio, right_ratio) for decoder asymmetric padding
+            - None: Use causal parameter (backward compatibility)
+            - Recommended: (1.0, 0.0) for Option B (decoder causal)
+        causal: Backward compatibility parameter
+            - If encoder_padding_ratio/decoder_padding_ratio not provided, use this
+
+    Example (Option B configuration):
+        model = PrimeKnet(
+            ...,
+            encoder_padding_ratio=(0.8333, 0.1667),  # R=5, 37.5ms latency
+            decoder_padding_ratio=(1.0, 0.0),         # Decoder causal
+        )
+    """
+    def __init__(self,
+                 win_len,
+                 hop_len,
+                 fft_len,
+                 dense_channel,
+                 sigmoid_beta,
                  compress_factor,
                  dense_depth=4,
                  num_tsblock=4,
@@ -421,7 +611,9 @@ class PrimeKnet(nn.Module):
                  time_block_num=2,
                  freq_block_num=2,
                  infer_type='masking',
-                 causal=False
+                 causal=False,
+                 encoder_padding_ratio=None,
+                 decoder_padding_ratio=None
                  ):
         super().__init__()
         self.win_len = win_len
@@ -434,14 +626,20 @@ class PrimeKnet(nn.Module):
         self.num_tsblock = num_tsblock
         self.causal = causal
         self.infer_type = infer_type
+        self.encoder_padding_ratio = encoder_padding_ratio
+        self.decoder_padding_ratio = decoder_padding_ratio
         assert infer_type in ['masking', 'mapping'], 'infer_type must be either masking or mapping'
 
-        self.dense_encoder = DenseEncoder(dense_channel, in_channel=2, depth=dense_depth, causal=causal)
+        self.dense_encoder = DenseEncoder(dense_channel, in_channel=2, depth=dense_depth,
+                                         causal=causal, padding_ratio=encoder_padding_ratio)
         self.sequence_block = nn.Sequential(
-            *[TS_BLOCK(dense_channel, time_block_num, freq_block_num, time_dw_kernel_size, time_block_kernel, freq_block_kernel, causal=causal) for _ in range(num_tsblock)]
+            *[TS_BLOCK(dense_channel, time_block_num, freq_block_num, time_dw_kernel_size,
+                      time_block_kernel, freq_block_kernel, causal=causal) for _ in range(num_tsblock)]
         )
-        self.mask_decoder = MaskDecoder(dense_channel, fft_len, sigmoid_beta, out_channel=1, depth=dense_depth, causal=causal)
-        self.phase_decoder = PhaseDecoder(dense_channel, out_channel=1, depth=dense_depth, causal=causal)
+        self.mask_decoder = MaskDecoder(dense_channel, fft_len, sigmoid_beta, out_channel=1,
+                                       depth=dense_depth, causal=causal, padding_ratio=decoder_padding_ratio)
+        self.phase_decoder = PhaseDecoder(dense_channel, out_channel=1, depth=dense_depth,
+                                         causal=causal, padding_ratio=decoder_padding_ratio)
 
     def forward(self, noisy_com):
         # Input shape: [B, F, T, 2]

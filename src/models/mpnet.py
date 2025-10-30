@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 import torch.nn as nn
 from torch.nn import MultiheadAttention, GRU, Linear, LayerNorm, Dropout
-from stft import mag_pha_stft, mag_pha_istft, pad_stft_input
+from src.stft import mag_pha_stft, mag_pha_istft, pad_stft_input
 
 
 class LearnableSigmoid2d(nn.Module):

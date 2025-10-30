@@ -32,10 +32,10 @@ pip install -r requirements.txt
 
 ```bash
 # Train PrimeKnet-GRU on TAPS dataset
-CUDA_VISIBLE_DEVICES=0 python train.py +model=primeknet_gru_masking +dset=taps
+CUDA_VISIBLE_DEVICES=0 python -m src.train.py +model=primeknet_gru_masking +dset=taps
 
 # Resume from checkpoint
-python train.py +model=primeknet_gru_masking +dset=taps \
+python -m src.train.py +model=primeknet_gru_masking +dset=taps \
   continue_from=outputs/2025-10-10_03-52-05
 ```
 
@@ -44,7 +44,7 @@ Training outputs (checkpoints, logs, samples) are saved to `outputs/<timestamp>/
 ### Inference
 
 ```bash
-python enhance.py \
+python -m src.enhance.py \
   --chkpt_dir outputs/your_model_dir \
   --chkpt_file best.th \
   --noise_dir /path/to/noise \
@@ -61,7 +61,7 @@ python enhance.py \
 # Evaluate model on test set
 bash eval.sh
 # Or customize:
-python evaluate.py \
+python -m src.evaluate.py \
   --model_config outputs/model_dir/.hydra/config.yaml \
   --chkpt_dir outputs/model_dir \
   --chkpt_file best.th \
@@ -158,13 +158,13 @@ Hydra-based configuration allows flexible experiment management:
 
 ```bash
 # Override model parameters
-python train.py +model=primeknet_gru_masking model.param.gru_layers=2
+python -m src.train.py +model=primeknet_gru_masking model.param.gru_layers=2
 
 # Override training settings
-python train.py +dset=taps batch_size=8 lr=1e-3
+python -m src.train.py +dset=taps batch_size=8 lr=1e-3
 
 # Combine configs
-python train.py +model=primeknet_lstm_masking +dset=vibravox epochs=100
+python -m src.train.py +model=primeknet_lstm_masking +dset=vibravox epochs=100
 ```
 
 Configuration files are in `conf/`:
@@ -180,21 +180,27 @@ BAFNet-plus/
 │   ├── config.yaml         # Main config
 │   ├── dset/               # Dataset configs
 │   └── model/              # Model configs
-├── models/                 # Model implementations
-│   ├── primeknet.py        # Base PrimeKnet
-│   ├── primeknet_gru.py    # GRU variant
-│   ├── primeknet_lstm.py   # LSTM variant
-│   └── discriminator.py    # MetricGAN discriminator
+├── src/                    # Source code
+│   ├── models/             # Model implementations
+│   │   ├── primeknet.py    # Base PrimeKnet
+│   │   ├── bafnet.py       # BAFNet variant
+│   │   ├── mpnet.py        # MPNet variant
+│   │   └── discriminator.py # MetricGAN discriminator
+│   ├── train.py            # Training entry point
+│   ├── evaluate.py         # Evaluation script
+│   ├── enhance.py          # Inference script
+│   ├── data.py             # Dataset implementation
+│   ├── solver.py           # Training loop
+│   ├── stft.py             # STFT utilities
+│   ├── utils.py            # Helper functions
+│   └── compute_metrics.py  # Metric computation
+├── tools/                  # Utility tools
+│   └── track_experiment.py # Experiment tracking
+├── tests/                  # Unit tests
 ├── dataset/                # Dataset file lists
 ├── outputs/                # Training outputs (auto-generated)
-├── docs/                   # Documentation
-├── train.py                # Training entry point
-├── evaluate.py             # Evaluation script
-├── enhance.py              # Inference script
-├── data.py                 # Dataset implementation
-├── solver.py               # Training loop
-├── stft.py                 # STFT utilities
-└── utils.py                # Helper functions
+├── results/                # Experiment tracking results
+└── docs/                   # Documentation
 ```
 
 ## Evaluation Metrics

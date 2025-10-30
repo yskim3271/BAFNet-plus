@@ -1,12 +1,17 @@
-
-
 import os
+import sys
+from pathlib import Path
+
+# Add project root to Python path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
 import torch
 import torchaudio
 
 from matplotlib import pyplot as plt
-from utils import LogProgress
-from stft import mag_pha_stft, mag_pha_istft
+from src.utils import LogProgress
+from src.stft import mag_pha_stft, mag_pha_istft
 
 def save_wavs(wavs_dict, filepath, sr=16_000):
     for i, (key, wav) in enumerate(wavs_dict.items()):
@@ -79,8 +84,8 @@ if __name__=="__main__":
     import logging
     import logging.config
     import argparse
-    import importlib
-    from data import Noise_Augmented_Dataset
+    from src.data import Noise_Augmented_Dataset
+    from src.utils import load_model, load_checkpoint, parse_file_list, get_stft_args_from_config
     from omegaconf import OmegaConf
     from torch.utils.data import DataLoader
     from datasets import load_dataset
@@ -118,13 +123,11 @@ if __name__=="__main__":
     
     model_args = conf.model
     model_lib = model_args.model_lib
-    model_name = model_args.model_class
-    module = importlib.import_module("models."+ model_lib)
-    model_class = getattr(module, model_name)
-    
-    model = model_class(**model_args.param).to(device)
-    chkpt = torch.load(os.path.join(chkpt_dir, chkpt_file), map_location=device)
-    model.load_state_dict(chkpt['model'])
+    model_class_name = model_args.model_class
+
+    # Load model and checkpoint using utility functions
+    model = load_model(model_lib, model_class_name, model_args.param, device)
+    model = load_checkpoint(model, chkpt_dir, chkpt_file, device)
     tm_only = model_args.input_type == "tm"
 
     # Load dataset based on user selection
@@ -135,8 +138,9 @@ if __name__=="__main__":
     else:
         raise ValueError(f"Unknown dataset: {args.dataset}")
 
-    noise_test_list = [os.path.join(args.noise_dir, line.strip()) for line in open(args.noise_test, "r")]
-    rir_test_list = [os.path.join(args.rir_dir, line.strip()) for line in open(args.rir_test, "r")]
+    # Parse file lists using utility function
+    noise_test_list = parse_file_list(args.noise_dir, args.noise_test)
+    rir_test_list = parse_file_list(args.rir_dir, args.rir_test)
 
     tt_dataset = Noise_Augmented_Dataset(datapair_list=testset,
                                          noise_list=noise_test_list,
@@ -160,17 +164,11 @@ if __name__=="__main__":
         num_workers=0,
         pin_memory=True)
 
-    # Prepare STFT args for frequency-domain models
-    fft_len = model_args.param.fft_len
-    stft_args = {
-        "n_fft": fft_len,
-        "hop_size": model_args.param.get("hop_len", fft_len // 4),  # Default: fft_len // 4
-        "win_size": model_args.param.get("win_len", fft_len),  # Default: same as fft_len
-        "compress_factor": model_args.param.get("compress_factor", 1.0)  # Default: 1.0
-    }
+    # Prepare STFT args for frequency-domain models using utility function
+    stft_args = get_stft_args_from_config(model_args)
 
     logger.info(f"Dataset: {args.dataset}")
-    logger.info(f"Model: {model_name}")
+    logger.info(f"Model: {model_class_name}")
     logger.info(f"Checkpoint: {chkpt_dir}")
     logger.info(f"Device: {device}")
     logger.info(f"Output directory: {local_out_dir}")
