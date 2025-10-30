@@ -45,6 +45,7 @@ run.sh
 # Private Docs
 docs/
 CLAUDE.md
+Todo.md
 
 # Private tests
 tests/
@@ -54,4 +55,3 @@ results/
 
 # Private workflows
 tools/
-

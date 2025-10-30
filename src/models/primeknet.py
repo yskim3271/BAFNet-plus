@@ -79,10 +79,6 @@ from src.stft import mag_pha_to_complex
 #        RF_samples = (61 - 1) * 100 + 400 = 6,400   (≈ 0.4 s @16 kHz)
 #
 # -----------------------------------------------------------------------------
-# 3) Streaming Guidelines (unchanged idea; numbers depend on your params)
-#   - Minimal chunk size in samples should cover RF_samples.
-#   - Processing hop can remain hop_len for lowest algorithmic step.
-#   - Algorithmic latency is at least (win_len) and practically bounded by RF.
 # ==================================================================================
 
 
@@ -402,45 +398,33 @@ class DS_DDB(nn.Module):
         dense_channel: Number of dense channels
         kernel_size: Convolution kernel size (time, freq)
         depth: Number of dilated layers (default: 4)
-        causal: Use causal padding (backward compatibility, deprecated)
-        padding_ratio: (left_ratio, right_ratio) for asymmetric padding on time axis
-            - If provided, overrides causal parameter
+        causal: Deprecated parameter, kept for compatibility but ignored
+        padding_ratio: (left_ratio, right_ratio) for asymmetric padding on time axis (required)
             - (1.0, 0.0): Fully causal
             - (0.5, 0.5): Symmetric
             - Custom ratios: Asymmetric (e.g., (0.8333, 0.1667) for R=5)
-
-    Note: For backward compatibility, causal=True sets padding_ratio=(1.0, 0.0)
+            - Must sum to 1.0
     """
-    def __init__(self, dense_channel, kernel_size=(3, 3), depth=4, causal=False, padding_ratio=None):
+    def __init__(self, dense_channel, kernel_size=(3, 3), depth=4, causal=False, padding_ratio=(0.5, 0.5)):
         super().__init__()
         self.dense_channel = dense_channel
         self.depth = depth
         self.dense_block = nn.ModuleList([])
 
-        # Handle padding_ratio logic
-        if padding_ratio is not None:
-            # Explicit padding_ratio provided
-            self.padding_ratio = padding_ratio
-            use_asymmetric = True
-        elif causal:
-            # Backward compatibility: causal=True → fully causal
-            self.padding_ratio = (1.0, 0.0)
-            use_asymmetric = True
-        else:
-            # causal=False → use standard symmetric Conv2d
-            self.padding_ratio = None
-            use_asymmetric = False
+        # Validate padding_ratio
+        left_ratio, right_ratio = padding_ratio
+        assert abs(left_ratio + right_ratio - 1.0) < 1e-6, \
+            f"padding_ratio must sum to 1.0, got {left_ratio + right_ratio}"
+        assert 0.0 <= left_ratio <= 1.0 and 0.0 <= right_ratio <= 1.0, \
+            f"padding_ratio values must be in [0, 1], got ({left_ratio}, {right_ratio})"
 
-        # Select convolution function
-        if use_asymmetric:
-            conv_fn = lambda in_ch, out_ch, ks, dil, pad, groups, bias: AsymmetricConv2d(
-                in_ch, out_ch, ks, padding=pad, padding_ratio=self.padding_ratio,
-                dilation=dil, groups=groups, bias=bias
-            )
-        else:
-            conv_fn = lambda in_ch, out_ch, ks, dil, pad, groups, bias: nn.Conv2d(
-                in_ch, out_ch, ks, padding=pad, dilation=dil, groups=groups, bias=bias
-            )
+        self.padding_ratio = padding_ratio
+
+        # Always use AsymmetricConv2d with specified padding_ratio
+        conv_fn = lambda in_ch, out_ch, ks, dil, pad, groups, bias: AsymmetricConv2d(
+            in_ch, out_ch, ks, padding=pad, padding_ratio=self.padding_ratio,
+            dilation=dil, groups=groups, bias=bias
+        )
 
         for i in range(depth):
             dil = 2 ** i
@@ -464,18 +448,17 @@ class DS_DDB(nn.Module):
 
 class DenseEncoder(nn.Module):
     """
-    Dense Encoder with optional asymmetric padding.
+    Dense Encoder with asymmetric padding.
 
     Args:
         dense_channel: Number of dense channels
         in_channel: Number of input channels
         depth: Depth of DS_DDB (default: 4)
-        causal: Use causal padding (backward compatibility)
-        padding_ratio: (left_ratio, right_ratio) for asymmetric padding
-            - If None, uses causal parameter for backward compatibility
-            - If provided, overrides causal parameter
+        causal: Deprecated parameter, kept for compatibility but ignored
+        padding_ratio: (left_ratio, right_ratio) for asymmetric padding (required)
+            - Must sum to 1.0
     """
-    def __init__(self, dense_channel, in_channel, depth=4, causal=False, padding_ratio=None):
+    def __init__(self, dense_channel, in_channel, depth=4, causal=False, padding_ratio=(0.5, 0.5)):
         super().__init__()
         self.dense_channel = dense_channel
         self.dense_conv_1 = nn.Sequential(
@@ -496,7 +479,7 @@ class DenseEncoder(nn.Module):
 
 class MaskDecoder(nn.Module):
     """
-    Mask Decoder with optional asymmetric padding.
+    Mask Decoder with asymmetric padding.
 
     Args:
         dense_channel: Number of dense channels
@@ -504,10 +487,9 @@ class MaskDecoder(nn.Module):
         sigmoid_beta: Beta parameter for learnable sigmoid
         out_channel: Number of output channels (default: 1)
         depth: Depth of DS_DDB (default: 4)
-        causal: Use causal padding (backward compatibility)
-        padding_ratio: (left_ratio, right_ratio) for asymmetric padding
-            - If None, uses causal parameter for backward compatibility
-            - If provided, overrides causal parameter
+        causal: Deprecated parameter, kept for compatibility but ignored
+        padding_ratio: (left_ratio, right_ratio) for asymmetric padding (required)
+            - Must sum to 1.0
     """
     def __init__(self,
                  dense_channel,
@@ -516,7 +498,7 @@ class MaskDecoder(nn.Module):
                  out_channel=1,
                  depth=4,
                  causal=False,
-                 padding_ratio=None):
+                 padding_ratio=(0.5, 0.5)):
         super().__init__()
         self.n_fft = n_fft
         self.dense_block = DS_DDB(dense_channel, depth=depth, causal=causal, padding_ratio=padding_ratio)
@@ -538,23 +520,22 @@ class MaskDecoder(nn.Module):
 
 class PhaseDecoder(nn.Module):
     """
-    Phase Decoder with optional asymmetric padding.
+    Phase Decoder with asymmetric padding.
 
     Args:
         dense_channel: Number of dense channels
         out_channel: Number of output channels (default: 1)
         depth: Depth of DS_DDB (default: 4)
-        causal: Use causal padding (backward compatibility)
-        padding_ratio: (left_ratio, right_ratio) for asymmetric padding
-            - If None, uses causal parameter for backward compatibility
-            - If provided, overrides causal parameter
+        causal: Deprecated parameter, kept for compatibility but ignored
+        padding_ratio: (left_ratio, right_ratio) for asymmetric padding (required)
+            - Must sum to 1.0
     """
     def __init__(self,
                  dense_channel,
                  out_channel=1,
                  depth=4,
                  causal=False,
-                 padding_ratio=None):
+                 padding_ratio=(0.5, 0.5)):
         super().__init__()
         self.dense_block = DS_DDB(dense_channel, depth=depth, causal=causal, padding_ratio=padding_ratio)
         self.phase_conv = nn.Sequential(
@@ -578,22 +559,22 @@ class PrimeKnet(nn.Module):
     PrimeKnet with asymmetric padding support for latency control.
 
     Args:
-        encoder_padding_ratio: (left_ratio, right_ratio) for encoder asymmetric padding
-            - None: Use causal parameter (backward compatibility)
+        encoder_padding_ratio: (left_ratio, right_ratio) for encoder asymmetric padding (required)
             - (1.0, 0.0): Fully causal (6.25ms latency)
             - (0.8333, 0.1667): R=5, 37.5ms latency
             - (0.5, 0.5): Symmetric (100ms latency)
-        decoder_padding_ratio: (left_ratio, right_ratio) for decoder asymmetric padding
-            - None: Use causal parameter (backward compatibility)
+            - Must sum to 1.0
+        decoder_padding_ratio: (left_ratio, right_ratio) for decoder asymmetric padding (required)
             - Recommended: (1.0, 0.0) for Option B (decoder causal)
-        causal: Backward compatibility parameter
-            - If encoder_padding_ratio/decoder_padding_ratio not provided, use this
+            - Must sum to 1.0
+        causal: Controls TS_BLOCK causality (True for causal time processing)
 
     Example (Option B configuration):
         model = PrimeKnet(
             ...,
             encoder_padding_ratio=(0.8333, 0.1667),  # R=5, 37.5ms latency
             decoder_padding_ratio=(1.0, 0.0),         # Decoder causal
+            causal=True,                              # TS_BLOCK causal
         )
     """
     def __init__(self,
@@ -612,8 +593,8 @@ class PrimeKnet(nn.Module):
                  freq_block_num=2,
                  infer_type='masking',
                  causal=False,
-                 encoder_padding_ratio=None,
-                 decoder_padding_ratio=None
+                 encoder_padding_ratio=(0.5, 0.5),
+                 decoder_padding_ratio=(0.5, 0.5)
                  ):
         super().__init__()
         self.win_len = win_len
@@ -626,6 +607,21 @@ class PrimeKnet(nn.Module):
         self.num_tsblock = num_tsblock
         self.causal = causal
         self.infer_type = infer_type
+
+        # Validate encoder_padding_ratio
+        enc_left, enc_right = encoder_padding_ratio
+        assert abs(enc_left + enc_right - 1.0) < 1e-6, \
+            f"encoder_padding_ratio must sum to 1.0, got {enc_left + enc_right}"
+        assert 0.0 <= enc_left <= 1.0 and 0.0 <= enc_right <= 1.0, \
+            f"encoder_padding_ratio values must be in [0, 1], got ({enc_left}, {enc_right})"
+
+        # Validate decoder_padding_ratio
+        dec_left, dec_right = decoder_padding_ratio
+        assert abs(dec_left + dec_right - 1.0) < 1e-6, \
+            f"decoder_padding_ratio must sum to 1.0, got {dec_left + dec_right}"
+        assert 0.0 <= dec_left <= 1.0 and 0.0 <= dec_right <= 1.0, \
+            f"decoder_padding_ratio values must be in [0, 1], got ({dec_left}, {dec_right})"
+
         self.encoder_padding_ratio = encoder_padding_ratio
         self.decoder_padding_ratio = decoder_padding_ratio
         assert infer_type in ['masking', 'mapping'], 'infer_type must be either masking or mapping'
