@@ -239,6 +239,58 @@ def load_checkpoint(model: torch.nn.Module, chkpt_dir: str, chkpt_file: str, dev
     return model
 
 
+def load_model_config_from_checkpoint(checkpoint_path: str) -> Dict[str, Any]:
+    """
+    Load model configuration from checkpoint file.
+
+    This function extracts the model configuration (args.model) from a saved checkpoint,
+    allowing BAFNet to automatically configure mapping/masking submodels without
+    requiring manual parameter specification.
+
+    Args:
+        checkpoint_path: Path to checkpoint file (e.g., "outputs/exp/best.th")
+
+    Returns:
+        Dictionary containing model configuration with keys:
+            - model_lib: Model library name (e.g., "primeknet")
+            - model_class: Model class name (e.g., "PrimeKnet")
+            - param: Dictionary of model parameters
+
+    Raises:
+        FileNotFoundError: If checkpoint file doesn't exist
+        KeyError: If checkpoint doesn't contain 'args' or 'args.model'
+
+    Example:
+        >>> config = load_model_config_from_checkpoint("outputs/primeknet_exp/best.th")
+        >>> print(config['model_lib'])  # "primeknet"
+        >>> print(config['param']['dense_channel'])  # 64
+    """
+    if not os.path.exists(checkpoint_path):
+        raise FileNotFoundError(f"Checkpoint file not found: {checkpoint_path}")
+
+    # Load checkpoint (CPU is sufficient for config extraction)
+    checkpoint = torch.load(checkpoint_path, map_location='cpu')
+
+    if 'args' not in checkpoint:
+        raise KeyError(f"Checkpoint does not contain 'args' field: {checkpoint_path}")
+
+    args = checkpoint['args']
+
+    if not hasattr(args, 'model'):
+        raise KeyError(f"Checkpoint args does not contain 'model' field: {checkpoint_path}")
+
+    model_config = args.model
+
+    # Extract relevant fields
+    config = {
+        'model_lib': model_config.model_lib,
+        'model_class': model_config.model_class,
+        'param': dict(model_config.param)  # Convert to regular dict
+    }
+
+    return config
+
+
 def parse_file_list(directory: str, list_file: str) -> List[str]:
     """
     Parse file list and return full paths.

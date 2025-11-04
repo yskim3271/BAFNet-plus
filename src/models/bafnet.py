@@ -1,14 +1,15 @@
 import importlib
 import torch
 import torch.nn as nn
-from src.stft import mag_pha_stft, mag_pha_istft, pad_stft_input, complex_to_mag_pha
+from src.stft import complex_to_mag_pha
+from src.utils import load_model_config_from_checkpoint
 
 class LearnableSigmoid2d(nn.Module):
     def __init__(self, in_features, beta=1):
         super().__init__()
         self.beta = beta
         self.slope = nn.Parameter(torch.ones(in_features, 1))
-        self.slope.requiresGrad = True
+        self.slope.requires_grad = True
 
     def forward(self, x):
         return self.beta * torch.sigmoid(self.slope * x)
@@ -39,8 +40,29 @@ class BAFNet(torch.nn.Module):
         self.conv_padding = conv_kernel_size // 2
         self.learnable_sigmoid = learnable_sigmoid
 
-        module_mapping = importlib.import_module("models." + args_mapping.model_lib)
-        module_masking = importlib.import_module("models." + args_masking.model_lib)
+        # Auto-load mapping model config from checkpoint if not provided
+        if args_mapping is None:
+            if checkpoint_mapping is None:
+                raise ValueError("Either args_mapping or checkpoint_mapping must be provided")
+            print(f"[BAFNet] Auto-loading mapping model config from: {checkpoint_mapping}")
+            mapping_config = load_model_config_from_checkpoint(checkpoint_mapping)
+            # Convert dict to object-like structure for compatibility
+            class ConfigDict:
+                def __init__(self, d):
+                    for key, value in d.items():
+                        setattr(self, key, value if not isinstance(value, dict) else ConfigDict(value))
+            args_mapping = ConfigDict(mapping_config)
+
+        # Auto-load masking model config from checkpoint if not provided
+        if args_masking is None:
+            if checkpoint_masking is None:
+                raise ValueError("Either args_masking or checkpoint_masking must be provided")
+            print(f"[BAFNet] Auto-loading masking model config from: {checkpoint_masking}")
+            masking_config = load_model_config_from_checkpoint(checkpoint_masking)
+            args_masking = ConfigDict(masking_config)
+
+        module_mapping = importlib.import_module("src.models." + args_mapping.model_lib)
+        module_masking = importlib.import_module("src.models." + args_masking.model_lib)
 
         mapping_class = getattr(module_mapping, args_mapping.model_class)
         masking_class = getattr(module_masking, args_masking.model_class)
@@ -83,63 +105,58 @@ class BAFNet(torch.nn.Module):
                 nn.init.constant_(m.bias, 0)
 
 
-    def forward(self, tm, am, lens=False):
-                        
-        in_len = tm.size(-1)
-        
-        tm_wav = self.mapping(tm)
+    def forward(self, input):
+        """
+        Forward pass for BAFNet with STFT inputs.
 
-        mask, am_wav = self.masking(am, lens=True)
+        Args:
+            input: Tuple of (bcs_com, acs_com) where each is [B, F, T, 2]
+                   bcs_com: Bone conduction signal complex spectrogram (processed by mapping model)
+                   acs_com: Air conduction signal complex spectrogram (processed by masking model)
 
-        tm_padded = pad_stft_input(tm_wav.squeeze(1), self.fft_len, self.hop_len)
-        am_padded = pad_stft_input(am_wav.squeeze(1), self.fft_len, self.hop_len)
+        Returns:
+            est_mag: Estimated magnitude [B, F, T]
+            est_pha: Estimated phase [B, F, T]
+            est_com: Estimated complex spectrogram [B, F, T, 2]
+        """
+        # Unpack input tuple (compatible with solver's input_type='acs+bcs')
+        if isinstance(input, tuple):
+            bcs_com, acs_com = input
+        else:
+            raise ValueError("BAFNet requires tuple input: (bcs_com, acs_com)")
 
-        tm_mag, _, tm_com = mag_pha_stft(tm_padded, self.fft_len, self.hop_len, self.win_len, center=False, stack_dim=1)
-        am_mag, _, am_com = mag_pha_stft(am_padded, self.fft_len, self.hop_len, self.win_len, center=False, stack_dim=1)
 
-        tm_real, tm_imag = tm_com[:, 0, :, :], tm_com[:, 1, :, :]
-        am_real, am_imag = am_com[:, 0, :, :], am_com[:, 1, :, :]
+        # Call mapping and masking submodels
+        # Both models expect [B, F, T, 2] and return (mag, pha, com)
+        bcs_mag, bcs_pha, bcs_com_out = self.mapping(bcs_com)
+        acs_mag, acs_pha, acs_com_out = self.masking(acs_com)
 
-        tm_mag_mean = tm_mag.mean(dim=[1, 2], keepdim=True)
-        am_mag_mean = am_mag.mean(dim=[1, 2], keepdim=True)
+        # Calculate mask from masking model output
+        # mask represents the magnitude ratio (enhanced / noisy)
+        acs_input_mag = torch.sqrt(acs_com[:, :, :, 0]**2 + acs_com[:, :, :, 1]**2)
+        mask = acs_mag / (acs_input_mag + 1e-8)  # [B, F, T]
 
-        tm_real, tm_imag = tm_real / (tm_mag_mean + 1e-8), tm_imag / (tm_mag_mean + 1e-8)
-        am_real, am_imag = am_real / (am_mag_mean + 1e-8), am_imag / (am_mag_mean + 1e-8)
+        # Normalize by magnitude mean
+        bcs_mag_mean = bcs_mag.mean(dim=[1, 2], keepdim=True)  # [B, 1, 1]
+        acs_mag_mean = acs_mag.mean(dim=[1, 2], keepdim=True)
 
-        alpha = mask.unsqueeze(1)
+        bcs_com_norm = bcs_com_out / (bcs_mag_mean + 1e-8)
+        acs_com_norm = acs_com_out / (acs_mag_mean + 1e-8)
+
+        # Compute alpha mask from mask using CNN layers
+        alpha = mask.unsqueeze(1)  # [B, 1, F, T]
         for i in range(self.conv_depth):
             alpha = getattr(self, f"convblock_{i}")(alpha)
-        alpha = alpha.squeeze(1)
+        alpha = alpha.squeeze(1)  # [B, F, T]
         alpha = self.sigmoid(alpha)
 
-        est_real = tm_real * alpha + am_real * (1 - alpha)
-        est_imag = tm_imag * alpha + am_imag * (1 - alpha)
+        # Blend normalized complex spectrograms using alpha
+        est_com_norm = bcs_com_norm * alpha + acs_com_norm * (1 - alpha)
 
-        est_real = est_real * (tm_mag_mean + am_mag_mean) / 2.0
-        est_imag = est_imag * (tm_mag_mean + am_mag_mean) / 2.0
+        # Denormalize using average of both magnitude means
+        avg_mag_mean = (bcs_mag_mean + acs_mag_mean) / 2.0
+        est_com = est_com_norm * avg_mag_mean
 
-        est_com = torch.stack([est_real, est_imag], dim=1)
+        est_mag, est_pha = complex_to_mag_pha(est_com)
 
-        est_mag, est_pha = complex_to_mag_pha(est_com, stack_dim=1)
-
-        est_wav = mag_pha_istft(est_mag, est_pha, self.fft_len, self.hop_len, self.win_len, compress_factor=1)
-
-        est_wav = est_wav[..., :in_len]
-        est_wav = est_wav.unsqueeze(1)
-        
-        if lens == True:
-            return mask, alpha, tm_wav, am_wav, est_wav
-        
-        return est_wav
-        
-        
-        
-        
-        
-        
-
-        
-        
-        
-        
-        
+        return est_mag, est_pha, est_com
