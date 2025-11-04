@@ -20,6 +20,9 @@ python -m src.train +model=primeknet_gru_masking +dset=taps \
 python -m src.enhance --chkpt_dir outputs/model_dir --chkpt_file best.th \
   --noise_dir /path/to/noise --rir_dir /path/to/rir \
   --snr 0 --output_dir samples
+
+# Track experiments (parse results to CSV/Markdown)
+python results/track_experiment.py --update
 ```
 
 ### Linting and Testing
@@ -89,7 +92,7 @@ def mag_pha_to_complex(mag: Tensor, pha: Tensor) -> Tensor:
 - `src/stft.py`: STFT/iSTFT utilities
 - `src/utils.py`: Utility functions
 - `src/models/primeknet.py`: Model architectures
-- `tools/track_experiment.py`: Experiment tracking tool
+- `results/track_experiment.py`: Experiment tracking and result parser
 
 ### Configuration
 - `conf/config.yaml`: Base configuration
@@ -156,7 +159,6 @@ pytest tests/ -vsx
 BAFNet-plus/
 ├── README.md               # Project overview
 ├── CLAUDE.md              # Development guide (this file)
-├── WORKFLOW.md            # Experiment tracking guide
 ├── requirements.txt       # Python dependencies
 ├── src/                   # Source code (library + scripts)
 │   ├── data.py           # Dataset and data augmentation
@@ -168,16 +170,15 @@ BAFNet-plus/
 │   ├── evaluate.py       # Evaluation script
 │   ├── compute_metrics.py # Metric computation
 │   └── models/           # Model architectures
-├── tools/                 # Utility tools
-│   └── track_experiment.py # Experiment tracking
 ├── conf/                  # Hydra configurations
 ├── dataset/               # Dataset file lists
 ├── tests/                 # Unit tests
 ├── outputs/               # Training outputs (auto-generated)
-└── results/               # Experiment tracking results
-    ├── experiments.csv   # All experiment data
-    ├── EXPERIMENTS.md    # Summary tables
-    └── plots/            # Visualization plots
+└── results/               # Experiment tracking
+    ├── track_experiment.py # Experiment tracking tool
+    ├── experiments/       # Saved experiment results
+    ├── experiments.csv   # Parsed experiment data
+    └── EXPERIMENTS.md    # Human-readable summary
 ```
 
 ## Common Tasks
@@ -199,9 +200,37 @@ BAFNet-plus/
 3. Add unit test for the loss function
 
 ### Tracking Experiments
-1. After training completes, run: `python tools/track_experiment.py --update`
-2. Check results in `results/EXPERIMENTS.md` and `results/plots/`
-3. See `WORKFLOW.md` for detailed experiment tracking guide
+
+The `results/track_experiment.py` tool automatically parses experiment results from `results/experiments/` subdirectories and generates CSV and Markdown documentation.
+
+**Usage:**
+```bash
+# Full reparse of all experiments (first time)
+python results/track_experiment.py --full
+
+# Incremental update (add only new experiments)
+python results/track_experiment.py --update
+
+# Parse specific experiment
+python results/track_experiment.py --experiment prk_1104_2
+
+# Check schema and statistics
+python results/track_experiment.py --check
+```
+
+**What it parses:**
+- Performance metrics: PESQ, STOI, CER, WER, CSIG, CBAK, COVL (from `trainer.log`)
+- Model hyperparameters: All params from `model.param` (from `.hydra/config.yaml`)
+- Model version: Modification date + file hash of model code
+
+**Output files:**
+- `results/experiments.csv`: Complete data in CSV format (pandas-friendly)
+- `results/EXPERIMENTS.md`: Human-readable tables grouped by model type
+
+**Schema management:**
+- Uses Union schema: all parameter columns across different model versions
+- Missing parameters are filled with "N/A"
+- Automatically adds new columns when new parameters are detected
 
 ### Debugging Training
 1. Check TensorBoard logs: `tensorboard --logdir outputs/your_run/tensorbd`
