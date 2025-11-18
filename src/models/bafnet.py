@@ -137,8 +137,8 @@ class BAFNet(torch.nn.Module):
         mask = acs_mag / (acs_input_mag + 1e-8)  # [B, F, T]
 
         # Normalize by magnitude mean
-        bcs_mag_mean = bcs_mag.mean(dim=[1, 2], keepdim=True)  # [B, 1, 1]
-        acs_mag_mean = acs_mag.mean(dim=[1, 2], keepdim=True)
+        bcs_mag_mean = bcs_mag.mean(dim=[1, 2], keepdim=True).unsqueeze(-1)  # [B, 1, 1, 1]
+        acs_mag_mean = acs_mag.mean(dim=[1, 2], keepdim=True).unsqueeze(-1)  # [B, 1, 1, 1]
 
         bcs_com_norm = bcs_com_out / (bcs_mag_mean + 1e-8)
         acs_com_norm = acs_com_out / (acs_mag_mean + 1e-8)
@@ -148,13 +148,13 @@ class BAFNet(torch.nn.Module):
         for i in range(self.conv_depth):
             alpha = getattr(self, f"convblock_{i}")(alpha)
         alpha = alpha.squeeze(1)  # [B, F, T]
-        alpha = self.sigmoid(alpha)
+        alpha = self.sigmoid(alpha).unsqueeze(-1)  # [B, F, T, 1]
 
         # Blend normalized complex spectrograms using alpha
         est_com_norm = bcs_com_norm * alpha + acs_com_norm * (1 - alpha)
 
         # Denormalize using average of both magnitude means
-        avg_mag_mean = (bcs_mag_mean + acs_mag_mean) / 2.0
+        avg_mag_mean = (bcs_mag_mean + acs_mag_mean) / 2.0  # [B, 1, 1, 1]
         est_com = est_com_norm * avg_mag_mean
 
         est_mag, est_pha = complex_to_mag_pha(est_com)

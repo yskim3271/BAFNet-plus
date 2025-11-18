@@ -55,3 +55,6 @@ results/
 
 # Private workflows
 tools/
+
+# Private visualizations
+vis/

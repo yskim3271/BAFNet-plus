@@ -23,6 +23,9 @@ python -m src.enhance --chkpt_dir outputs/model_dir --chkpt_file best.th \
 
 # Track experiments (parse results to CSV/Markdown)
 python results/track_experiment.py --update
+
+# Compute receptive field and latency
+python src/compute_rf.py --experiment prk_1117_1 --csv results/experiments.csv
 ```
 
 ### Linting and Testing
@@ -198,6 +201,53 @@ BAFNet-plus/
 1. Add implementation to `src/utils.py` or `src/solver.py`
 2. Update loss configuration in `conf/config.yaml`
 3. Add unit test for the loss function
+
+### Computing Receptive Field and Latency
+
+The `src/compute_rf.py` tool calculates the receptive field size and algorithmic latency of PrimeKnet models based on their hyperparameters.
+
+**Usage:**
+```bash
+# From experiment in CSV
+python src/compute_rf.py --experiment prk_1117_1 --csv results/experiments.csv
+
+# With direct parameters
+python src/compute_rf.py --dense_depth 4 --num_tsblock 4 \
+  --time_block_kernel 3 5 7 11 --causal True \
+  --encoder_padding_ratio 0.5 0.5
+```
+
+**Output includes:**
+- Time-axis and frequency-axis receptive field sizes
+- Algorithmic latency in frames, samples, and milliseconds
+- Layer-wise breakdown (DenseEncoder, TS_BLOCK, MaskDecoder)
+- Configuration summary
+
+**Example output:**
+```
+Configuration:
+  Model: PrimeKnet
+  Causal: True
+  Encoder Padding: (1.0, 0.0)  # Fully causal
+
+Receptive Field:
+  Time-axis RF: 105 frames (656.2ms @ 16kHz)
+  Frequency-axis RF: 260 bins
+
+Algorithmic Latency:
+  STFT hop size: 100 samples (6.25ms)
+  Total latency: 650.00ms
+
+Layer-wise Breakdown:
+  DenseEncoder:    RF_time=9, RF_freq=11
+  TS_BLOCK x4:     RF_time=+92, RF_freq=+244
+  MaskDecoder:     RF_time=9, RF_freq=10
+```
+
+**Key insights:**
+- **Causal models** with `encoder_padding_ratio=(1.0, 0.0)` have ~650ms latency
+- **Symmetric models** with `encoder_padding_ratio=(0.5, 0.5)` have ~325ms latency but use future context
+- Latency is primarily determined by encoder padding ratio and receptive field size
 
 ### Tracking Experiments
 
