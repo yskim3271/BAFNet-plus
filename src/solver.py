@@ -97,7 +97,8 @@ class Solver(object):
         os.rename(tmp_path, f"checkpoint.th")
 
         best_path = "best.tmp"
-        torch.save(self.best_state, best_path)
+        best_package = {**self.best_state, 'args': self.args}
+        torch.save(best_package, best_path)
         os.rename(best_path, "best.th")
 
     def _reset(self):

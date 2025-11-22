@@ -25,7 +25,7 @@ def mag_pha_istft(mag, pha, n_fft, hop_size, win_size, compress_factor=1.0, cent
 
 def complex_to_mag_pha(com, stack_dim=-1):
     real, imag = com.chunk(2, dim=stack_dim)
-    mag = torch.sqrt(real**2 + imag**2).squeeze(stack_dim)
+    mag = torch.sqrt(real**2 + imag**2 + 1e-8).squeeze(stack_dim)
     pha = torch.atan2(imag, real).squeeze(stack_dim)
     return mag, pha
 

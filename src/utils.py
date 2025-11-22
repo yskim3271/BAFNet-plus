@@ -234,9 +234,37 @@ def load_checkpoint(model: torch.nn.Module, chkpt_dir: str, chkpt_file: str, dev
         >>> model = load_checkpoint(model, "outputs/exp", "best.th", "cuda")
     """
     chkpt_path = os.path.join(chkpt_dir, chkpt_file)
-    chkpt = torch.load(chkpt_path, map_location=device)
+    chkpt = torch.load(chkpt_path, map_location=device, weights_only=False)
     model.load_state_dict(chkpt['model'])
     return model
+
+
+class ConfigDict:
+    """
+    Convert nested dictionary to object with attribute access.
+
+    Useful for converting checkpoint args to object-like structure.
+
+    Example:
+        >>> config = ConfigDict({'model': {'name': 'test', 'params': {'lr': 0.01}}})
+        >>> config.model.name  # 'test'
+        >>> config.model.params.lr  # 0.01
+        >>> config.to_dict()  # {'model': {'name': 'test', 'params': {'lr': 0.01}}}
+    """
+
+    def __init__(self, d: Dict[str, Any]):
+        for key, value in d.items():
+            setattr(self, key, value if not isinstance(value, dict) else ConfigDict(value))
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert ConfigDict back to regular dict for ** unpacking"""
+        result = {}
+        for key, value in self.__dict__.items():
+            if isinstance(value, ConfigDict):
+                result[key] = value.to_dict()
+            else:
+                result[key] = value
+        return result
 
 
 def load_model_config_from_checkpoint(checkpoint_path: str) -> Dict[str, Any]:
@@ -269,7 +297,7 @@ def load_model_config_from_checkpoint(checkpoint_path: str) -> Dict[str, Any]:
         raise FileNotFoundError(f"Checkpoint file not found: {checkpoint_path}")
 
     # Load checkpoint (CPU is sufficient for config extraction)
-    checkpoint = torch.load(checkpoint_path, map_location='cpu')
+    checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
 
     if 'args' not in checkpoint:
         raise KeyError(f"Checkpoint does not contain 'args' field: {checkpoint_path}")

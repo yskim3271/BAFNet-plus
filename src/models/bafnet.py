@@ -2,7 +2,7 @@ import importlib
 import torch
 import torch.nn as nn
 from src.stft import complex_to_mag_pha
-from src.utils import load_model_config_from_checkpoint
+from src.utils import load_model_config_from_checkpoint, ConfigDict
 
 class LearnableSigmoid2d(nn.Module):
     def __init__(self, in_features, beta=1):
@@ -46,11 +46,6 @@ class BAFNet(torch.nn.Module):
                 raise ValueError("Either args_mapping or checkpoint_mapping must be provided")
             print(f"[BAFNet] Auto-loading mapping model config from: {checkpoint_mapping}")
             mapping_config = load_model_config_from_checkpoint(checkpoint_mapping)
-            # Convert dict to object-like structure for compatibility
-            class ConfigDict:
-                def __init__(self, d):
-                    for key, value in d.items():
-                        setattr(self, key, value if not isinstance(value, dict) else ConfigDict(value))
             args_mapping = ConfigDict(mapping_config)
 
         # Auto-load masking model config from checkpoint if not provided
@@ -67,8 +62,12 @@ class BAFNet(torch.nn.Module):
         mapping_class = getattr(module_mapping, args_mapping.model_class)
         masking_class = getattr(module_masking, args_masking.model_class)
 
-        self.mapping = mapping_class(**args_mapping.param)
-        self.masking = masking_class(**args_masking.param)
+        # Convert ConfigDict to dict if needed for ** unpacking
+        mapping_params = args_mapping.param.to_dict() if hasattr(args_mapping.param, 'to_dict') else args_mapping.param
+        masking_params = args_masking.param.to_dict() if hasattr(args_masking.param, 'to_dict') else args_masking.param
+
+        self.mapping = mapping_class(**mapping_params)
+        self.masking = masking_class(**masking_params)
         
         for i in range(self.conv_depth):
             setattr(self, f"convblock_{i}", nn.Sequential(
@@ -90,9 +89,9 @@ class BAFNet(torch.nn.Module):
         self.init_modules()
 
         if checkpoint_mapping is not None:
-            self.mapping.load_state_dict(torch.load(checkpoint_mapping)['model'])
+            self.mapping.load_state_dict(torch.load(checkpoint_mapping, weights_only=False)['model'])
         if checkpoint_masking is not None:
-            self.masking.load_state_dict(torch.load(checkpoint_masking)['model'])
+            self.masking.load_state_dict(torch.load(checkpoint_masking, weights_only=False)['model'])
         
     def init_modules(self):
         for m in self.modules():
@@ -133,15 +132,19 @@ class BAFNet(torch.nn.Module):
 
         # Calculate mask from masking model output
         # mask represents the magnitude ratio (enhanced / noisy)
-        acs_input_mag = torch.sqrt(acs_com[:, :, :, 0]**2 + acs_com[:, :, :, 1]**2)
+        acs_input_mag = torch.sqrt(acs_com[:, :, :, 0]**2 + acs_com[:, :, :, 1]**2 + 1e-8)
         mask = acs_mag / (acs_input_mag + 1e-8)  # [B, F, T]
+        mask = torch.clamp(mask, min=0.0, max=10.0)
 
-        # Normalize by magnitude mean
-        bcs_mag_mean = bcs_mag.mean(dim=[1, 2], keepdim=True).unsqueeze(-1)  # [B, 1, 1, 1]
-        acs_mag_mean = acs_mag.mean(dim=[1, 2], keepdim=True).unsqueeze(-1)  # [B, 1, 1, 1]
+        # Normalize by RMS energy (원본 BAFNet 방식)
+        bcs_power = bcs_com_out[:, :, :, 0]**2 + bcs_com_out[:, :, :, 1]**2  # [B, F, T]
+        bcs_energy = (bcs_power.mean(dim=[1, 2], keepdim=True) + 1e-8).sqrt().unsqueeze(-1)  # [B, 1, 1, 1]
 
-        bcs_com_norm = bcs_com_out / (bcs_mag_mean + 1e-8)
-        acs_com_norm = acs_com_out / (acs_mag_mean + 1e-8)
+        acs_power = acs_com_out[:, :, :, 0]**2 + acs_com_out[:, :, :, 1]**2  # [B, F, T]
+        acs_energy = (acs_power.mean(dim=[1, 2], keepdim=True) + 1e-8).sqrt().unsqueeze(-1)  # [B, 1, 1, 1]
+
+        bcs_com_norm = bcs_com_out / (bcs_energy + 1e-8)
+        acs_com_norm = acs_com_out / (acs_energy + 1e-8)
 
         # Compute alpha mask from mask using CNN layers
         alpha = mask.unsqueeze(1)  # [B, 1, F, T]
@@ -153,9 +156,9 @@ class BAFNet(torch.nn.Module):
         # Blend normalized complex spectrograms using alpha
         est_com_norm = bcs_com_norm * alpha + acs_com_norm * (1 - alpha)
 
-        # Denormalize using average of both magnitude means
-        avg_mag_mean = (bcs_mag_mean + acs_mag_mean) / 2.0  # [B, 1, 1, 1]
-        est_com = est_com_norm * avg_mag_mean
+        # Denormalize using average of both energies (원본 BAFNet 방식)
+        avg_energy = (bcs_energy + acs_energy) / 2.0  # [B, 1, 1, 1]
+        est_com = est_com_norm * avg_energy
 
         est_mag, est_pha = complex_to_mag_pha(est_com)
 

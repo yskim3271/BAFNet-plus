@@ -59,6 +59,45 @@ def run(args):
     # Load model using utility function
     model = load_model(model_lib, model_class_name, model_args.param, device)
 
+    # LoRA injection (if enabled in config)
+    if hasattr(args.model, 'lora') and args.model.lora.get('enabled', False):
+        from src.models.lora import inject_lora_into_model, get_lora_parameters
+
+        logger.info(f"[LoRA] Injecting LoRA adapters (rank={args.model.lora.rank})")
+
+        # Inject LoRA into the model
+        num_lora_params = inject_lora_into_model(
+            model,
+            target_modules=args.model.lora.get('target_modules', None),
+            rank=args.model.lora.rank,
+            alpha=args.model.lora.alpha,
+            dropout=args.model.lora.get('dropout', 0.0)
+        )
+        logger.info(f"[LoRA] Added {num_lora_params:,} trainable LoRA parameters")
+
+        # Freeze all non-LoRA parameters
+        for param in model.parameters():
+            param.requires_grad = False
+
+        # Unfreeze LoRA parameters
+        for param in get_lora_parameters(model):
+            param.requires_grad = True
+
+        # Unfreeze CNN layers (alpha blending network in BAFNet)
+        if hasattr(model, 'conv_depth'):
+            for i in range(model.conv_depth):
+                for param in getattr(model, f"convblock_{i}").parameters():
+                    param.requires_grad = True
+            for param in model.sigmoid.parameters():
+                param.requires_grad = True
+            logger.info(f"[LoRA] Unfroze {model.conv_depth} CNN blocks for training")
+
+        # Log parameter counts
+        total_params = sum(p.numel() for p in model.parameters())
+        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        logger.info(f"[LoRA] Total params: {total_params:,}, Trainable: {trainable_params:,} "
+                    f"({100*trainable_params/total_params:.2f}%)")
+
     # Calculate and log the total number of parameters and model size
     logger.info(f"Selected model: {model_lib}.{model_class_name}")
     total_params = sum(p.numel() for p in model.parameters())
@@ -86,7 +125,32 @@ def run(args):
     discriminator = MetricGAN_Discriminator().to(device)
 
     # optimizer
-    optim = optim_class(model.parameters(), lr=args.lr, betas=args.betas)
+    if hasattr(args.model, 'lora') and args.model.lora.get('enabled', False):
+        # Different learning rates for LoRA vs CNN
+        from src.models.lora import get_lora_parameters
+
+        lora_params = get_lora_parameters(model)
+        cnn_params = []
+
+        # Collect CNN parameters (if BAFNet)
+        if hasattr(model, 'conv_depth'):
+            for i in range(model.conv_depth):
+                cnn_params.extend(getattr(model, f"convblock_{i}").parameters())
+            cnn_params.extend(model.sigmoid.parameters())
+
+        param_groups = [
+            {'params': lora_params, 'lr': args.model.lora.lr, 'name': 'lora'},
+            {'params': cnn_params, 'lr': args.lr, 'name': 'cnn'}
+        ]
+
+        optim = optim_class(param_groups, betas=args.betas)
+        logger.info(f"[Optimizer] Created {args.optim} with different LRs:")
+        logger.info(f"  LoRA LR: {args.model.lora.lr}")
+        logger.info(f"  CNN LR: {args.lr}")
+    else:
+        # Standard optimizer for non-LoRA models
+        optim = optim_class(model.parameters(), lr=args.lr, betas=args.betas)
+
     optim_disc = optim_class(discriminator.parameters(), lr=args.lr, betas=args.betas)
     
     # scheduler
@@ -94,7 +158,27 @@ def run(args):
     scheduler_disc = None
 
     if args.lr_decay is not None:
-        scheduler = torch.optim.lr_scheduler.ExponentialLR(optim, gamma=args.lr_decay, last_epoch=-1)
+        # Add warmup for LoRA fine-tuning
+        if hasattr(args.model, 'lora') and args.model.lora.get('enabled', False):
+            warmup_epochs = args.model.lora.get('warmup_epochs', 5)
+            warmup_start_factor = args.model.lora.get('warmup_start_factor', 0.2)
+
+            logger.info(f"[Scheduler] Warmup enabled: {warmup_epochs} epochs (start_factor={warmup_start_factor})")
+
+            warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
+                optim, start_factor=warmup_start_factor, total_iters=warmup_epochs
+            )
+            exp_scheduler = torch.optim.lr_scheduler.ExponentialLR(
+                optim, gamma=args.lr_decay, last_epoch=-1
+            )
+            scheduler = torch.optim.lr_scheduler.SequentialLR(
+                optim, schedulers=[warmup_scheduler, exp_scheduler], milestones=[warmup_epochs]
+            )
+        else:
+            # Standard scheduler for non-LoRA models
+            scheduler = torch.optim.lr_scheduler.ExponentialLR(optim, gamma=args.lr_decay, last_epoch=-1)
+
+        # Discriminator scheduler (no warmup)
         scheduler_disc = torch.optim.lr_scheduler.ExponentialLR(optim_disc, gamma=args.lr_decay, last_epoch=-1)
 
     # Load dataset from Huggingface

@@ -1,0 +1,65 @@
+# BAFNet with LoRA (Low-Rank Adaptation)
+# Uses existing BAFNet class with LoRA adapters injected at training time
+
+model_lib: bafnet
+model_class: BAFNet
+input_type: acs+bcs
+
+param:
+  # STFT parameters (must match pretrained models)
+  win_len: 400
+  hop_len: 100
+  fft_len: 400
+
+  # BAFNet-specific parameters
+  conv_depth: 4
+  conv_channels: 16
+  conv_kernel_size: 7
+  learnable_sigmoid: true
+
+  # ============================================================================
+  # Pretrained Model Checkpoints (REQUIRED for LoRA)
+  # ============================================================================
+  # These will be loaded and frozen, with LoRA adapters added
+  checkpoint_mapping: /home/yskim/workspace/BAFNet-plus/results/experiments/prk_taps_map/checkpoint.th
+  checkpoint_masking: /home/yskim/workspace/BAFNet-plus/results/experiments/prk_taps_mask/checkpoint.th
+
+# ============================================================================
+# LoRA Configuration
+# ============================================================================
+lora:
+  enabled: true              # Enable LoRA fine-tuning
+
+  # LoRA hyperparameters
+  rank: 8                    # Rank of decomposition (4, 8, 16, 32)
+                            # Lower = fewer params, faster training
+                            # Higher = better performance
+
+  alpha: 16                  # Scaling factor (typically 2 * rank)
+                            # Controls the magnitude of LoRA updates
+
+  dropout: 0.0               # Dropout for LoRA path (0.0 = no dropout)
+                            # Can help prevent overfitting
+
+  lr: 1.0e-4                 # Learning rate for LoRA parameters
+                            # Should be lower than CNN lr (adapting pretrained)
+
+  # Warmup scheduler configuration
+  warmup_epochs: 5           # Number of warmup epochs (default: 5)
+                            # Typical: 5-20 epochs (2.5-10% of total)
+  warmup_start_factor: 0.2   # Initial LR multiplier (default: 0.2)
+                            # LR starts at lr * 0.2 and increases to lr
+
+  # Target modules to adapt
+  # null = adapt all Conv1d, Conv2d, Linear layers
+  # Specify list to be selective (more efficient)
+  target_modules:
+    - Conv1d
+    - Conv2d
+    # - Linear  # Uncomment to also adapt linear layers
+
+# ============================================================================
+# Training Configuration
+# ============================================================================
+# Note: Main lr in config.yaml applies to CNN (alpha network)
+# LoRA uses separate lr specified above

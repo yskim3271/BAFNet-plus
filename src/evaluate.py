@@ -12,60 +12,183 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 import torch
-import nlptutti as sarmetric
 import numpy as np
+import nlptutti as sarmetric
+import logging
+from typing import Dict, Optional, Any, List, Tuple
+from torch.utils.data import DataLoader
+from omegaconf import DictConfig
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
-from .compute_metrics import compute_metrics
-from .stft import mag_pha_stft, mag_pha_istft
-from .utils import bold, LogProgress
+
+from src.compute_metrics import compute_metrics
+from src.stft import mag_pha_stft, mag_pha_istft
+from src.utils import bold, LogProgress
 
 
-def get_stts(args, logger, enhanced):
+class STTEvaluator:
+    """
+    Speech-to-Text (STT) evaluator
 
-    cer, wer = 0, 0
-    model_id = "ghost613/whisper-large-v3-turbo-korean"
-    model = AutoModelForSpeechSeq2Seq.from_pretrained(
-    model_id, torch_dtype=torch.float32, low_cpu_mem_usage=True, use_safetensors=True
-    )
-    model.to(args.device)
-    
-    processor = AutoProcessor.from_pretrained(model_id)
+    Loads Whisper model once and reuses it for multiple evaluations
 
-    pipe = pipeline(
-        "automatic-speech-recognition",
-        model=model,
-        tokenizer=processor.tokenizer,
-        feature_extractor=processor.feature_extractor,
-        torch_dtype=torch.float32,
-        device=args.device,)
-    
-    iterator = LogProgress(logger, enhanced, name="STT Evaluation")
-    for wav, text in iterator:
-        with torch.no_grad():
-            transcription = pipe(wav, generate_kwargs={"num_beams": 1, "max_length": 100})['text']
+    Example:
+        >>> evaluator = STTEvaluator(device="cuda")
+        >>> cer1, wer1 = evaluator.evaluate(samples1)
+        >>> cer2, wer2 = evaluator.evaluate(samples2)  # No model reload
+    """
 
-        cer += sarmetric.get_cer(text, transcription, rm_punctuation=True)['cer']
-        wer += sarmetric.get_wer(text, transcription, rm_punctuation=True)['wer']
-    
-    cer /= len(enhanced)
-    wer /= len(enhanced)
-    
-    return cer, wer
+    def __init__(
+        self,
+        model_id: str = "openai/whisper-large-v3",
+        device: str = "cuda",
+        logger: Optional[logging.Logger] = None
+    ):
+        """
+        Args:
+            model_id: HuggingFace model ID
+            device: Device (cuda/cpu)
+            logger: Logger instance
+        """
+        self.model_id = model_id
+        self.device = device
+        self.logger = logger or logging.getLogger(__name__)
 
-def evaluate(args, model, data_loader_list, logger, epoch=None, stft_args=None):
-    
+        # Load model once
+        self.pipe = self._load_model()
 
+        self.logger.info(f"✅ STTEvaluator initialized with {model_id}")
+
+    def _load_model(self):
+        """Load Whisper model"""
+        torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+
+        self.logger.info(f"Loading STT model: {self.model_id}")
+        self.logger.info(f"Using dtype: {torch_dtype}")
+
+        model = AutoModelForSpeechSeq2Seq.from_pretrained(
+            self.model_id,
+            torch_dtype=torch_dtype,
+            low_cpu_mem_usage=True,
+            use_safetensors=True
+        )
+        model.to(self.device)
+
+        processor = AutoProcessor.from_pretrained(self.model_id)
+
+        pipe = pipeline(
+            "automatic-speech-recognition",
+            model=model,
+            tokenizer=processor.tokenizer,
+            feature_extractor=processor.feature_extractor,
+            chunk_length_s=30,
+            torch_dtype=torch_dtype,
+            device=self.device,
+        )
+
+        return pipe
+
+    def evaluate(
+        self,
+        enhanced: List[Tuple[np.ndarray, str]],
+        language: str = "korean"
+    ) -> Tuple[float, float]:
+        """
+        Perform STT evaluation
+
+        Args:
+            enhanced: List of (audio, reference_text) tuples
+            language: Language hint (korean, english, etc.)
+
+        Returns:
+            (cer, wer) tuple
+
+        Example:
+            >>> samples = [(audio_array, "안녕하세요"), ...]
+            >>> cer, wer = evaluator.evaluate(samples, language="korean")
+            >>> print(f"CER: {cer:.4f}, WER: {wer:.4f}")
+        """
+        if not enhanced:
+            self.logger.warning("No samples to evaluate")
+            return 0.0, 0.0
+
+        self.logger.info(f"Evaluating {len(enhanced)} samples with STT...")
+
+        cer_sum = 0.0
+        wer_sum = 0.0
+
+        for wav, reference_text in enhanced:
+            with torch.no_grad():
+                transcription = self.pipe(
+                    wav,
+                    generate_kwargs={
+                        "language": language,
+                        "num_beams": 1,
+                        "max_length": 100
+                    }
+                )['text']
+
+            cer_sum += sarmetric.get_cer(
+                reference_text, transcription, rm_punctuation=True
+            )['cer']
+            wer_sum += sarmetric.get_wer(
+                reference_text, transcription, rm_punctuation=True
+            )['wer']
+
+        cer = cer_sum / len(enhanced)
+        wer = wer_sum / len(enhanced)
+
+        self.logger.info(f"STT Evaluation complete: CER={cer:.4f}, WER={wer:.4f}")
+
+        return cer, wer
+
+
+def evaluate(
+    args: DictConfig,
+    model: torch.nn.Module,
+    data_loader_list: Dict[str, DataLoader],
+    logger: logging.Logger,
+    epoch: Optional[int] = None,
+    stft_args: Optional[Dict[str, Any]] = None
+) -> Dict[str, Dict[str, float]]:
+    """
+    Model evaluation
+
+    Args:
+        args: Evaluation settings (OmegaConf)
+        model: Model to evaluate
+        data_loader_list: Dictionary of dataloaders by SNR {"0": loader, "5": loader, ...}
+        logger: Logger instance
+        epoch: Current epoch (during training)
+        stft_args: STFT parameters
+
+    Returns:
+        Dictionary of metrics by SNR
+        {
+            "0dB": {"pesq": 2.5, "stoi": 0.85, "cer": 0.02, "wer": 0.05, ...},
+            "5dB": {"pesq": 2.8, "stoi": 0.90, "cer": 0.01, "wer": 0.03, ...}
+        }
+    """
     prefix = f"Epoch {epoch+1}, " if epoch is not None else ""
 
     metrics = {}
     model.eval()
+
+    # Initialize STT evaluator once (reuse across SNRs)
+    stt_evaluator = None
+    if args.eval_stt:
+        stt_evaluator = STTEvaluator(
+            model_id="openai/whisper-large-v3",
+            device=args.device,
+            logger=logger
+        )
+
     for snr, data_loader in data_loader_list.items():
         iterator = LogProgress(logger, data_loader, name=f"Evaluate on {snr}dB")
         enhanced = []
         results  = []
         with torch.no_grad():
             for data in iterator:
-                bcs, noisy_acs, clean_acs, id, text = data
+                bcs, noisy_acs, clean_acs, _, text = data
                 
                 if args.model.input_type == "acs":
                     input = mag_pha_stft(noisy_acs, **stft_args)[2].to(args.device)
@@ -74,7 +197,7 @@ def evaluate(args, model, data_loader_list, logger, epoch=None, stft_args=None):
                 elif args.model.input_type == "acs+bcs":
                     input = mag_pha_stft(bcs, **stft_args)[2].to(args.device), mag_pha_stft(noisy_acs, **stft_args)[2].to(args.device)
 
-                clean_mag_hat, clean_pha_hat, clean_com_hat = model(input)
+                clean_mag_hat, clean_pha_hat, _ = model(input)
 
                 clean_hat = mag_pha_istft(clean_mag_hat, clean_pha_hat, **stft_args)
 
@@ -98,9 +221,11 @@ def evaluate(args, model, data_loader_list, logger, epoch=None, stft_args=None):
             "segSNR": segSNR
         }
         logger.info(bold(f"{prefix}Performance on {snr}dB: PESQ={pesq:.4f}, STOI={stoi:.4f}, CSIG={csig:.4f}, CBAK={cbak:.4f}, COVL={covl:.4f}"))
-                
-        if args.eval_stt:
-            cer, wer = get_stts(args, logger, enhanced)
+
+        # STT evaluation (model reused!)
+        if stt_evaluator:
+            language = getattr(args, 'stt_language', 'korean')
+            cer, wer = stt_evaluator.evaluate(enhanced, language=language)
             metrics[f'{snr}dB']['cer'] = cer
             metrics[f'{snr}dB']['wer'] = wer
             logger.info(bold(f"{prefix}Performance on {snr}dB: CER={cer:.4f}, WER={wer:.4f}"))
@@ -110,9 +235,6 @@ def evaluate(args, model, data_loader_list, logger, epoch=None, stft_args=None):
 
 
 if __name__=="__main__":
-    import os
-    import logging
-    import logging.config
     import argparse
     from src.data import Noise_Augmented_Dataset
     from src.utils import load_model, load_checkpoint, parse_file_list, get_stft_args_from_config
@@ -139,6 +261,7 @@ if __name__=="__main__":
     parser.add_argument("--num_workers", type=int, default=5, help="Number of workers. default is 5")
     parser.add_argument("--log_file", type=str, default="output.log", help="Log file name. default is output.log")
     parser.add_argument("--eval_stt", default=False, action="store_true", help="Evaluate STT performance")
+    parser.add_argument("--stt_language", type=str, default=None, help="STT language (korean, french, english, etc.). Auto-detected from dataset if not specified.")
     
     args = parser.parse_args()
     chkpt_dir = args.chkpt_dir
@@ -161,6 +284,7 @@ if __name__=="__main__":
     conf = OmegaConf.load(args.model_config)
     conf.device = device
     conf.eval_stt = args.eval_stt
+    # Note: stt_language will be set after dataset is determined (see below)
     
     model_args = conf.model
     model_lib = model_args.model_lib
@@ -171,6 +295,12 @@ if __name__=="__main__":
     model = load_checkpoint(model, chkpt_dir, chkpt_file, device)
     tm_only = model_args.input_type == "tm"
 
+    # Dataset-to-language mapping for STT
+    DATASET_LANGUAGE_MAP = {
+        "taps": "korean",
+        "vibravox": "french"
+    }
+
     # Load dataset based on user selection
     if args.dataset.lower() == "taps":
         testset = load_dataset("yskim3271/Throat_and_Acoustic_Pairing_Speech_Dataset", split="test")
@@ -178,6 +308,16 @@ if __name__=="__main__":
         testset = load_dataset("yskim3271/vibravox_16k", split="test")
     else:
         raise ValueError(f"Unknown dataset: {args.dataset}")
+
+    # Configure STT language (CLI override or auto-detection)
+    if args.stt_language:
+        stt_language = args.stt_language
+        logger.info(f"Using user-specified STT language: {stt_language}")
+    else:
+        stt_language = DATASET_LANGUAGE_MAP.get(args.dataset.lower(), "korean")
+        logger.info(f"Auto-detected STT language from dataset: {stt_language}")
+
+    conf.stt_language = stt_language
 
     testset_list = [testset] * args.test_augment_numb
     testset = concatenate_datasets(testset_list)
@@ -218,7 +358,7 @@ if __name__=="__main__":
         ev_loader_list[f"{fixed_snr}"] = ev_loader
 
     logger.info(f"Dataset: {args.dataset}")
-    logger.info(f"Model: {model_name}")
+    logger.info(f"Model: {model_class_name}")
     logger.info(f"Input type: {model_args.input_type}")
     logger.info(f"Checkpoint: {chkpt_dir}")
     logger.info(f"Device: {device}")

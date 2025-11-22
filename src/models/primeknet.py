@@ -567,7 +567,7 @@ class PrimeKnet(nn.Module):
         real = noisy_com[:, :, :, 0]
         imag = noisy_com[:, :, :, 1]
 
-        mag = torch.sqrt(real**2 + imag**2)
+        mag = torch.sqrt(real**2 + imag**2 + 1e-8)
         pha = torch.atan2(imag, real)
 
         mag = mag.unsqueeze(1).permute(0, 1, 3, 2) # [B, 1, T, F]

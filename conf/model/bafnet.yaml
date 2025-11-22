@@ -12,7 +12,7 @@ param:
   conv_depth: 4
   conv_channels: 16
   conv_kernel_size: 7
-  learnable_sigmoid: true
+  learnable_sigmoid: false
 
   # ============================================================================
   # Mapping Model Configuration

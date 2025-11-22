@@ -58,3 +58,6 @@ tools/
 
 # Private visualizations
 vis/
+
+# Private inference data
+vinference/
