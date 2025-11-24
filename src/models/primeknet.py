@@ -309,7 +309,7 @@ class LearnableSigmoid_2d(nn.Module):
         super().__init__()
         self.beta = beta
         self.slope = nn.Parameter(torch.ones(in_features, 1))
-        self.slope.requiresGrad = True
+        self.slope.requires_grad = True
 
     def forward(self, x):
         return self.beta * torch.sigmoid(self.slope * x)
@@ -475,7 +475,8 @@ class PhaseDecoder(nn.Module):
         x = self.phase_conv(x)
         x_r = self.phase_conv_r(x)
         x_i = self.phase_conv_i(x)
-        x = torch.atan2(x_i, x_r)
+        # Add epsilon to prevent gradient explosion in atan2 backward
+        x = torch.atan2(x_i + 1e-8, x_r + 1e-8)
         return x
 
 class PrimeKnet(nn.Module):
@@ -568,7 +569,7 @@ class PrimeKnet(nn.Module):
         imag = noisy_com[:, :, :, 1]
 
         mag = torch.sqrt(real**2 + imag**2 + 1e-8)
-        pha = torch.atan2(imag, real)
+        pha = torch.atan2(imag + 1e-8, real + 1e-8)
 
         mag = mag.unsqueeze(1).permute(0, 1, 3, 2) # [B, 1, T, F]
         pha = pha.unsqueeze(1).permute(0, 1, 3, 2) # [B, 1, T, F]
@@ -579,9 +580,12 @@ class PrimeKnet(nn.Module):
 
         x = self.sequence_block(x)
 
-        denoised_mag = (mag * self.mask_decoder(x)).permute(0, 3, 2, 1).squeeze(-1)
-        denoised_pha = self.phase_decoder(x).permute(0, 3, 2, 1).squeeze(-1)
-        
-        denoised_com = mag_pha_to_complex(denoised_mag, denoised_pha)
+        if self.infer_type == 'masking':
+            est_mag = (mag * self.mask_decoder(x)).permute(0, 3, 2, 1).squeeze(-1)
+        elif self.infer_type == 'mapping':
+            est_mag = self.mask_decoder(x).permute(0, 3, 2, 1).squeeze(-1)
 
-        return denoised_mag, denoised_pha, denoised_com
+        est_pha = self.phase_decoder(x).permute(0, 3, 2, 1).squeeze(-1)
+        est_com = mag_pha_to_complex(est_mag, est_pha)
+
+        return est_mag, est_pha, est_com

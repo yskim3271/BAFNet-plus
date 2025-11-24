@@ -74,7 +74,7 @@ class Solver(object):
         self.num_prints = args.num_prints
         self.num_workers = args.num_workers
         self.args = args
-        
+
         # Initialize or resume (checkpoint loading)
         self._reset()
     
@@ -261,7 +261,6 @@ class Solver(object):
             clean_hat = mag_pha_istft(clean_mag_hat, clean_pha_hat, **self.stft_args)
             clean_mag_hat_con, clean_pha_hat_con, clean_com_hat_con = mag_pha_stft(clean_hat, **self.stft_args)
 
-
             if not valid:
                 clean_list, clean_list_hat = list(clean_acs.cpu().numpy()), list(clean_hat.detach().cpu().numpy())
                 batch_pesq_score = batch_pesq(clean_list, clean_list_hat, workers=self.num_workers)
@@ -298,21 +297,33 @@ class Solver(object):
                     loss_magnitude * self.loss.magnitude + \
                     loss_phase * self.loss.phase
 
+            # Prepare loss dict for logging
+            loss_dict = {
+                "Magnitude_Loss": loss_magnitude,
+                "Phase_Loss": loss_phase,
+                "Complex_Loss": loss_complex,
+                "Consistency_Loss": loss_consistency,
+                "Metric_Loss": loss_metric,
+                "Gen_Loss": loss_gen
+            }
+
+            # Convert loss dict to scalar values for logging
+            loss_dict_scalar = {k: v.item() if isinstance(v, torch.Tensor) else v
+                               for k, v in loss_dict.items()}
+
             if not valid:
                 self.optim.zero_grad()
                 loss_gen.backward()
+
+                # Gradient clipping
+                max_grad_norm = getattr(self.args, 'max_grad_norm', 5.0)
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=max_grad_norm)
+                if hasattr(self.discriminator, 'parameters'):
+                    torch.nn.utils.clip_grad_norm_(self.discriminator.parameters(), max_norm=max_grad_norm)
+
                 self.optim.step()
 
-            loss_dict = {
-                "Magnitude_Loss": loss_magnitude.item(),
-                "Phase_Loss": loss_phase.item(),
-                "Complex_Loss": loss_complex.item(),
-                "Consistency_Loss": loss_consistency.item(),
-                "Metric_Loss": loss_metric.item(),
-                "Gen_Loss": loss_gen.item()
-            }
-
-            for k, v in loss_dict.items():
+            for k, v in loss_dict_scalar.items():
                 if v != 0.0:
                     logprog.append(**{f"{k}": format(v, "4.5f")})
                     if i % (self.num_prints * 10) == 0:

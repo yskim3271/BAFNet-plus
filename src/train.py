@@ -48,7 +48,7 @@ def run(args):
     torch.cuda.manual_seed(args.seed)
     random.seed(args.seed)
     np.random.seed(args.seed)
-    
+
     # Set device
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
@@ -56,47 +56,46 @@ def run(args):
     model_lib = model_args.model_lib
     model_class_name = model_args.model_class
 
-    # Load model using utility function
-    model = load_model(model_lib, model_class_name, model_args.param, device)
+    # Load model on CPU first if using LoRA, otherwise directly on target device
+    if hasattr(args.model, 'lora') and args.model.lora.get('enabled', False):
+        # Load on CPU to avoid device mismatch during LoRA injection
+        model = load_model(model_lib, model_class_name, model_args.param, 'cpu')
+        logger.info("[LoRA] Model loaded on CPU for LoRA injection")
+    else:
+        model = load_model(model_lib, model_class_name, model_args.param, device)
 
     # LoRA injection (if enabled in config)
+    lora_stats = None
     if hasattr(args.model, 'lora') and args.model.lora.get('enabled', False):
-        from src.models.lora import inject_lora_into_model, get_lora_parameters
+        from src.models.lora import inject_lora_with_strategy
 
-        logger.info(f"[LoRA] Injecting LoRA adapters (rank={args.model.lora.rank})")
+        strategy = args.model.lora.get('strategy', 'track1')
+        logger.info(f"[LoRA] Applying strategy: {strategy.upper()}")
 
-        # Inject LoRA into the model
-        num_lora_params = inject_lora_into_model(
+        # Inject LoRA using strategy (handles all parameter management automatically)
+        # Model is on CPU at this point, so LoRA params will be created on CPU
+        lora_stats = inject_lora_with_strategy(
             model,
-            target_modules=args.model.lora.get('target_modules', None),
+            strategy=strategy,
             rank=args.model.lora.rank,
             alpha=args.model.lora.alpha,
-            dropout=args.model.lora.get('dropout', 0.0)
+            dropout=args.model.lora.get('dropout', 0.0),
+            target_modules=args.model.lora.get('target_modules', None),
+            verbose=True
         )
-        logger.info(f"[LoRA] Added {num_lora_params:,} trainable LoRA parameters")
 
-        # Freeze all non-LoRA parameters
-        for param in model.parameters():
-            param.requires_grad = False
-
-        # Unfreeze LoRA parameters
-        for param in get_lora_parameters(model):
-            param.requires_grad = True
-
-        # Unfreeze CNN layers (alpha blending network in BAFNet)
+        # Additional unfreezing for BAFNet-specific layers (CNN blending network)
         if hasattr(model, 'conv_depth'):
+            logger.info(f"[BAFNet] Unfreezing CNN blending network ({model.conv_depth} blocks)")
             for i in range(model.conv_depth):
                 for param in getattr(model, f"convblock_{i}").parameters():
                     param.requires_grad = True
             for param in model.sigmoid.parameters():
                 param.requires_grad = True
-            logger.info(f"[LoRA] Unfroze {model.conv_depth} CNN blocks for training")
 
-        # Log parameter counts
-        total_params = sum(p.numel() for p in model.parameters())
-        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-        logger.info(f"[LoRA] Total params: {total_params:,}, Trainable: {trainable_params:,} "
-                    f"({100*trainable_params/total_params:.2f}%)")
+        # Now move everything to target device
+        logger.info(f"[LoRA] Moving model with LoRA adapters to {device}")
+        model = model.to(device)
 
     # Calculate and log the total number of parameters and model size
     logger.info(f"Selected model: {model_lib}.{model_class_name}")
@@ -126,27 +125,97 @@ def run(args):
 
     # optimizer
     if hasattr(args.model, 'lora') and args.model.lora.get('enabled', False):
-        # Different learning rates for LoRA vs CNN
-        from src.models.lora import get_lora_parameters
+        from src.models.lora import (
+            get_lora_parameters,
+            get_depthwise_parameters,
+            get_normalization_parameters,
+            get_critical_scalar_parameters,
+            get_conv_transpose_parameters
+        )
 
+        strategy = args.model.lora.get('strategy', 'track1')
+        lora_lr = args.model.lora.get('lr', args.lr)
+
+        # Collect parameter groups based on strategy
         lora_params = get_lora_parameters(model)
-        cnn_params = []
+        norm_params = get_normalization_parameters(model)
+        scalar_params = get_critical_scalar_parameters(model)
+        ct_params = get_conv_transpose_parameters(model, verbose=False)
 
-        # Collect CNN parameters (if BAFNet)
-        if hasattr(model, 'conv_depth'):
-            for i in range(model.conv_depth):
-                cnn_params.extend(getattr(model, f"convblock_{i}").parameters())
-            cnn_params.extend(model.sigmoid.parameters())
-
+        # Base parameter groups (common to both strategies)
         param_groups = [
-            {'params': lora_params, 'lr': args.model.lora.lr, 'name': 'lora'},
-            {'params': cnn_params, 'lr': args.lr, 'name': 'cnn'}
+            {
+                'params': lora_params,
+                'lr': lora_lr,
+                'weight_decay': args.model.lora.get('weight_decay', 0.01),
+                'name': 'lora'
+            },
+            {
+                'params': norm_params,
+                'lr': lora_lr,
+                'weight_decay': 0.0,  # No decay for normalization
+                'name': 'norm'
+            },
+            {
+                'params': scalar_params,
+                'lr': lora_lr,
+                'weight_decay': 0.0,  # No decay for scalars
+                'name': 'scalar'
+            },
+            {
+                'params': ct_params,
+                'lr': lora_lr * 0.5,
+                'weight_decay': args.model.lora.get('weight_decay', 0.01),
+                'name': 'conv_transpose'
+            }
         ]
 
+        # Track2-specific: Add depthwise parameters with conservative settings
+        if strategy == 'track2':
+            dw_params = get_depthwise_parameters(model)
+            dw_lr_ratio = args.model.lora.get('dw_lr_ratio', 0.1)
+            param_groups.append({
+                'params': dw_params,
+                'lr': lora_lr * dw_lr_ratio,
+                'weight_decay': 0.0,  # CRITICAL: No decay to preserve pretrained features!
+                'name': 'depthwise'
+            })
+            logger.info(f"[Optimizer] Track2 mode: Depthwise LR = {lora_lr * dw_lr_ratio:.2e} (ratio={dw_lr_ratio})")
+            logger.info(f"[Optimizer] CRITICAL: Depthwise weight_decay=0.0 to preserve pretrained spatial patterns")
+
+        # BAFNet-specific: Add CNN blending network parameters
+        if hasattr(model, 'conv_depth'):
+            cnn_params = []
+            # Collect all parameter IDs that are already in other groups
+            excluded_param_ids = {id(p) for p in lora_params}
+            excluded_param_ids.update({id(p) for p in norm_params})
+            excluded_param_ids.update({id(p) for p in scalar_params})
+            excluded_param_ids.update({id(p) for p in ct_params})
+
+            for i in range(model.conv_depth):
+                convblock = getattr(model, f"convblock_{i}")
+                for param in convblock.parameters():
+                    if param.requires_grad and id(param) not in excluded_param_ids:
+                        cnn_params.append(param)
+            for param in model.sigmoid.parameters():
+                if param.requires_grad and id(param) not in excluded_param_ids:
+                    cnn_params.append(param)
+
+            if cnn_params:
+                param_groups.append({
+                    'params': cnn_params,
+                    'lr': args.lr,
+                    'weight_decay': args.model.lora.get('weight_decay', 0.01),
+                    'name': 'bafnet_cnn'
+                })
+
         optim = optim_class(param_groups, betas=args.betas)
-        logger.info(f"[Optimizer] Created {args.optim} with different LRs:")
-        logger.info(f"  LoRA LR: {args.model.lora.lr}")
-        logger.info(f"  CNN LR: {args.lr}")
+
+        # Log optimizer configuration
+        logger.info(f"[Optimizer] Created {args.optim} with differential learning rates:")
+        for group in param_groups:
+            num_params = sum(p.numel() for p in group['params'])
+            logger.info(f"  {group['name']:15s}: LR={group['lr']:.2e}, WD={group['weight_decay']:.4f}, Params={num_params:,}")
     else:
         # Standard optimizer for non-LoRA models
         optim = optim_class(model.parameters(), lr=args.lr, betas=args.betas)

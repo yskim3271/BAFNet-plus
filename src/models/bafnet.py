@@ -19,12 +19,12 @@ class BAFNet(torch.nn.Module):
                  win_len=400,
                  hop_len=100,
                  fft_len=400,
-                 conv_depth=4, 
-                 conv_channels=16, 
+                 conv_depth=4,
+                 conv_channels=16,
                  conv_kernel_size=7,
                  learnable_sigmoid=True,
-                 args_mapping=None, 
-                 args_masking=None, 
+                 args_mapping=None,
+                 args_masking=None,
                  checkpoint_mapping=None,
                  checkpoint_masking=None,
                  ):
@@ -33,7 +33,7 @@ class BAFNet(torch.nn.Module):
         self.win_len = win_len
         self.hop_len = hop_len
         self.fft_len = fft_len
-        
+
         self.conv_depth = conv_depth
         self.conv_channels = conv_channels
         self.conv_kernel_size = conv_kernel_size
@@ -103,7 +103,6 @@ class BAFNet(torch.nn.Module):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
 
-
     def forward(self, input):
         """
         Forward pass for BAFNet with STFT inputs.
@@ -124,7 +123,6 @@ class BAFNet(torch.nn.Module):
         else:
             raise ValueError("BAFNet requires tuple input: (bcs_com, acs_com)")
 
-
         # Call mapping and masking submodels
         # Both models expect [B, F, T, 2] and return (mag, pha, com)
         bcs_mag, bcs_pha, bcs_com_out = self.mapping(bcs_com)
@@ -136,7 +134,7 @@ class BAFNet(torch.nn.Module):
         mask = acs_mag / (acs_input_mag + 1e-8)  # [B, F, T]
         mask = torch.clamp(mask, min=0.0, max=10.0)
 
-        # Normalize by RMS energy (원본 BAFNet 방식)
+        # Normalize by RMS energy
         bcs_power = bcs_com_out[:, :, :, 0]**2 + bcs_com_out[:, :, :, 1]**2  # [B, F, T]
         bcs_energy = (bcs_power.mean(dim=[1, 2], keepdim=True) + 1e-8).sqrt().unsqueeze(-1)  # [B, 1, 1, 1]
 
@@ -150,13 +148,14 @@ class BAFNet(torch.nn.Module):
         alpha = mask.unsqueeze(1)  # [B, 1, F, T]
         for i in range(self.conv_depth):
             alpha = getattr(self, f"convblock_{i}")(alpha)
+
         alpha = alpha.squeeze(1)  # [B, F, T]
         alpha = self.sigmoid(alpha).unsqueeze(-1)  # [B, F, T, 1]
 
         # Blend normalized complex spectrograms using alpha
         est_com_norm = bcs_com_norm * alpha + acs_com_norm * (1 - alpha)
 
-        # Denormalize using average of both energies (원본 BAFNet 방식)
+        # Denormalize using average of both energies
         avg_energy = (bcs_energy + acs_energy) / 2.0  # [B, 1, 1, 1]
         est_com = est_com_norm * avg_energy
 

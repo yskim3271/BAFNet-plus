@@ -30,6 +30,13 @@ param:
 lora:
   enabled: true              # Enable LoRA fine-tuning
 
+  # ============================================================================
+  # Strategy Selection (Track1 vs Track2)
+  # ============================================================================
+  strategy: track1           # 'track1' or 'track2'
+                            # track1: PW-LoRA + DW-Freeze (baseline, safe, ~3% params)
+                            # track2: PW-LoRA + DW-Full (max perf, ~8% params)
+
   # LoRA hyperparameters
   rank: 8                    # Rank of decomposition (4, 8, 16, 32)
                             # Lower = fewer params, faster training
@@ -43,6 +50,13 @@ lora:
 
   lr: 1.0e-4                 # Learning rate for LoRA parameters
                             # Should be lower than CNN lr (adapting pretrained)
+
+  weight_decay: 0.01         # Weight decay for LoRA/ConvTranspose parameters
+                            # Note: Depthwise/Norm/Scalar always use 0.0
+
+  # Track2-specific: Depthwise learning rate ratio
+  dw_lr_ratio: 0.1           # Depthwise LR = lora_lr * dw_lr_ratio
+                            # Default: 0.1 (10x lower, conservative)
 
   # Warmup scheduler configuration
   warmup_epochs: 5           # Number of warmup epochs (default: 5)

@@ -60,6 +60,7 @@ lr: 5e-4
 lr_decay: 0.99
 optim: adamW
 betas: [0.8, 0.99]
+max_grad_norm: 5.0  # Gradient clipping threshold (prevents gradient explosion)
 
 # Logging and printing, and does not impact training
 device: cuda
@@ -73,6 +74,10 @@ save_code: true
 
 # Other stuff
 seed: 2039
+
+# NaN Debugging (enable these only when debugging NaN issues)
+debug_nan: false  # Enable comprehensive NaN detection and logging
+enable_anomaly_detection: false  # Enable PyTorch's anomaly detection (very slow!)
 
 # Hydra config
 hydra:
