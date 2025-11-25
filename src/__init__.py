@@ -19,11 +19,10 @@ Executable Scripts:
 __version__ = "0.1.0"
 
 # Core library imports
+# Note: solver is not imported here to avoid TensorBoard/TensorFlow conflicts
+# Import Solver directly: from src.solver import Solver
 from .data import *
-from .solver import Solver
 from .stft import *
 from .utils import *
 
-__all__ = [
-    'Solver',
-]
+__all__ = []

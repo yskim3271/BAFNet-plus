@@ -60,3 +60,22 @@ param:
   #   param:
   #     # ... (same structure as args_mapping)
   #     infer_type: masking
+
+# ============================================================================
+# Fine-tuning Configuration (Exp2: Differential LR without LoRA)
+# ============================================================================
+# Use this to apply different learning rates to pretrained vs CNN params
+# without using LoRA adapters. Replicates LoRA's optimizer strategy.
+#
+# Usage:
+#   model.finetune.enabled=true
+#   model.finetune.pretrained_lr=0.0001
+#   model.finetune.cnn_lr=0.0005
+#
+finetune:
+  enabled: false              # Set to true to enable differential LR
+  pretrained_lr: 0.0001       # LR for mapping/masking (same as LoRA adapters)
+  cnn_lr: 0.0005              # LR for BAFNet CNN blending
+  weight_decay: 0.01          # Weight decay for CNN params
+  warmup_epochs: 5            # Warmup epochs (same as LoRA)
+  warmup_start_factor: 0.2    # Warmup start factor
