@@ -216,48 +216,6 @@ def run(args):
         for group in param_groups:
             num_params = sum(p.numel() for p in group['params'])
             logger.info(f"  {group['name']:15s}: LR={group['lr']:.2e}, WD={group['weight_decay']:.4f}, Params={num_params:,}")
-    elif hasattr(args.model, 'finetune') and args.model.finetune.get('enabled', False):
-        # ============================================================
-        # Exp2: Differential LR without LoRA
-        # Replicates LoRA's optimizer strategy for fair comparison
-        # ============================================================
-        finetune_cfg = args.model.finetune
-        pretrained_lr = finetune_cfg.get('pretrained_lr', 0.0001)
-        cnn_lr = finetune_cfg.get('cnn_lr', args.lr)
-        weight_decay = finetune_cfg.get('weight_decay', 0.01)
-
-        # Collect pretrained parameters (mapping + masking)
-        pretrained_params = list(model.mapping.parameters()) + list(model.masking.parameters())
-
-        # Collect BAFNet CNN parameters
-        cnn_params = []
-        for i in range(model.conv_depth):
-            cnn_params.extend(getattr(model, f"convblock_{i}").parameters())
-        cnn_params.extend(model.sigmoid.parameters())
-
-        # Build param_groups
-        param_groups = [
-            {
-                'params': pretrained_params,
-                'lr': pretrained_lr,
-                'weight_decay': 0.0,  # No decay for pretrained (preserve features)
-                'name': 'pretrained'
-            },
-            {
-                'params': cnn_params,
-                'lr': cnn_lr,
-                'weight_decay': weight_decay,
-                'name': 'bafnet_cnn'
-            }
-        ]
-
-        optim = optim_class(param_groups, betas=args.betas)
-
-        # Log configuration
-        logger.info(f"[Finetune] Created {args.optim} with differential learning rates:")
-        for group in param_groups:
-            num_params = sum(p.numel() for p in group['params'])
-            logger.info(f"  {group['name']:15s}: LR={group['lr']:.2e}, WD={group['weight_decay']:.4f}, Params={num_params:,}")
     else:
         # Standard optimizer for non-LoRA models
         optim = optim_class(model.parameters(), lr=args.lr, betas=args.betas)
@@ -269,18 +227,11 @@ def run(args):
     scheduler_disc = None
 
     if args.lr_decay is not None:
-        # Determine warmup settings from LoRA or finetune config
-        warmup_epochs = 0
-        warmup_start_factor = 0.2
-
+        # Add warmup for LoRA fine-tuning
         if hasattr(args.model, 'lora') and args.model.lora.get('enabled', False):
             warmup_epochs = args.model.lora.get('warmup_epochs', 5)
             warmup_start_factor = args.model.lora.get('warmup_start_factor', 0.2)
-        elif hasattr(args.model, 'finetune') and args.model.finetune.get('enabled', False):
-            warmup_epochs = args.model.finetune.get('warmup_epochs', 0)
-            warmup_start_factor = args.model.finetune.get('warmup_start_factor', 0.2)
 
-        if warmup_epochs > 0:
             logger.info(f"[Scheduler] Warmup enabled: {warmup_epochs} epochs (start_factor={warmup_start_factor})")
 
             warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
@@ -293,7 +244,7 @@ def run(args):
                 optim, schedulers=[warmup_scheduler, exp_scheduler], milestones=[warmup_epochs]
             )
         else:
-            # Standard scheduler without warmup
+            # Standard scheduler for non-LoRA models
             scheduler = torch.optim.lr_scheduler.ExponentialLR(optim, gamma=args.lr_decay, last_epoch=-1)
 
         # Discriminator scheduler (no warmup)

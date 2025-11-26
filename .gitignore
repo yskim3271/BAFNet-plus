@@ -61,8 +61,3 @@ vis/
 
 # Private inference data
 vinference/
-
-# etc
-*onnx*
-*onnx.py
-*.png

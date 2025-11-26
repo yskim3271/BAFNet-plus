@@ -139,7 +139,41 @@ class SimpleGate(nn.Module):
         x1, x2 = x.chunk(2, dim=1)
         return x1 * x2
 
+class LayerNormFunction(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, x, weight, bias, eps):
+        ctx.eps = eps
+        B, C, T = x.size()
+        mu = x.mean(1, keepdim=True)
+        var = (x - mu).pow(2).mean(1, keepdim=True)
+        y = (x - mu) / (var + eps).sqrt()
+        ctx.save_for_backward(y, var, weight)
+        y = weight.view(1, C, 1) * y + bias.view(1, C, 1)
+        return y
+    @staticmethod
+    def backward(ctx, grad_output):
+        eps = ctx.eps
 
+        B, C, T = grad_output.size()
+        y, var, weight = ctx.saved_variables
+        g = grad_output * weight.view(1, C, 1)
+        mean_g = g.mean(dim=1, keepdim=True)
+
+        mean_gy = (g * y).mean(dim=1, keepdim=True)
+        gx = 1. / torch.sqrt(var + eps) * (g - y * mean_gy - mean_g)
+        return gx, (grad_output * y).sum(dim=2).sum(dim=0), grad_output.sum(dim=2).sum(
+            dim=0), None
+
+class LayerNorm1d(nn.Module):
+    def __init__(self, channels, eps=1e-6):
+        super(LayerNorm1d, self).__init__()
+        self.register_parameter('weight', nn.Parameter(torch.ones(channels)))
+        self.register_parameter('bias', nn.Parameter(torch.zeros(channels)))
+        self.eps = eps
+
+    def forward(self, x):
+        return LayerNormFunction.apply(x, self.weight, self.bias, self.eps)
+    
 class Group_Prime_Kernel_FFN(nn.Module):
     def __init__(self, in_channel: int = 64, kernel_list: List[int] = [3, 11, 23, 31], causal: bool = False):
         super().__init__()
@@ -158,7 +192,7 @@ class Group_Prime_Kernel_FFN(nn.Module):
             nn.Conv1d(self.in_channel, self.mid_channel, kernel_size=1))
         self.proj_last = nn.Sequential(
             nn.Conv1d(self.mid_channel, self.in_channel, kernel_size=1))
-        self.norm = nn.LayerNorm(self.in_channel)
+        self.norm = LayerNorm1d(self.in_channel)
         self.scale = nn.Parameter(torch.zeros((1, self.in_channel, 1)), requires_grad=True)
 
         for kernel_size in self.kernel_list:
@@ -170,7 +204,7 @@ class Group_Prime_Kernel_FFN(nn.Module):
 
     def forward(self, x):
         shortcut = x.clone()
-        x = self.norm(x.transpose(1, 2)).transpose(1, 2)
+        x = self.norm(x)
         x = self.proj_first(x)
 
         x_chunks = list(torch.chunk(x, self.expand_ratio, dim=1))
@@ -192,7 +226,7 @@ class Channel_Attention_Block(nn.Module):
         else:
             conv_fn = nn.Conv1d
 
-        self.norm = nn.LayerNorm(in_channels)
+        self.norm = LayerNorm1d(in_channels)
         self.pwconv1 = nn.Conv1d(in_channels=in_channels, out_channels=dw_channel, kernel_size=1, padding=0, stride=1,
                                groups=1, bias=True)
         self.dwconv = conv_fn(in_channels=dw_channel, out_channels=dw_channel, kernel_size=dw_kernel_size,
@@ -209,7 +243,7 @@ class Channel_Attention_Block(nn.Module):
 
     def forward(self, x):
         skip = x
-        x = self.norm(x.transpose(1, 2)).transpose(1, 2)
+        x = self.norm(x)
         x = self.pwconv1(x)
         x = self.dwconv(x)
         x = self.sg(x)
