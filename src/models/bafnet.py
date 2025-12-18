@@ -27,6 +27,7 @@ class BAFNet(torch.nn.Module):
                  args_masking=None,
                  checkpoint_mapping=None,
                  checkpoint_masking=None,
+                 load_pretrained_weights=True,
                  ):
         super(BAFNet, self).__init__()
 
@@ -88,10 +89,16 @@ class BAFNet(torch.nn.Module):
         
         self.init_modules()
 
-        if checkpoint_mapping is not None:
-            self.mapping.load_state_dict(torch.load(checkpoint_mapping, weights_only=False)['model'])
-        if checkpoint_masking is not None:
-            self.masking.load_state_dict(torch.load(checkpoint_masking, weights_only=False)['model'])
+        # Load pretrained weights (skip if resuming from checkpoint)
+        if load_pretrained_weights:
+            if checkpoint_mapping is not None:
+                print(f"[BAFNet] Loading pretrained mapping weights from: {checkpoint_mapping}")
+                self.mapping.load_state_dict(torch.load(checkpoint_mapping, weights_only=False)['model'])
+            if checkpoint_masking is not None:
+                print(f"[BAFNet] Loading pretrained masking weights from: {checkpoint_masking}")
+                self.masking.load_state_dict(torch.load(checkpoint_masking, weights_only=False)['model'])
+        else:
+            print("[BAFNet] Skipping pretrained weights loading (will load from checkpoint)")
         
     def init_modules(self):
         for m in self.modules():

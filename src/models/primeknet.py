@@ -3,7 +3,7 @@ from typing import List
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from src.stft import mag_pha_to_complex
+from src.stft import mag_pha_to_complex, complex_to_mag_pha
 
 
 def get_padding(kernel_size, dilation=1):
@@ -203,7 +203,7 @@ class Group_Prime_Kernel_FFN(nn.Module):
             setattr(self, f"conv_{kernel_size}", conv_fn(self.in_channel, self.in_channel, kernel_size=kernel_size, padding=get_padding(kernel_size), groups=self.in_channel))
 
     def forward(self, x):
-        shortcut = x.clone()
+        shortcut = x
         x = self.norm(x)
         x = self.proj_first(x)
 
@@ -295,10 +295,10 @@ class TS_BLOCK(nn.Module):
 
     def forward(self, x):
         B, C, T, F = x.size()
-        x = x.permute(0, 3, 1, 2).contiguous().view(B * F, C, T)
+        x = x.permute(0, 3, 1, 2).reshape(B * F, C, T)
 
         x = self.time_stage(x) + x * self.beta_t
-        x = x.view(B, F, C, T).permute(0, 3, 2, 1).contiguous().view(B * T, C, F)
+        x = x.view(B, F, C, T).permute(0, 3, 2, 1).reshape(B * T, C, F)
 
         x = self.freq_stage(x) + x * self.beta_f
         x = x.view(B, T, C, F).permute(0, 2, 1, 3)
@@ -438,8 +438,8 @@ class MaskDecoder(nn.Module):
     def forward(self, x):
         x = self.dense_block(x)
         x = self.mask_conv(x)
-        x = x.permute(0, 3, 2, 1).squeeze(-1)
-        x = self.lsigmoid(x).permute(0, 2, 1).unsqueeze(1)
+        x = x.squeeze(1).transpose(1, 2)
+        x = self.lsigmoid(x).transpose(1,2).unsqueeze(1)
         return x
 
 class PhaseDecoder(nn.Module):
@@ -564,28 +564,20 @@ class PrimeKnet(nn.Module):
 
     def forward(self, noisy_com):
         # Input shape: [B, F, T, 2]
+        mag, pha = complex_to_mag_pha(noisy_com, stack_dim=-1)  # [B, F, T] each
 
-        real = noisy_com[:, :, :, 0]
-        imag = noisy_com[:, :, :, 1]
-
-        mag = torch.sqrt(real**2 + imag**2 + 1e-8)
-        pha = torch.atan2(imag + 1e-8, real + 1e-8)
-
-        mag = mag.unsqueeze(1).permute(0, 1, 3, 2) # [B, 1, T, F]
-        pha = pha.unsqueeze(1).permute(0, 1, 3, 2) # [B, 1, T, F]
-
-        x = torch.cat((mag, pha), dim=1) # [B, 2, T, F]
-
+        x = torch.stack((mag, pha), dim=1).permute(0, 1, 3, 2)  # [B, 2, T, F]
         x = self.dense_encoder(x)
-
         x = self.sequence_block(x)
 
+        # mask_decoder output: [B, 1, T, F] -> squeeze/transpose -> [B, F, T]
+        mask = self.mask_decoder(x).squeeze(1).transpose(1, 2)
         if self.infer_type == 'masking':
-            est_mag = (mag * self.mask_decoder(x)).permute(0, 3, 2, 1).squeeze(-1)
+            est_mag = mag * mask  # [B, F, T]
         elif self.infer_type == 'mapping':
-            est_mag = self.mask_decoder(x).permute(0, 3, 2, 1).squeeze(-1)
+            est_mag = mask
 
-        est_pha = self.phase_decoder(x).permute(0, 3, 2, 1).squeeze(-1)
-        est_com = mag_pha_to_complex(est_mag, est_pha)
+        est_pha = self.phase_decoder(x).squeeze(1).transpose(1, 2)  # [B, F, T]
+        est_com = mag_pha_to_complex(est_mag, est_pha, stack_dim=-1)
 
         return est_mag, est_pha, est_com

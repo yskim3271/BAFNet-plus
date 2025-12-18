@@ -61,3 +61,15 @@ vis/
 
 # Private inference data
 vinference/
+
+# Private samples
+generate_test_samples.py
+test_samples/
+
+# onnx
+android_export_ONNX/
+android_export_ExecuTorch/
+*.onnx
+
+# ablation experiments
+ablation/

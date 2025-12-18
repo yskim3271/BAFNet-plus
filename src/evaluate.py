@@ -330,6 +330,9 @@ if __name__=="__main__":
 
     # Prepare STFT args using utility function
     stft_args = get_stft_args_from_config(model_args)
+    # Override compress_factor from root config if available (*BAFNet only)
+    if hasattr(conf, 'compress_factor'):
+        stft_args['compress_factor'] = conf.compress_factor
 
     for fixed_snr in args.snr_step:
         ev_dataset = Noise_Augmented_Dataset(

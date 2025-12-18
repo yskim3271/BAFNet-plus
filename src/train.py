@@ -56,46 +56,14 @@ def run(args):
     model_lib = model_args.model_lib
     model_class_name = model_args.model_class
 
-    # Load model on CPU first if using LoRA, otherwise directly on target device
-    if hasattr(args.model, 'lora') and args.model.lora.get('enabled', False):
-        # Load on CPU to avoid device mismatch during LoRA injection
-        model = load_model(model_lib, model_class_name, model_args.param, 'cpu')
-        logger.info("[LoRA] Model loaded on CPU for LoRA injection")
-    else:
-        model = load_model(model_lib, model_class_name, model_args.param, device)
+    # Prepare model params (skip pretrained loading if resuming from checkpoint)
+    model_params = OmegaConf.to_container(model_args.param, resolve=True)
+    if args.continue_from is not None:
+        model_params['load_pretrained_weights'] = False
+        logger.info("[Resume] Skipping pretrained weights loading (will load from checkpoint)")
 
-    # LoRA injection (if enabled in config)
-    lora_stats = None
-    if hasattr(args.model, 'lora') and args.model.lora.get('enabled', False):
-        from src.models.lora import inject_lora_with_strategy
-
-        strategy = args.model.lora.get('strategy', 'track1')
-        logger.info(f"[LoRA] Applying strategy: {strategy.upper()}")
-
-        # Inject LoRA using strategy (handles all parameter management automatically)
-        # Model is on CPU at this point, so LoRA params will be created on CPU
-        lora_stats = inject_lora_with_strategy(
-            model,
-            strategy=strategy,
-            rank=args.model.lora.rank,
-            alpha=args.model.lora.alpha,
-            dropout=args.model.lora.get('dropout', 0.0),
-            target_modules=args.model.lora.get('target_modules', None),
-            verbose=True
-        )
-
-        # Additional unfreezing for BAFNet-specific layers (CNN blending network)
-        if hasattr(model, 'conv_depth'):
-            logger.info(f"[BAFNet] Unfreezing CNN blending network ({model.conv_depth} blocks)")
-            for i in range(model.conv_depth):
-                for param in getattr(model, f"convblock_{i}").parameters():
-                    param.requires_grad = True
-            for param in model.sigmoid.parameters():
-                param.requires_grad = True
-
-        # Now move everything to target device
-        logger.info(f"[LoRA] Moving model with LoRA adapters to {device}")
-        model = model.to(device)
+    # Load model
+    model = load_model(model_lib, model_class_name, model_params, device)
 
     # Calculate and log the total number of parameters and model size
     logger.info(f"Selected model: {model_lib}.{model_class_name}")
@@ -124,100 +92,59 @@ def run(args):
     discriminator = MetricGAN_Discriminator().to(device)
 
     # optimizer
-    if hasattr(args.model, 'lora') and args.model.lora.get('enabled', False):
-        from src.models.lora import (
-            get_lora_parameters,
-            get_depthwise_parameters,
-            get_normalization_parameters,
-            get_critical_scalar_parameters,
-            get_conv_transpose_parameters
-        )
+    if hasattr(args.model, 'finetune') and args.model.finetune.get('enabled', False):
+        # ============================================================
+        # Finetune: Differential LR for pretrained models
+        # ============================================================
+        finetune_cfg = args.model.finetune
+        pretrained_lr = finetune_cfg.get('pretrained_lr', 0.0001)
+        cnn_lr = finetune_cfg.get('cnn_lr', args.lr)
+        weight_decay = finetune_cfg.get('weight_decay', 0.01)
 
-        strategy = args.model.lora.get('strategy', 'track1')
-        lora_lr = args.model.lora.get('lr', args.lr)
+        # Collect pretrained parameters (mapping + masking)
+        pretrained_params = list(model.mapping.parameters()) + list(model.masking.parameters())
 
-        # Collect parameter groups based on strategy
-        lora_params = get_lora_parameters(model)
-        norm_params = get_normalization_parameters(model)
-        scalar_params = get_critical_scalar_parameters(model)
-        ct_params = get_conv_transpose_parameters(model, verbose=False)
+        # Collect fusion module parameters (BAFNet v1 or v2)
+        fusion_params = []
+        if hasattr(model, 'conv_depth'):
+            # BAFNet v1: CNN-based fusion
+            for i in range(model.conv_depth):
+                fusion_params.extend(getattr(model, f"convblock_{i}").parameters())
+            fusion_params.extend(model.sigmoid.parameters())
+            fusion_name = 'bafnet_cnn'
+        elif hasattr(model, 'fusion'):
+            # BAFNet v2: Mamba-based fusion
+            fusion_params.extend(model.fusion.parameters())
+            fusion_name = 'bafnet_fusion'
+        else:
+            raise ValueError("Model must have either 'conv_depth' (v1) or 'fusion' (v2) attribute")
 
-        # Base parameter groups (common to both strategies)
+        # Build param_groups
+        fusion_lr = finetune_cfg.get('fusion_lr', finetune_cfg.get('cnn_lr', args.lr))
         param_groups = [
             {
-                'params': lora_params,
-                'lr': lora_lr,
-                'weight_decay': args.model.lora.get('weight_decay', 0.01),
-                'name': 'lora'
+                'params': pretrained_params,
+                'lr': pretrained_lr,
+                'weight_decay': 0.0,  # No decay for pretrained (preserve features)
+                'name': 'pretrained'
             },
             {
-                'params': norm_params,
-                'lr': lora_lr,
-                'weight_decay': 0.0,  # No decay for normalization
-                'name': 'norm'
-            },
-            {
-                'params': scalar_params,
-                'lr': lora_lr,
-                'weight_decay': 0.0,  # No decay for scalars
-                'name': 'scalar'
-            },
-            {
-                'params': ct_params,
-                'lr': lora_lr * 0.5,
-                'weight_decay': args.model.lora.get('weight_decay', 0.01),
-                'name': 'conv_transpose'
+                'params': fusion_params,
+                'lr': fusion_lr,
+                'weight_decay': weight_decay,
+                'name': fusion_name
             }
         ]
 
-        # Track2-specific: Add depthwise parameters with conservative settings
-        if strategy == 'track2':
-            dw_params = get_depthwise_parameters(model)
-            dw_lr_ratio = args.model.lora.get('dw_lr_ratio', 0.1)
-            param_groups.append({
-                'params': dw_params,
-                'lr': lora_lr * dw_lr_ratio,
-                'weight_decay': 0.0,  # CRITICAL: No decay to preserve pretrained features!
-                'name': 'depthwise'
-            })
-            logger.info(f"[Optimizer] Track2 mode: Depthwise LR = {lora_lr * dw_lr_ratio:.2e} (ratio={dw_lr_ratio})")
-            logger.info(f"[Optimizer] CRITICAL: Depthwise weight_decay=0.0 to preserve pretrained spatial patterns")
-
-        # BAFNet-specific: Add CNN blending network parameters
-        if hasattr(model, 'conv_depth'):
-            cnn_params = []
-            # Collect all parameter IDs that are already in other groups
-            excluded_param_ids = {id(p) for p in lora_params}
-            excluded_param_ids.update({id(p) for p in norm_params})
-            excluded_param_ids.update({id(p) for p in scalar_params})
-            excluded_param_ids.update({id(p) for p in ct_params})
-
-            for i in range(model.conv_depth):
-                convblock = getattr(model, f"convblock_{i}")
-                for param in convblock.parameters():
-                    if param.requires_grad and id(param) not in excluded_param_ids:
-                        cnn_params.append(param)
-            for param in model.sigmoid.parameters():
-                if param.requires_grad and id(param) not in excluded_param_ids:
-                    cnn_params.append(param)
-
-            if cnn_params:
-                param_groups.append({
-                    'params': cnn_params,
-                    'lr': args.lr,
-                    'weight_decay': args.model.lora.get('weight_decay', 0.01),
-                    'name': 'bafnet_cnn'
-                })
-
         optim = optim_class(param_groups, betas=args.betas)
 
-        # Log optimizer configuration
-        logger.info(f"[Optimizer] Created {args.optim} with differential learning rates:")
+        # Log configuration
+        logger.info(f"[Finetune] Created {args.optim} with differential learning rates:")
         for group in param_groups:
             num_params = sum(p.numel() for p in group['params'])
             logger.info(f"  {group['name']:15s}: LR={group['lr']:.2e}, WD={group['weight_decay']:.4f}, Params={num_params:,}")
     else:
-        # Standard optimizer for non-LoRA models
+        # Standard optimizer
         optim = optim_class(model.parameters(), lr=args.lr, betas=args.betas)
 
     optim_disc = optim_class(discriminator.parameters(), lr=args.lr, betas=args.betas)
@@ -227,11 +154,15 @@ def run(args):
     scheduler_disc = None
 
     if args.lr_decay is not None:
-        # Add warmup for LoRA fine-tuning
-        if hasattr(args.model, 'lora') and args.model.lora.get('enabled', False):
-            warmup_epochs = args.model.lora.get('warmup_epochs', 5)
-            warmup_start_factor = args.model.lora.get('warmup_start_factor', 0.2)
+        # Determine warmup settings from finetune config
+        warmup_epochs = 0
+        warmup_start_factor = 0.2
 
+        if hasattr(args.model, 'finetune') and args.model.finetune.get('enabled', False):
+            warmup_epochs = args.model.finetune.get('warmup_epochs', 0)
+            warmup_start_factor = args.model.finetune.get('warmup_start_factor', 0.2)
+
+        if warmup_epochs > 0:
             logger.info(f"[Scheduler] Warmup enabled: {warmup_epochs} epochs (start_factor={warmup_start_factor})")
 
             warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
@@ -244,7 +175,7 @@ def run(args):
                 optim, schedulers=[warmup_scheduler, exp_scheduler], milestones=[warmup_epochs]
             )
         else:
-            # Standard scheduler for non-LoRA models
+            # Standard scheduler without warmup
             scheduler = torch.optim.lr_scheduler.ExponentialLR(optim, gamma=args.lr_decay, last_epoch=-1)
 
         # Discriminator scheduler (no warmup)
