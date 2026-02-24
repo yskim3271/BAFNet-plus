@@ -73,8 +73,8 @@ def enhance_multiple_snr(
 
 
 def _get_model_input(
-    tm: torch.Tensor,
-    noisy_am: torch.Tensor,
+    bcs: torch.Tensor,
+    noisy_acs: torch.Tensor,
     input_type: str,
     device: torch.device,
     stft_args: Optional[Dict[str, Any]] = None
@@ -82,9 +82,9 @@ def _get_model_input(
     """Prepare model input based on input type.
 
     Args:
-        tm: Throat microphone input [B, C, T]
-        noisy_am: Noisy acoustic microphone input [B, C, T]
-        input_type: One of ["acs", "bcs", "acs+bcs", "am", "tm", "am+tm"]
+        bcs: Body-conducted speech input [B, C, T]
+        noisy_acs: Noisy air-conducted speech input [B, C, T]
+        input_type: One of ["acs", "bcs", "acs+bcs"]
         device: Target device
         stft_args: STFT parameters for frequency-domain models
 
@@ -96,19 +96,12 @@ def _get_model_input(
     """
     # Frequency-domain handlers
     freq_handlers = {
-        "acs": lambda: mag_pha_stft(noisy_am, **stft_args)[2].to(device),
-        "bcs": lambda: mag_pha_stft(tm, **stft_args)[2].to(device),
+        "acs": lambda: mag_pha_stft(noisy_acs, **stft_args)[2].to(device),
+        "bcs": lambda: mag_pha_stft(bcs, **stft_args)[2].to(device),
         "acs+bcs": lambda: (
-            mag_pha_stft(tm, **stft_args)[2].to(device),
-            mag_pha_stft(noisy_am, **stft_args)[2].to(device)
+            mag_pha_stft(bcs, **stft_args)[2].to(device),
+            mag_pha_stft(noisy_acs, **stft_args)[2].to(device)
         ),
-    }
-
-    # Time-domain handlers
-    time_handlers = {
-        "am": lambda: noisy_am.to(device),
-        "tm": lambda: tm.to(device),
-        "am+tm": lambda: (tm.to(device), noisy_am.to(device)),
     }
 
     # Check if frequency-domain model has stft_args
@@ -116,11 +109,10 @@ def _get_model_input(
         raise ValueError("stft_args must be provided for frequency-domain models")
 
     # Dispatch to appropriate handler
-    handlers = {**freq_handlers, **time_handlers}
-    if input_type not in handlers:
+    if input_type not in freq_handlers:
         raise ValueError(f"Invalid model input type: {input_type}")
 
-    return handlers[input_type]()
+    return freq_handlers[input_type]()
 
 
 def enhance(
@@ -165,39 +157,31 @@ def enhance(
         for batch_idx, data in enumerate(iterator):
             try:
                 # Get batch data (batch, channel, time)
-                tm, noisy_am, clean_am, id, _ = data
+                bcs, noisy_acs, clean_acs, id, _ = data
 
                 # Prepare model input using dispatcher
                 input_data = _get_model_input(
-                    tm, noisy_am, args.model.input_type, args.device, stft_args
+                    bcs, noisy_acs, args.model.input_type, args.device, stft_args
                 )
 
                 # Run model inference
-                if args.model.input_type in ["acs", "bcs", "acs+bcs"]:
-                    # Frequency-domain models
-                    if isinstance(input_data, tuple):
-                        clean_mag_hat, clean_pha_hat, _ = model(*input_data)
-                    else:
-                        clean_mag_hat, clean_pha_hat, _ = model(input_data)
-                    clean_am_hat = mag_pha_istft(clean_mag_hat, clean_pha_hat, **stft_args)
+                if isinstance(input_data, tuple):
+                    clean_mag_hat, clean_pha_hat, _ = model(*input_data)
                 else:
-                    # Time-domain models
-                    if isinstance(input_data, tuple):
-                        clean_am_hat = model(*input_data)
-                    else:
-                        clean_am_hat = model(input_data)
+                    clean_mag_hat, clean_pha_hat, _ = model(input_data)
+                clean_acs_hat = mag_pha_istft(clean_mag_hat, clean_pha_hat, **stft_args)
 
                 # Move to CPU and squeeze channel dimension
-                tm = tm.squeeze(1).cpu()
-                clean_am = clean_am.squeeze(1).cpu()
-                noisy_am = noisy_am.squeeze(1).cpu()
-                clean_am_hat = clean_am_hat.squeeze(1).cpu()
+                bcs = bcs.squeeze(1).cpu()
+                clean_acs = clean_acs.squeeze(1).cpu()
+                noisy_acs = noisy_acs.squeeze(1).cpu()
+                clean_acs_hat = clean_acs_hat.squeeze(1).cpu()
 
                 wavs_dict = {
-                    "tm": tm,
-                    "noisy_am": noisy_am,
-                    "clean_am": clean_am,
-                    "clean_am_hat": clean_am_hat,
+                    "bcs": bcs,
+                    "noisy_acs": noisy_acs,
+                    "clean_acs": clean_acs,
+                    "clean_acs_hat": clean_acs_hat,
                 }
 
                 save_wavs(wavs_dict, os.path.join(outdir_wavs, id[0]))
@@ -244,6 +228,65 @@ if __name__ == "__main__":
     parser.add_argument("--output_dir", type=str, default="samples", help="Output directory for enhanced samples. default is samples")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu", help="Specifies the device (cuda or cpu).")
 
+    # Frozen/Folded normalization options
+    parser.add_argument(
+        "--norm_infer_mode",
+        type=str,
+        choices=["instance", "frozen", "folded"],
+        default="instance",
+        help="Normalization inference mode: "
+             "instance (default, original IN), "
+             "frozen (fixed stats from calibration), "
+             "folded (IN absorbed into Conv)"
+    )
+    parser.add_argument(
+        "--norm_stats_path",
+        type=str,
+        default=None,
+        help="Path to *.normstats.pt file for frozen/folded mode. "
+             "If not specified, looks for model.normstats.pt in chkpt_dir"
+    )
+
+    # SCA (Squeeze-Channel-Attention) streaming options
+    parser.add_argument(
+        "--sca_mode",
+        type=str,
+        choices=["global", "ema", "local"],
+        default="global",
+        help="SCA squeeze mode: "
+             "global (default, AdaptiveAvgPool1d equivalent), "
+             "ema (exponential moving average for streaming), "
+             "local (last W frames only)"
+    )
+    parser.add_argument(
+        "--sca_ema_alpha",
+        type=float,
+        default=0.99,
+        help="EMA decay factor for sca_mode=ema (default: 0.99). "
+             "Higher values = slower adaptation, more stable."
+    )
+    parser.add_argument(
+        "--sca_local_window",
+        type=int,
+        default=32,
+        help="Window size for sca_mode=local (default: 32 frames)"
+    )
+    parser.add_argument(
+        "--sca_stateful_eval",
+        action="store_true",
+        default=True,
+        help="Maintain EMA state across chunks in eval mode (default: True)"
+    )
+
+    # Stateful Convolution options
+    parser.add_argument(
+        "--use_stateful_conv",
+        action="store_true",
+        default=False,
+        help="Use stateful convolutions for streaming inference. "
+             "Eliminates zero-padding discontinuity at chunk boundaries."
+    )
+
     args = parser.parse_args()
     chkpt_dir = args.chkpt_dir
     chkpt_file = args.chkpt_file
@@ -268,7 +311,86 @@ if __name__ == "__main__":
     # Load model and checkpoint using utility functions
     model = load_model(model_lib, model_class_name, model_args.param, device)
     model = load_checkpoint(model, chkpt_dir, chkpt_file, device)
-    tm_only = model_args.input_type == "tm"
+
+    # Apply frozen/folded normalization if requested
+    if args.norm_infer_mode != "instance":
+        from pathlib import Path
+        from src.calibration.calibrator import INCalibrator
+
+        # Find stats file
+        if args.norm_stats_path is not None:
+            stats_path = args.norm_stats_path
+        else:
+            stats_path = os.path.join(chkpt_dir, "model.normstats.pt")
+
+        if not os.path.exists(stats_path):
+            raise FileNotFoundError(
+                f"Calibration stats not found at {stats_path}. "
+                f"Run 'python -m src.calibrate --chkpt_dir {chkpt_dir}' first, "
+                f"or specify --norm_stats_path"
+            )
+
+        logger.info(f"Loading calibration stats from: {stats_path}")
+        stats, meta = INCalibrator.load(stats_path)
+        logger.info(f"  Modules: {len(stats)}, Model: {meta.get('model_class', 'unknown')}")
+
+        if args.norm_infer_mode == "frozen":
+            from src.models.streaming.converters import replace_in_with_frozen
+            logger.info("Applying frozen normalization...")
+            model = replace_in_with_frozen(model, stats, verbose=True)
+
+        elif args.norm_infer_mode == "folded":
+            from src.calibration.folding import fold_model
+            logger.info("Applying conv folding...")
+            model = fold_model(model, stats, verbose=True)
+
+        model.to(device)
+
+    # Apply SCA replacement if not using global mode
+    if args.sca_mode != "global":
+        from src.models.streaming.converters import replace_sca_with_streaming, get_sca_info
+
+        logger.info(f"Replacing SCA with streaming mode: {args.sca_mode}")
+        logger.info(f"  EMA alpha: {args.sca_ema_alpha}")
+        logger.info(f"  Local window: {args.sca_local_window}")
+        logger.info(f"  Stateful eval: {args.sca_stateful_eval}")
+
+        model = replace_sca_with_streaming(
+            model,
+            mode=args.sca_mode,
+            ema_alpha=args.sca_ema_alpha,
+            local_window=args.sca_local_window,
+            stateful_eval=args.sca_stateful_eval,
+            verbose=True,
+        )
+
+        sca_info = get_sca_info(model)
+        logger.info(f"SCA replacement complete: {sca_info['streaming_sca_count']} modules")
+
+    # Apply stateful convolutions if requested
+    if args.use_stateful_conv:
+        from src.models.streaming.converters import (
+            convert_to_stateful,
+            set_streaming_mode,
+            get_stateful_layer_count,
+        )
+
+        logger.info("Applying stateful convolutions...")
+        model = convert_to_stateful(model, verbose=False, inplace=True)
+        model.to(device)
+        model.eval()
+        set_streaming_mode(model, True)
+
+        layer_counts = get_stateful_layer_count(model)
+        logger.info(f"Stateful conversion complete: {layer_counts['total']} layers")
+        if layer_counts["StatefulCausalConv1d"] > 0:
+            logger.info(f"  - StatefulCausalConv1d: {layer_counts['StatefulCausalConv1d']}")
+        if layer_counts["StatefulAsymmetricConv2d"] > 0:
+            logger.info(f"  - StatefulAsymmetricConv2d: {layer_counts['StatefulAsymmetricConv2d']}")
+        if layer_counts["StatefulCausalConv2d"] > 0:
+            logger.info(f"  - StatefulCausalConv2d: {layer_counts['StatefulCausalConv2d']}")
+
+    bcs_only = "acs" not in model_args.input_type
 
     # Load dataset based on user selection
     if args.dataset.lower() == "taps":
@@ -294,7 +416,7 @@ if __name__ == "__main__":
                                          sampling_rate=16000,
                                          with_id=True,
                                          with_text=True,
-                                         tm_only=tm_only)
+                                         bcs_only=bcs_only)
 
 
     tt_loader = DataLoader(
@@ -311,6 +433,9 @@ if __name__ == "__main__":
     logger.info(f"Model: {model_class_name}")
     logger.info(f"Checkpoint: {chkpt_dir}")
     logger.info(f"Device: {device}")
+    logger.info(f"Norm inference mode: {args.norm_infer_mode}")
+    logger.info(f"SCA mode: {args.sca_mode}" + (f" (alpha={args.sca_ema_alpha})" if args.sca_mode == "ema" else "") + (f" (window={args.sca_local_window})" if args.sca_mode == "local" else ""))
+    logger.info(f"Stateful conv: {args.use_stateful_conv}")
     logger.info(f"Output directory: {local_out_dir}")
     os.makedirs(local_out_dir, exist_ok=True)
 

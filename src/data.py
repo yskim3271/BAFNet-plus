@@ -49,7 +49,7 @@ class Noise_Augmented_Dataset:
                  with_id=False,
                  with_text=False,
                  deterministic=False,
-                 tm_only=False
+                 bcs_only=False
                  ):
         # Initialize variables with constructor arguments
         self.datapair_list = datapair_list
@@ -67,7 +67,7 @@ class Noise_Augmented_Dataset:
         self.with_id = with_id
         self.with_text = with_text
         self.deterministic = deterministic
-        self.tm_only = tm_only
+        self.bcs_only = bcs_only
         assert self.with_id if self.with_text else True, "with_id must be True if with_text is True"
         
         # Parse the SNR range into a list of possible SNR values
@@ -76,21 +76,21 @@ class Noise_Augmented_Dataset:
         assert 0 <= reverb_proportion <= 1, "reverberation proportion should be in [0, 1]"
         self.reverb_proportion = reverb_proportion
         
-        # Prepare lists for tm and am audio arrays
-        tm_list, am_list = [], []
+        # Prepare lists for bcs and acs audio arrays
+        bcs_list, acs_list = [], []
         for item in self.datapair_list:
             # Load throat and acoustic microphone audio array, and convert to tensor. Add channel dimension
-            tm = item["audio.throat_microphone"]['array'].astype('float32')
-            am = item["audio.acoustic_microphone"]['array'].astype('float32')
+            bcs = item["audio.throat_microphone"]['array'].astype('float32')
+            acs = item["audio.acoustic_microphone"]['array'].astype('float32')
             id = item["speaker_id"] + "_" + item["sentence_id"]
             text = item["text"]
-            length = tm.shape[-1]
-            tm_list.append((tm, id, text, length))
-            am_list.append((am, id, text, length))
-        
-        # Create Audioset objects for tm and am
-        self.tm_set = Audioset(wavs=tm_list, segment=segment, stride=stride, with_id=with_id, with_text=with_text)
-        self.am_set = Audioset(wavs=am_list, segment=segment, stride=stride, with_id=with_id, with_text=with_text)
+            length = bcs.shape[-1]
+            bcs_list.append((bcs, id, text, length))
+            acs_list.append((acs, id, text, length))
+
+        # Create Audioset objects for bcs and acs
+        self.bcs_set = Audioset(wavs=bcs_list, segment=segment, stride=stride, with_id=with_id, with_text=with_text)
+        self.acs_set = Audioset(wavs=acs_list, segment=segment, stride=stride, with_id=with_id, with_text=with_text)
         
     @staticmethod
     def _parse_snr_range(snr_range):
@@ -182,52 +182,52 @@ class Noise_Augmented_Dataset:
         return noisy
 
     def __len__(self):
-        # The length of the dataset is the number of tm_set samples
-        return len(self.tm_set)
+        # The length of the dataset is the number of bcs_set samples
+        return len(self.bcs_set)
 
     def __getitem__(self, index):
         eps = 1e-6
         
         if self.with_text:
-            tm, id, text = self.tm_set[index]
-            am, _, _ = self.am_set[index]
+            bcs, id, text = self.bcs_set[index]
+            acs, _, _ = self.acs_set[index]
         elif self.with_id:
-            tm, id = self.tm_set[index]
-            am, _ = self.am_set[index]
+            bcs, id = self.bcs_set[index]
+            acs, _ = self.acs_set[index]
         else:
-            tm = self.tm_set[index]
-            am = self.am_set[index]
-        
-        # If shift is specified, randomly pick an offset for tm and am
+            bcs = self.bcs_set[index]
+            acs = self.acs_set[index]
+
+        # If shift is specified, randomly pick an offset for bcs and acs
         if self.shift:
-            t = am.shape[-1] - self.shift
+            t = acs.shape[-1] - self.shift
             # Ensure shift is even and enough frames remain
             assert self.shift % 2 == 0 and t > 0
             offset = random.randint(0, self.shift)
-            # Cut both tm and am with the chosen offset
-            am = am[offset:offset+t]
-            tm = tm[offset:offset+t]
-        
-        am = torch.tensor(am, dtype=torch.float32)
-        tm = torch.tensor(tm, dtype=torch.float32)            
-        
-        # Keep a reference to the original clean am
-        clean_am = am.clone()
-        
-        # if tm_only is True, do not add noise or reverb
-        if self.tm_only:
-            dummy_am = torch.zeros_like(am)
+            # Cut both bcs and acs with the chosen offset
+            acs = acs[offset:offset+t]
+            bcs = bcs[offset:offset+t]
+
+        acs = torch.tensor(acs, dtype=torch.float32)
+        bcs = torch.tensor(bcs, dtype=torch.float32)
+
+        # Keep a reference to the original clean acs
+        clean_acs = acs.clone()
+
+        # if bcs_only is True, do not add noise or reverb
+        if self.bcs_only:
+            dummy_acs = torch.zeros_like(acs)
             if self.with_text:
-                return tm, dummy_am, clean_am, id, text
+                return bcs, dummy_acs, clean_acs, id, text
             elif self.with_id:
-                return tm, dummy_am, clean_am, id
+                return bcs, dummy_acs, clean_acs, id
             else:
-                return tm, dummy_am, clean_am
-        
-        # Select noise for the length of am
-        noise = self._select_noise(am.shape[-1], index)
+                return bcs, dummy_acs, clean_acs
+
+        # Select noise for the length of acs
+        noise = self._select_noise(acs.shape[-1], index)
         # Verify lengths match
-        assert noise.shape[-1] == am.shape[-1], f"Length mismatch: {am.shape[-1]} vs {noise.shape[-1]}"
+        assert noise.shape[-1] == acs.shape[-1], f"Length mismatch: {acs.shape[-1]} vs {noise.shape[-1]}"
         
         # Randomly pick an SNR from the snr_list
         snr = self._random_select_from(self.snr_list)
@@ -257,50 +257,50 @@ class Noise_Augmented_Dataset:
             rir = rir_waveform.to(dtype=torch.float32)
             
             # Convolve the clean speech with the RIR to add reverberation
-            am = signal.fftconvolve(am.squeeze(), rir.squeeze().numpy(), mode='full')[:am.shape[-1]]
+            acs = signal.fftconvolve(acs.squeeze(), rir.squeeze().numpy(), mode='full')[:acs.shape[-1]]
             # Convert the numpy array back to a torch tensor
-            am = torch.tensor(am, dtype=torch.float32)
-        
+            acs = torch.tensor(acs, dtype=torch.float32)
+
         # Normalize amplitudes (set max abs amplitude to 1)
-        tm, _ = norm_amplitude(tm)
-        clean_am, _ = norm_amplitude(clean_am)
-        am, _ = norm_amplitude(am)
+        bcs, _ = norm_amplitude(bcs)
+        clean_acs, _ = norm_amplitude(clean_acs)
+        acs, _ = norm_amplitude(acs)
         noise, _ = norm_amplitude(noise)
-        
+
         # Scale signals to the target dB FS
-        tm, _, _ = tailor_dB_FS(tm, self.target_dB_FS)
-        clean_am, _, _ = tailor_dB_FS(clean_am, self.target_dB_FS)
-        am, _, _ = tailor_dB_FS(am, self.target_dB_FS)
+        bcs, _, _ = tailor_dB_FS(bcs, self.target_dB_FS)
+        clean_acs, _, _ = tailor_dB_FS(clean_acs, self.target_dB_FS)
+        acs, _, _ = tailor_dB_FS(acs, self.target_dB_FS)
         noise, _, _ = tailor_dB_FS(noise, self.target_dB_FS)
 
         # Mix the (potentially reverberant) clean speech with noise at the chosen SNR
-        noisy_am = self.snr_mix(am, noise, snr)
-        
+        noisy_acs = self.snr_mix(acs, noise, snr)
+
         # Randomly adjust the overall level within a floating value range
         noisy_target_dB_FS = random.randint(
             int(self.target_dB_FS - self.target_dB_FS_floating_value),
             int(self.target_dB_FS + self.target_dB_FS_floating_value)
         )
-        
+
         # Scale noisy and clean signals with the new target dB FS
-        noisy_am, _, noisy_scalar = tailor_dB_FS(noisy_am, noisy_target_dB_FS)
-        clean_am *= noisy_scalar
-        tm *= noisy_scalar
-        
+        noisy_acs, _, noisy_scalar = tailor_dB_FS(noisy_acs, noisy_target_dB_FS)
+        clean_acs *= noisy_scalar
+        bcs *= noisy_scalar
+
         # Check if the noisy signal is clipped; if so, reduce the amplitude
-        if is_clipped(noisy_am):
-            clip_scalar = torch.max(torch.abs(noisy_am)) / (0.99 - eps)
-            noisy_am /= clip_scalar
-            clean_am /= clip_scalar
-            tm /= clip_scalar
-        
-        # If tapsId is True, return the file ID as well
+        if is_clipped(noisy_acs):
+            clip_scalar = torch.max(torch.abs(noisy_acs)) / (0.99 - eps)
+            noisy_acs /= clip_scalar
+            clean_acs /= clip_scalar
+            bcs /= clip_scalar
+
+        # Return bcs, noisy_acs, clean_acs (and optionally id and text)
         if self.with_text:
-            return tm, noisy_am, clean_am, id, text
+            return bcs, noisy_acs, clean_acs, id, text
         elif self.with_id:
-            return tm, noisy_am, clean_am, id
+            return bcs, noisy_acs, clean_acs, id
         else:
-            return tm, noisy_am, clean_am
+            return bcs, noisy_acs, clean_acs
 
 
 class Audioset:
