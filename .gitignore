@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 *$py.class
+.pytest_cache/
 
 # PyTorch checkpoints
 *.pth
@@ -70,6 +71,12 @@ test_samples/
 android_export_ONNX/
 android_export_ExecuTorch/
 *.onnx
+
+# android
+android/
+
+# scripts
+scripts/
 
 # ablation experiments
 ablation/

@@ -16,9 +16,9 @@ class LearnableSigmoid2d(nn.Module):
 
 class BAFNet(torch.nn.Module):
     def __init__(self,
-                 win_len=400,
-                 hop_len=100,
-                 fft_len=400,
+                 n_fft=None,
+                 hop_size=None,
+                 win_size=None,
                  conv_depth=4,
                  conv_channels=16,
                  conv_kernel_size=7,
@@ -28,12 +28,29 @@ class BAFNet(torch.nn.Module):
                  checkpoint_mapping=None,
                  checkpoint_masking=None,
                  load_pretrained_weights=True,
+                 # Deprecated aliases (for old checkpoint configs)
+                 fft_len=None,
+                 hop_len=None,
+                 win_len=None,
                  ):
         super(BAFNet, self).__init__()
 
-        self.win_len = win_len
-        self.hop_len = hop_len
-        self.fft_len = fft_len
+        # Migration: old names → new names
+        if fft_len is not None and n_fft is None:
+            n_fft = fft_len
+        if hop_len is not None and hop_size is None:
+            hop_size = hop_len
+        if win_len is not None and win_size is None:
+            win_size = win_len
+
+        # Defaults
+        n_fft = n_fft or 400
+        hop_size = hop_size or 100
+        win_size = win_size or 400
+
+        self.n_fft = n_fft
+        self.hop_size = hop_size
+        self.win_size = win_size
 
         self.conv_depth = conv_depth
         self.conv_channels = conv_channels
@@ -82,7 +99,7 @@ class BAFNet(torch.nn.Module):
             ))
         
         if self.learnable_sigmoid:
-            self.sigmoid = LearnableSigmoid2d(self.fft_len // 2 + 1)
+            self.sigmoid = LearnableSigmoid2d(self.n_fft // 2 + 1)
         else:
             self.sigmoid = nn.Sigmoid()
         
@@ -132,8 +149,8 @@ class BAFNet(torch.nn.Module):
 
         # Call mapping and masking submodels
         # Both models expect [B, F, T, 2] and return (mag, pha, com)
-        bcs_mag, bcs_pha, bcs_com_out = self.mapping(bcs_com)
-        acs_mag, acs_pha, acs_com_out = self.masking(acs_com)
+        _, _, bcs_com_out = self.mapping(bcs_com)
+        acs_mag, _, acs_com_out = self.masking(acs_com)
 
         # Calculate mask from masking model output
         # mask represents the magnitude ratio (enhanced / noisy)

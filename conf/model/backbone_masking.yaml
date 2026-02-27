@@ -1,23 +1,23 @@
-model_lib: primeknet
-model_class: PrimeKnet
-input_type: bcs
+model_lib: backbone
+model_class: Backbone
+input_type: acs
 
 param:
-  win_len: 400
-  hop_len: 100
-  fft_len: 400
+  win_size: 400
+  hop_size: 100
+  n_fft: 400
   compress_factor: 0.3
   dense_channel: 64
   sigmoid_beta: 2.0
   num_tsblock: 4
   dense_depth: 4
   time_dw_kernel_size: 3
-  time_block_kernel: [3, 11, 23, 31]
+  time_block_kernel: [11]
   freq_block_kernel: [3, 11, 23, 31]
   time_block_num: 2
   freq_block_num: 2
-  causal: false
+  causal_ts_block: true
   encoder_padding_ratio: [0.5, 0.5]
   decoder_padding_ratio: [0.5, 0.5]
-  infer_type: mapping
-
+  sca_kernel_size: 11
+  infer_type: masking

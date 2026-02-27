@@ -199,17 +199,17 @@ def evaluate(
 
                 clean_mag_hat, clean_pha_hat, _ = model(input)
 
-                clean_hat = mag_pha_istft(clean_mag_hat, clean_pha_hat, **stft_args)
+                clean_acs_hat = mag_pha_istft(clean_mag_hat, clean_pha_hat, **stft_args)
 
                 clean_acs = clean_acs.squeeze().detach().cpu().numpy()
-                clean_hat = clean_hat.squeeze().detach().cpu().numpy()
-                if len(clean_acs) != len(clean_hat):
-                    length = min(len(clean_acs), len(clean_hat))
+                clean_acs_hat = clean_acs_hat.squeeze().detach().cpu().numpy()
+                if len(clean_acs) != len(clean_acs_hat):
+                    length = min(len(clean_acs), len(clean_acs_hat))
                     clean_acs = clean_acs[0:length]
-                    clean_hat = clean_hat[0:length]
+                    clean_acs_hat = clean_acs_hat[0:length]
 
-                enhanced.append((clean_hat, text[0]))
-                results.append(compute_metrics(clean_acs, clean_hat))
+                enhanced.append((clean_acs_hat, text[0]))
+                results.append(compute_metrics(clean_acs, clean_acs_hat))
         
         pesq, csig, cbak, covl, segSNR, stoi = np.mean(results, axis=0)
         metrics[f'{snr}dB'] = {
@@ -293,7 +293,7 @@ if __name__=="__main__":
     # Load model and checkpoint using utility functions
     model = load_model(model_lib, model_class_name, model_args.param, device)
     model = load_checkpoint(model, chkpt_dir, chkpt_file, device)
-    tm_only = model_args.input_type == "tm"
+    bcs_only = "acs" not in model_args.input_type
 
     # Dataset-to-language mapping for STT
     DATASET_LANGUAGE_MAP = {
@@ -324,9 +324,12 @@ if __name__=="__main__":
     
     ev_loader_list = {}
 
-    # Parse file lists using utility function
-    noise_test_list = parse_file_list(args.noise_dir, args.noise_test)
-    rir_test_list = parse_file_list(args.rir_dir, args.rir_test)
+    # Parse file lists using utility function (skip if bcs_only)
+    if bcs_only:
+        noise_test_list, rir_test_list = [], []
+    else:
+        noise_test_list = parse_file_list(args.noise_dir, args.noise_test)
+        rir_test_list = parse_file_list(args.rir_dir, args.rir_test)
 
     # Prepare STFT args using utility function
     stft_args = get_stft_args_from_config(model_args)
@@ -348,7 +351,7 @@ if __name__=="__main__":
             sampling_rate=16000,
             with_id=True,
             with_text=True,
-            tm_only=tm_only,
+            bcs_only=bcs_only,
         )
 
         ev_loader = DataLoader(

@@ -29,7 +29,6 @@ class Solver(object):
         self.tr_loader = data['tr_loader']      # Training DataLoader
         self.va_loader = data['va_loader']      # Validation DataLoader
         self.ev_loader_list = data['ev_loader_list']      # Evaluation DataLoader
-        self.tt_loader_list = data['tt_loader_list']      # Test Time Evaluation DataLoader
         
         self.model = model
         self.discriminator = discriminator
@@ -44,12 +43,7 @@ class Solver(object):
         # logger
         self.logger = logger
 
-        # dataset
-        self.segment = args.segment
-        self.n_fft = args.n_fft
-        self.hop_size = args.hop_size
-        self.win_size = args.win_size
-        self.compress_factor = args.compress_factor
+        # STFT args
         self.stft_args = {
             "n_fft": args.n_fft,
             "hop_size": args.hop_size,
@@ -70,7 +64,6 @@ class Solver(object):
         self.best_loss = 0.0
         self.history = []
         self.log_dir = args.log_dir
-        self.samples_dir = args.samples_dir
         self.num_prints = args.num_prints
         self.num_workers = args.num_workers
         self.args = args
@@ -258,25 +251,25 @@ class Solver(object):
 
             clean_mag_hat, clean_pha_hat, clean_com_hat = self.model(input)
 
-            clean_hat = mag_pha_istft(clean_mag_hat, clean_pha_hat, **self.stft_args)
-            clean_mag_hat_con, clean_pha_hat_con, clean_com_hat_con = mag_pha_stft(clean_hat, **self.stft_args)
+            clean_acs_hat = mag_pha_istft(clean_mag_hat, clean_pha_hat, **self.stft_args)
+            clean_mag_hat_recon, clean_pha_hat_recon, clean_com_hat_recon = mag_pha_stft(clean_acs_hat, **self.stft_args)
 
             if not valid:
-                clean_list, clean_list_hat = list(clean_acs.cpu().numpy()), list(clean_hat.detach().cpu().numpy())
-                batch_pesq_score = batch_pesq(clean_list, clean_list_hat, workers=self.num_workers)
+                clean_acs_list, clean_acs_list_hat = list(clean_acs.cpu().numpy()), list(clean_acs_hat.detach().cpu().numpy())
+                batch_pesq_score = batch_pesq(clean_acs_list, clean_acs_list_hat, workers=self.num_workers)
 
-                metric_r = self.discriminator(clean_mag.unsqueeze(1), clean_mag.unsqueeze(1))
-                metric_g = self.discriminator(clean_mag.unsqueeze(1), clean_mag_hat_con.detach().unsqueeze(1))
-                
-                loss_disc_r = F.mse_loss(one_labels, metric_r.flatten())
+                disc_score_real = self.discriminator(clean_mag.unsqueeze(1), clean_mag.unsqueeze(1))
+                disc_score_fake = self.discriminator(clean_mag.unsqueeze(1), clean_mag_hat_recon.detach().unsqueeze(1))
+
+                loss_disc_r = F.mse_loss(one_labels, disc_score_real.flatten())
 
                 if batch_pesq_score is not None:
-                    loss_disc_g = F.mse_loss(batch_pesq_score.to(self.device), metric_g.flatten())
+                    loss_disc_g = F.mse_loss(batch_pesq_score.to(self.device), disc_score_fake.flatten())
                 else:
                     loss_disc_g = 0
 
                 loss_disc = loss_disc_r + loss_disc_g
-                
+
                 self.optim_disc.zero_grad()
                 loss_disc.backward()
                 self.optim_disc.step()
@@ -286,10 +279,10 @@ class Solver(object):
             loss_magnitude = F.mse_loss(clean_mag, clean_mag_hat)
             loss_phase = phase_losses(clean_pha, clean_pha_hat)
             loss_complex = F.mse_loss(clean_com, clean_com_hat) * 2
-            loss_consistency = F.mse_loss(clean_com_hat, clean_com_hat_con) * 2
+            loss_consistency = F.mse_loss(clean_com_hat, clean_com_hat_recon) * 2
 
-            metric_g = self.discriminator(clean_mag.unsqueeze(1), clean_mag_hat_con.unsqueeze(1))
-            loss_metric = F.mse_loss(metric_g.flatten(), one_labels)
+            disc_score_gen = self.discriminator(clean_mag.unsqueeze(1), clean_mag_hat_recon.unsqueeze(1))
+            loss_metric = F.mse_loss(disc_score_gen.flatten(), one_labels)
 
             loss_gen = loss_metric * self.loss.metric + \
                     loss_complex * self.loss.complex + \

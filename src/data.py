@@ -4,7 +4,6 @@ import torch.utils.data
 import torchaudio
 import math
 import numpy as np
-from torch.nn.utils.rnn import pad_sequence
 from scipy import signal
 
 import warnings

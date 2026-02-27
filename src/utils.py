@@ -3,12 +3,10 @@ import time
 import torch
 import numpy as np
 import logging
-import re
 import importlib
-from typing import Dict, List, Optional, Union, Any
+from typing import Dict, List, Any
 from joblib import Parallel, delayed
 from contextlib import contextmanager
-import atexit
 from pesq import pesq
 
 def anti_wrapping_function(x):
@@ -63,12 +61,6 @@ def copy_state(state):
     return {k: v.cpu().clone() for k, v in state.items()}
 
 
-def serialize_model(model):
-    args, kwargs = model._init_args_kwargs
-    state = copy_state(model.state_dict())
-    return {"class": model.__class__, "args": args, "kwargs": kwargs, "state": state}
-
-
 @contextmanager
 def swap_state(model, state):
     """
@@ -93,15 +85,6 @@ def pull_metric(history, name):
         if name in metrics:
             out.append(metrics[name])
     return out
-
-def expand_path(path):
-    return os.path.abspath(os.path.expanduser(path))
-
-def basename(path):
-    filename, ext = os.path.splitext(os.path.basename(path))
-    return filename, ext
-
-
 
 class LogProgress:
     """
@@ -135,9 +118,6 @@ class LogProgress:
     
     def append(self, **infos):
         self._infos.update(**infos)
-        
-    def _append(self, info):
-        self._infos.update(info)
 
     def __iter__(self):
         self._iterator = iter(self.iterable)
@@ -200,8 +180,8 @@ def load_model(model_lib: str, model_class_name: str, model_params: Dict[str, An
     Load model dynamically from models directory.
 
     Args:
-        model_lib: Model library name (e.g., "primeknet", "primeknet_gru")
-        model_class_name: Model class name (e.g., "PrimeKnet")
+        model_lib: Model library name (e.g., "backbone", "bafnet")
+        model_class_name: Model class name (e.g., "Backbone")
         model_params: Model parameters dictionary
         device: Device to load model on ('cuda' or 'cpu')
 
@@ -209,7 +189,7 @@ def load_model(model_lib: str, model_class_name: str, model_params: Dict[str, An
         Model instance loaded on specified device
 
     Example:
-        >>> model = load_model("primeknet", "PrimeKnet", params, "cuda")
+        >>> model = load_model("backbone", "Backbone", params, "cuda")
     """
     module = importlib.import_module(f"src.models.{model_lib}")
     model_class = getattr(module, model_class_name)
@@ -280,8 +260,8 @@ def load_model_config_from_checkpoint(checkpoint_path: str) -> Dict[str, Any]:
 
     Returns:
         Dictionary containing model configuration with keys:
-            - model_lib: Model library name (e.g., "primeknet")
-            - model_class: Model class name (e.g., "PrimeKnet")
+            - model_lib: Model library name (e.g., "backbone")
+            - model_class: Model class name (e.g., "Backbone")
             - param: Dictionary of model parameters
 
     Raises:
@@ -289,8 +269,8 @@ def load_model_config_from_checkpoint(checkpoint_path: str) -> Dict[str, Any]:
         KeyError: If checkpoint doesn't contain 'args' or 'args.model'
 
     Example:
-        >>> config = load_model_config_from_checkpoint("outputs/primeknet_exp/best.th")
-        >>> print(config['model_lib'])  # "primeknet"
+        >>> config = load_model_config_from_checkpoint("outputs/backbone_exp/best.th")
+        >>> print(config['model_lib'])  # "backbone"
         >>> print(config['param']['dense_channel'])  # 64
     """
     if not os.path.exists(checkpoint_path):
@@ -341,6 +321,9 @@ def get_stft_args_from_config(model_args) -> Dict[str, Any]:
     """
     Extract STFT arguments from model configuration.
 
+    Supports both new (n_fft/hop_size/win_size) and legacy (fft_len/hop_len/win_len)
+    parameter names for backward compatibility with old checkpoint configs.
+
     Args:
         model_args: Model configuration object with param attributes
 
@@ -351,10 +334,13 @@ def get_stft_args_from_config(model_args) -> Dict[str, Any]:
         >>> stft_args = get_stft_args_from_config(config.model)
         >>> # Returns: {"n_fft": 400, "hop_size": 100, "win_size": 400, "compress_factor": 0.3}
     """
-    fft_len = model_args.param.fft_len
+    param = model_args.param
+    n_fft = param.get("n_fft", None) or param.get("fft_len", 400)
+    hop_size = param.get("hop_size", None) or param.get("hop_len", n_fft // 4)
+    win_size = param.get("win_size", None) or param.get("win_len", n_fft)
     return {
-        "n_fft": fft_len,
-        "hop_size": model_args.param.get("hop_len", fft_len // 4),
-        "win_size": model_args.param.get("win_len", fft_len),
-        "compress_factor": model_args.param.get("compress_factor", 1.0)
+        "n_fft": n_fft,
+        "hop_size": hop_size,
+        "win_size": win_size,
+        "compress_factor": param.get("compress_factor", 1.0)
     }

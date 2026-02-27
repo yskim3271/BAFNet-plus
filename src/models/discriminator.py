@@ -7,12 +7,11 @@ class LearnableSigmoid(nn.Module):
         super().__init__()
         self.beta = beta
         self.slope = nn.Parameter(torch.ones(in_features))
-        self.slope.requiresGrad = True
 
     def forward(self, x):
         return self.beta * torch.sigmoid(self.slope * x)
 
-class MetricGAN_Discriminator(nn.Module):
+class MetricGANDiscriminator(nn.Module):
     def __init__(self, ndf=16, in_channel=2):
         super().__init__()
         self.layers = nn.Sequential(

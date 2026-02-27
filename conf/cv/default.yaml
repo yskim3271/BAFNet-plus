@@ -1,0 +1,7 @@
+# Cross-validation settings (disabled by default)
+enabled: false
+fold_index: 1         # Current fold (1-based, 1 to num_folds)
+num_folds: 5          # Total number of folds
+held_out_size: 5587   # Held-out size for folds 1 to (num_folds-1)
+dev_ratio: 0.4516     # Dev ratio within held-out (2523/5587)
+shuffle: true         # Whether to shuffle data before splitting

@@ -34,44 +34,6 @@ def save_wavs(wavs_dict: Dict[str, torch.Tensor], filepath: str, sr: int = DEFAU
             logging.getLogger(__name__).error(f"Failed to save {filepath}_{key}.wav: {e}")
 
 
-def write(wav: torch.Tensor, filename: str, sr: int = DEFAULT_SAMPLE_RATE) -> None:
-    """Write a single waveform to file with normalization.
-
-    Args:
-        wav: Waveform tensor
-        filename: Output filename
-        sr: Sample rate in Hz
-    """
-    # Normalize audio if it prevents clipping
-    wav = wav / max(wav.abs().max().item(), 1)
-    try:
-        torchaudio.save(filename, wav.cpu(), sr)
-    except Exception as e:
-        logging.getLogger(__name__).error(f"Failed to save {filename}: {e}")
-
-
-def enhance_multiple_snr(
-    args: Any,
-    model: torch.nn.Module,
-    dataloader_list: Dict[int, DataLoader],
-    logger: logging.Logger,
-    epoch: Optional[int] = None,
-    local_out_dir: str = "samples"
-) -> None:
-    """Run enhancement on multiple SNR levels.
-
-    Args:
-        args: Configuration object
-        model: Enhancement model
-        dataloader_list: Dictionary mapping SNR values to dataloaders
-        logger: Logger instance
-        epoch: Training epoch number (for naming)
-        local_out_dir: Output directory
-    """
-    for snr, data_loader in dataloader_list.items():
-        enhance(args, model, data_loader, logger, snr, epoch, local_out_dir)
-
-
 def _get_model_input(
     bcs: torch.Tensor,
     noisy_acs: torch.Tensor,
@@ -228,56 +190,6 @@ if __name__ == "__main__":
     parser.add_argument("--output_dir", type=str, default="samples", help="Output directory for enhanced samples. default is samples")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu", help="Specifies the device (cuda or cpu).")
 
-    # Frozen/Folded normalization options
-    parser.add_argument(
-        "--norm_infer_mode",
-        type=str,
-        choices=["instance", "frozen", "folded"],
-        default="instance",
-        help="Normalization inference mode: "
-             "instance (default, original IN), "
-             "frozen (fixed stats from calibration), "
-             "folded (IN absorbed into Conv)"
-    )
-    parser.add_argument(
-        "--norm_stats_path",
-        type=str,
-        default=None,
-        help="Path to *.normstats.pt file for frozen/folded mode. "
-             "If not specified, looks for model.normstats.pt in chkpt_dir"
-    )
-
-    # SCA (Squeeze-Channel-Attention) streaming options
-    parser.add_argument(
-        "--sca_mode",
-        type=str,
-        choices=["global", "ema", "local"],
-        default="global",
-        help="SCA squeeze mode: "
-             "global (default, AdaptiveAvgPool1d equivalent), "
-             "ema (exponential moving average for streaming), "
-             "local (last W frames only)"
-    )
-    parser.add_argument(
-        "--sca_ema_alpha",
-        type=float,
-        default=0.99,
-        help="EMA decay factor for sca_mode=ema (default: 0.99). "
-             "Higher values = slower adaptation, more stable."
-    )
-    parser.add_argument(
-        "--sca_local_window",
-        type=int,
-        default=32,
-        help="Window size for sca_mode=local (default: 32 frames)"
-    )
-    parser.add_argument(
-        "--sca_stateful_eval",
-        action="store_true",
-        default=True,
-        help="Maintain EMA state across chunks in eval mode (default: True)"
-    )
-
     # Stateful Convolution options
     parser.add_argument(
         "--use_stateful_conv",
@@ -312,61 +224,6 @@ if __name__ == "__main__":
     model = load_model(model_lib, model_class_name, model_args.param, device)
     model = load_checkpoint(model, chkpt_dir, chkpt_file, device)
 
-    # Apply frozen/folded normalization if requested
-    if args.norm_infer_mode != "instance":
-        from pathlib import Path
-        from src.calibration.calibrator import INCalibrator
-
-        # Find stats file
-        if args.norm_stats_path is not None:
-            stats_path = args.norm_stats_path
-        else:
-            stats_path = os.path.join(chkpt_dir, "model.normstats.pt")
-
-        if not os.path.exists(stats_path):
-            raise FileNotFoundError(
-                f"Calibration stats not found at {stats_path}. "
-                f"Run 'python -m src.calibrate --chkpt_dir {chkpt_dir}' first, "
-                f"or specify --norm_stats_path"
-            )
-
-        logger.info(f"Loading calibration stats from: {stats_path}")
-        stats, meta = INCalibrator.load(stats_path)
-        logger.info(f"  Modules: {len(stats)}, Model: {meta.get('model_class', 'unknown')}")
-
-        if args.norm_infer_mode == "frozen":
-            from src.models.streaming.converters import replace_in_with_frozen
-            logger.info("Applying frozen normalization...")
-            model = replace_in_with_frozen(model, stats, verbose=True)
-
-        elif args.norm_infer_mode == "folded":
-            from src.calibration.folding import fold_model
-            logger.info("Applying conv folding...")
-            model = fold_model(model, stats, verbose=True)
-
-        model.to(device)
-
-    # Apply SCA replacement if not using global mode
-    if args.sca_mode != "global":
-        from src.models.streaming.converters import replace_sca_with_streaming, get_sca_info
-
-        logger.info(f"Replacing SCA with streaming mode: {args.sca_mode}")
-        logger.info(f"  EMA alpha: {args.sca_ema_alpha}")
-        logger.info(f"  Local window: {args.sca_local_window}")
-        logger.info(f"  Stateful eval: {args.sca_stateful_eval}")
-
-        model = replace_sca_with_streaming(
-            model,
-            mode=args.sca_mode,
-            ema_alpha=args.sca_ema_alpha,
-            local_window=args.sca_local_window,
-            stateful_eval=args.sca_stateful_eval,
-            verbose=True,
-        )
-
-        sca_info = get_sca_info(model)
-        logger.info(f"SCA replacement complete: {sca_info['streaming_sca_count']} modules")
-
     # Apply stateful convolutions if requested
     if args.use_stateful_conv:
         from src.models.streaming.converters import (
@@ -400,9 +257,12 @@ if __name__ == "__main__":
     else:
         raise ValueError(f"Unknown dataset: {args.dataset}")
 
-    # Parse file lists using utility function
-    noise_test_list = parse_file_list(args.noise_dir, args.noise_test)
-    rir_test_list = parse_file_list(args.rir_dir, args.rir_test)
+    # Parse file lists using utility function (skip if bcs_only)
+    if bcs_only:
+        noise_test_list, rir_test_list = [], []
+    else:
+        noise_test_list = parse_file_list(args.noise_dir, args.noise_test)
+        rir_test_list = parse_file_list(args.rir_dir, args.rir_test)
 
     tt_dataset = Noise_Augmented_Dataset(datapair_list=testset,
                                          noise_list=noise_test_list,
@@ -433,8 +293,6 @@ if __name__ == "__main__":
     logger.info(f"Model: {model_class_name}")
     logger.info(f"Checkpoint: {chkpt_dir}")
     logger.info(f"Device: {device}")
-    logger.info(f"Norm inference mode: {args.norm_infer_mode}")
-    logger.info(f"SCA mode: {args.sca_mode}" + (f" (alpha={args.sca_ema_alpha})" if args.sca_mode == "ema" else "") + (f" (window={args.sca_local_window})" if args.sca_mode == "local" else ""))
     logger.info(f"Stateful conv: {args.use_stateful_conv}")
     logger.info(f"Output directory: {local_out_dir}")
     os.makedirs(local_out_dir, exist_ok=True)

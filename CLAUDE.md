@@ -10,10 +10,10 @@ pip install -r requirements.txt
 pip install -e ".[dev]"
 
 # Train model
-CUDA_VISIBLE_DEVICES=0 python -m src.train +model=primeknet_gru_masking +dset=taps
+CUDA_VISIBLE_DEVICES=0 python -m src.train +model=backbone_masking +dset=taps
 
 # Resume training
-python -m src.train +model=primeknet_gru_masking +dset=taps \
+python -m src.train +model=backbone_masking +dset=taps \
   continue_from=outputs/checkpoint_dir
 
 # Run inference
@@ -26,6 +26,9 @@ python results/track_experiment.py --update
 
 # Compute receptive field and latency
 python src/compute_rf.py --experiment prk_1117_1 --csv results/experiments.csv
+
+# Streaming inference with LaCoSENet wrapper
+# (see src/models/streaming/lacosenet.py for API details)
 ```
 
 ### Linting and Testing
@@ -38,7 +41,7 @@ make test
 pytest tests/test_models.py -v
 
 # Run single test
-pytest tests/test_models.py::TestPrimeKnet::test_primeknet_forward -v
+pytest tests/test_models.py::TestBackbone::test_backbone_forward -v
 
 # Format code
 make format
@@ -56,10 +59,10 @@ make lint
 - **Formatting**: Use Black for auto-formatting
 - **Import sorting**: Use isort with Black profile
 - **Naming conventions**:
-  - Classes: `PascalCase` (e.g., `PrimeKnet`, `DenseEncoder`)
+  - Classes: `PascalCase` (e.g., `Backbone`, `DenseEncoder`)
   - Functions/methods: `snake_case` (e.g., `mag_pha_stft`, `tailor_dB_FS`)
   - Constants: `UPPER_SNAKE_CASE` (e.g., `DEFAULT_SR`)
-  - Private methods: `_leading_underscore` (e.g., `_serialize`)
+  - Private methods: `_leading_underscore` (e.g., `_run_one_epoch`)
 
 ### Documentation
 - Use docstrings for all public functions, classes, and modules
@@ -94,7 +97,13 @@ def mag_pha_to_complex(mag: Tensor, pha: Tensor) -> Tensor:
 - `src/data.py`: Dataset and data augmentation logic
 - `src/stft.py`: STFT/iSTFT utilities
 - `src/utils.py`: Utility functions
-- `src/models/primeknet.py`: Model architectures
+- `src/models/backbone.py`: Backbone model architecture (BatchNorm2d, CausalConv1d SCA)
+- `src/models/streaming/`: Streaming inference modules
+  - `converters/`: Layer converters (conv, reshape_free)
+  - `layers/`: Stateful layers (stateful_conv, reshape_free, reshape_free_stateful)
+  - `lacosenet.py`: LaCoSENet streaming wrapper (dual-buffer lookahead)
+  - `utils.py`: StateFramesContext, prepare_streaming_model
+  - `cpu_optimizations.py`: BN folding for CPU inference
 - `results/track_experiment.py`: Experiment tracking and result parser
 
 ### Configuration
@@ -124,7 +133,7 @@ def mag_pha_to_complex(mag: Tensor, pha: Tensor) -> Tensor:
   - `test:` for tests
   - `refactor:` for refactoring
   - `style:` for formatting changes
-- Example: `feat: add PrimeKnet-Mamba variant`
+- Example: `feat: add Backbone-Mamba variant`
 
 ### Pull Requests
 - Create feature branches: `git checkout -b feature/your-feature`
@@ -147,7 +156,7 @@ To run a single test quickly during development:
 pytest tests/test_stft.py::TestSTFT::test_mag_pha_to_complex_shape -v
 
 # Test entire class
-pytest tests/test_models.py::TestPrimeKnet -v
+pytest tests/test_models.py::TestBackbone -v
 
 # Test with coverage
 pytest tests/test_models.py -v --cov=src.models --cov-report=term-missing
@@ -173,8 +182,18 @@ BAFNet-plus/
 │   ├── evaluate.py       # Evaluation script
 │   ├── compute_metrics.py # Metric computation
 │   └── models/           # Model architectures
+│       ├── backbone.py   # Backbone (BatchNorm2d, CausalConv1d SCA)
+│       ├── bafnet.py
+│       ├── discriminator.py  # MetricGAN discriminator
+│       └── streaming/    # Streaming inference
+│           ├── lacosenet.py      # LaCoSENet streaming wrapper
+│           ├── utils.py          # StateFramesContext, model preparation
+│           ├── cpu_optimizations.py  # BN folding
+│           ├── converters/       # Layer converters (conv, reshape_free)
+│           └── layers/           # Stateful layers
 ├── conf/                  # Hydra configurations
 ├── dataset/               # Dataset file lists
+├── scripts/               # Experiment scripts
 ├── tests/                 # Unit tests
 ├── outputs/               # Training outputs (auto-generated)
 └── results/               # Experiment tracking
@@ -204,7 +223,7 @@ BAFNet-plus/
 
 ### Computing Receptive Field and Latency
 
-The `src/compute_rf.py` tool calculates the receptive field size and algorithmic latency of PrimeKnet models based on their hyperparameters.
+The `src/compute_rf.py` tool calculates the receptive field size and algorithmic latency of Backbone models based on their hyperparameters.
 
 **Usage:**
 ```bash
@@ -226,7 +245,7 @@ python src/compute_rf.py --dense_depth 4 --num_tsblock 4 \
 **Example output:**
 ```
 Configuration:
-  Model: PrimeKnet
+  Model: Backbone
   Causal: True
   Encoder Padding: (1.0, 0.0)  # Fully causal
 
@@ -335,3 +354,24 @@ export CUDA_VISIBLE_DEVICES=""
 - **PyTorch Docs**: https://pytorch.org/docs/stable/index.html
 - **Black Formatting**: https://black.readthedocs.io/
 - **Pytest Guide**: https://docs.pytest.org/
+
+## 코딩 가이드라인 (Karpathy-derived)
+
+### 1. Think Before Coding
+- 가정을 명시적으로 밝힌다. 불확실하면 먼저 질문한다.
+- 여러 해석이 가능하면 선택지를 제시한다 — 임의로 하나를 고르지 않는다.
+- 더 단순한 접근이 존재하면 말한다. 반박이 필요하면 반박한다.
+- 혼란스러우면 멈추고, 무엇이 불명확한지 짚고 질문한다.
+
+### 2. Simplicity First
+- 요청된 것만 구현한다. 투기적 기능, 단일 용도 추상화, 요청되지 않은 "유연성"이나 "설정 가능성"을 추가하지 않는다.
+- 200줄로 작성한 코드가 50줄로 가능하면 다시 쓴다.
+
+### 3. Surgical Changes
+- 요청과 직접 관련된 코드만 수정한다. 인접 코드, 주석, 포맷팅을 "개선"하지 않는다.
+- 깨지지 않은 것을 리팩토링하지 않는다. 기존 스타일을 따른다.
+- 내 변경으로 인해 미사용된 import/변수/함수는 제거한다. 기존 dead code는 요청 없이 건드리지 않는다.
+
+### 4. Goal-Driven Execution
+- 성공 기준을 먼저 정의하고, 검증될 때까지 루프한다.
+- 다단계 작업은 검증 체크포인트가 포함된 간단한 계획을 먼저 제시한다.

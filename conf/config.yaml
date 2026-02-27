@@ -1,13 +1,14 @@
 defaults:
   - _self_
+  - cv: default
   - override hydra/job_logging: colorlog
   - override hydra/hydra_logging: colorlog
 
 # Dataset related
 sampling_rate: 16000
-segment: 64000
-stride: 32000
-shift: 32000
+segment: auto       # "auto" -> RF-based auto calculation, or integer for manual
+stride: auto        # "auto" -> segment // 2, or integer for manual
+shift: auto         # "auto" -> segment // 2, or integer for manual
 n_fft: 400
 hop_size: 100
 win_size: 400

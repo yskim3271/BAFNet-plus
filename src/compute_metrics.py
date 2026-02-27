@@ -8,34 +8,34 @@ import math
 from scipy import signal
 from pesq import pesq
 
-''' 
+'''
 This is a python script which can be regarded as implementation of matlab script "compute_metrics.m".
 
-Usage: 
-    pesq, csig, cbak, covl, ssnr, stoi = compute_metrics(cleanFile, enhancedFile, Fs, path)
-    cleanFile: clean audio as array or path if path is equal to 1
-    enhancedFile: enhanced audio as array or path if path is equal to 1
+Usage:
+    pesq, csig, cbak, covl, ssnr, stoi = compute_metrics(clean_file, enhanced_file, Fs, path)
+    clean_file: clean audio as array or path if path is equal to 1
+    enhanced_file: enhanced audio as array or path if path is equal to 1
     Fs: sampling rate, usually equals to 8000 or 16000 Hz
-    path: whether the "cleanFile" and "enhancedFile" arguments are in .wav format or in numpy array format, 
+    path: whether the "clean_file" and "enhanced_file" arguments are in .wav format or in numpy array format,
           1 indicates "in .wav format"
-          
+
 Example call:
     pesq_output, csig_output, cbak_output, covl_output, ssnr_output, stoi_output = \
             compute_metrics(target_audio, output_audio, 16000, 0)
 '''
 
 
-def compute_metrics(cleanFile, enhancedFile, Fs=16000, path=False):
+def compute_metrics(clean_file, enhanced_file, Fs=16000, path=False):
     alpha = 0.95
 
     if path:
-        sampling_rate1, data1 = wavfile.read(cleanFile)
-        sampling_rate2, data2 = wavfile.read(enhancedFile)
+        sampling_rate1, data1 = wavfile.read(clean_file)
+        sampling_rate2, data2 = wavfile.read(enhanced_file)
         if sampling_rate1 != sampling_rate2:
             raise ValueError('The two files do not match!\n')
     else:
-        data1 = cleanFile
-        data2 = enhancedFile
+        data1 = clean_file
+        data2 = enhanced_file
         sampling_rate1 = Fs
         sampling_rate2 = Fs
 
