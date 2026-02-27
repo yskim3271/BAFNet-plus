@@ -5,7 +5,9 @@ This package provides functions to transform standard models into
 streaming-compatible versions:
 
 - conv_converter: Conv -> StatefulConv
-- reshape_free_converter: TSBlock -> ReshapeFreeTSBlock (batch_size=1 optimized)
+
+TSBlock conversion is now handled directly by StreamingTSBlock.from_backbone_tsblock()
+and StreamingTSBlock.convert_sequence_block() in layers/tsblock.py.
 
 Example:
     >>> from src.models.streaming.converters import (

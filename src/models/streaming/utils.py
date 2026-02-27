@@ -214,25 +214,18 @@ class ModelPrepConfig:
 
     This covers the common settings for preparing a model for streaming:
     - Stateful convolution conversion
-    - Reshape-free TSBlock conversion
+    - Streaming TSBlock conversion (always enabled)
 
     Streaming-specific settings (chunk_size, lookahead, etc.) are handled
     by each wrapper class separately.
 
     Attributes:
         use_stateful_conv: Convert convolutions to stateful versions
-        use_reshape_free: Convert TSBlocks to reshape-free versions
-            - Eliminates reshape operations (16 per inference)
-            - Unifies batch dimension (all states have batch=1)
-            - Reduces state count by ~48% (100 -> 52)
-            - Recommended for NPU deployment
         device: Target device (auto-detect if None)
         verbose: Print loading information
     """
 
     use_stateful_conv: bool = True
-    use_reshape_free: bool = False
-    fold_bn: bool = False
 
     device: Optional[str] = None
     verbose: bool = True
@@ -288,12 +281,12 @@ def load_model_from_checkpoint(
     return model, model_args
 
 
-def apply_reshape_free_tsblock(
+def apply_streaming_tsblock(
     model: nn.Module,
     verbose: bool = True,
 ) -> Tuple[nn.Module, nn.ModuleList, int]:
     """
-    Convert TSBlocks to stateful reshape-free versions.
+    Convert TSBlocks to streaming versions.
 
     This transformation:
     - Eliminates reshape operations (permute + contiguous)
@@ -306,33 +299,31 @@ def apply_reshape_free_tsblock(
         verbose: Print information
 
     Returns:
-        Tuple of (model, rf_sequence_block, num_ts_blocks):
+        Tuple of (model, streaming_tsblocks, num_ts_blocks):
         - model: Original model (sequence_block is NOT modified in-place)
-        - rf_sequence_block: ModuleList of StatefulReshapeFreeTSBlocks
+        - streaming_tsblocks: ModuleList of StreamingTSBlocks
         - num_ts_blocks: Number of converted TSBlocks
     """
-    from src.models.streaming.converters.reshape_free_converter import (
-        convert_sequence_block_to_stateful_reshape_free,
-    )
+    from src.models.streaming.layers.tsblock import StreamingTSBlock
 
     if not hasattr(model, "sequence_block"):
         if verbose:
-            print("  No sequence_block found, skipping reshape-free conversion")
+            print("  No sequence_block found, skipping streaming TSBlock conversion")
         return model, nn.ModuleList(), 0
 
-    # Convert to stateful reshape-free (returns ModuleList)
-    rf_sequence_block = convert_sequence_block_to_stateful_reshape_free(
+    # Convert to streaming TSBlocks (returns ModuleList)
+    streaming_tsblocks = StreamingTSBlock.convert_sequence_block(
         model.sequence_block,
     )
 
-    num_blocks = len(rf_sequence_block)
+    num_blocks = len(streaming_tsblocks)
 
     if verbose:
-        print(f"  Applied Reshape-Free TSBlock ({num_blocks} blocks)")
+        print(f"  Applied Streaming TSBlock ({num_blocks} blocks)")
         print(f"    - Batch dimension unified to B=1")
         print(f"    - freq_stage now stateless")
 
-    return model, rf_sequence_block, num_blocks
+    return model, streaming_tsblocks, num_blocks
 
 
 def apply_stateful_conv(
@@ -389,9 +380,8 @@ def prepare_streaming_model(
 
     This is the main entry point that combines all preparation steps:
     1. Load model from checkpoint
-    2. BN Folding (if fold_bn)
-    3. Optionally convert TSBlocks to reshape-free versions
-    4. Convert to Stateful Convolutions
+    2. Convert TSBlocks to streaming versions (always enabled)
+    3. Convert to Stateful Convolutions
 
     Args:
         chkpt_dir: Checkpoint directory path
@@ -404,6 +394,7 @@ def prepare_streaming_model(
             - chkpt_dir: Checkpoint directory
             - use_stateful_conv: Whether stateful conv was applied
             - stateful_conv_count: Number of converted layers
+            - streaming_tsblocks: ModuleList of StreamingTSBlocks
             - model_args: Original model configuration (OmegaConf node)
 
     Example:
@@ -417,8 +408,6 @@ def prepare_streaming_model(
         # Filter kwargs to only include valid ModelPrepConfig fields
         valid_fields = {
             "use_stateful_conv",
-            "use_reshape_free",
-            "fold_bn",
             "device",
             "verbose",
         }
@@ -435,53 +424,30 @@ def prepare_streaming_model(
     if config.verbose:
         print(f"Preparing streaming model from: {chkpt_dir}")
         print(f"  Device: {device}")
-        if config.use_reshape_free:
-            print(f"  Reshape-Free: enabled")
 
     # Step 1: Load model
     model, model_args = load_model_from_checkpoint(
         chkpt_dir, chkpt_file, device, config.verbose
     )
 
-    # Step 2: BN Folding (before structural transforms preserve Sequential structure)
-    bn_fused = 0
-    if config.fold_bn:
-        from src.models.streaming.cpu_optimizations import fold_batchnorm
+    # Step 2: Apply Streaming TSBlock (always enabled)
+    model, streaming_tsblocks, tsblock_count = apply_streaming_tsblock(
+        model,
+        verbose=config.verbose,
+    )
 
-        model, bn_fused = fold_batchnorm(model)
-        if config.verbose:
-            print(f"  BN Folding: {bn_fused} pairs fused")
-
-    # Step 3: Apply Reshape-Free TSBlock (if enabled)
-    rf_sequence_block = None
-    rf_block_count = 0
-    if config.use_reshape_free:
-        model, rf_sequence_block, rf_block_count = apply_reshape_free_tsblock(
-            model,
-            verbose=config.verbose,
-        )
-
-    # Step 4: Apply Stateful Conv (for encoder/decoder)
+    # Step 3: Apply Stateful Conv (for encoder/decoder)
     stateful_count = 0
     if config.use_stateful_conv:
         model, stateful_count = apply_stateful_conv(model, device, config.verbose)
-
-    cpu_stats = {}
-    if config.fold_bn:
-        cpu_stats = {
-            "bn_fused": bn_fused,
-        }
 
     # Build metadata
     metadata: Dict[str, Any] = {
         "chkpt_dir": chkpt_dir,
         "use_stateful_conv": config.use_stateful_conv,
         "stateful_conv_count": stateful_count,
-        "use_reshape_free": config.use_reshape_free,
-        "rf_sequence_block": rf_sequence_block,
-        "rf_block_count": rf_block_count,
-        "fold_bn": config.fold_bn,
-        "cpu_stats": cpu_stats,
+        "streaming_tsblocks": streaming_tsblocks,
+        "tsblock_count": tsblock_count,
         "model_args": model_args,
     }
 
@@ -502,5 +468,5 @@ __all__ = [
     "prepare_streaming_model",
     "load_model_from_checkpoint",
     "apply_stateful_conv",
-    "apply_reshape_free_tsblock",
+    "apply_streaming_tsblock",
 ]

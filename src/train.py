@@ -25,145 +25,6 @@ from src.utils import load_model, parse_file_list
 torch.backends.cudnn.benchmark = True
 
 
-def create_kfold_splits(dataset, fold_index, num_folds=5,
-                        held_out_size=5587, dev_ratio=0.4516,
-                        shuffle=True, seed=2039):
-    """Speaker-disjoint K-Fold Cross Validation 데이터 분할.
-
-    Sorted-greedy bin packing 알고리즘으로 화자 단위 분할을 수행하여,
-    동일 화자가 train과 held-out에 동시에 존재하는 data leakage를 방지한다.
-
-    Args:
-        dataset: 전체 HuggingFace dataset (train+dev+test 합친 것)
-        fold_index: 현재 fold (1-based, 1~num_folds)
-        num_folds: 전체 fold 수
-        held_out_size: fold 1~(num_folds-1)의 target held-out 크기
-        dev_ratio: held-out 내 dev 비율
-        shuffle: 화자 리스트 셔플 여부
-        seed: 랜덤 시드
-
-    Returns:
-        trainset, devset, testset, fold_info (재현성 검증용 정보)
-    """
-    from collections import defaultdict
-
-    total = len(dataset)
-    speaker_ids = dataset["speaker_id"]
-
-    # 1. speaker → [indices] 매핑 구축
-    speaker_to_indices = defaultdict(list)
-    for idx, spk in enumerate(speaker_ids):
-        speaker_to_indices[spk].append(idx)
-
-    speakers = list(speaker_to_indices.keys())
-    total_speakers = len(speakers)
-
-    # 2. seed 기반 셔플 (tie-breaking용)
-    rng = np.random.default_rng(seed)
-    if shuffle:
-        rng.shuffle(speakers)
-
-    # 3. 샘플 수 내림차순 stable sort (셔플 순서 보존)
-    speakers.sort(key=lambda s: len(speaker_to_indices[s]), reverse=True)
-
-    # 4. Fold별 target 크기 계산
-    fold_targets = []
-    for i in range(num_folds):
-        if i < num_folds - 1:
-            fold_targets.append(held_out_size)
-        else:
-            fold_targets.append(total - held_out_size * (num_folds - 1))
-
-    # 5. Sorted-greedy bin packing: 각 화자를 (target - current) 차이가 가장 큰 bin에 배정
-    fold_speakers = [[] for _ in range(num_folds)]
-    fold_sizes = [0] * num_folds
-
-    for spk in speakers:
-        spk_size = len(speaker_to_indices[spk])
-        # (target - current) 차이가 가장 큰 bin 선택
-        best_fold = max(range(num_folds), key=lambda f: fold_targets[f] - fold_sizes[f])
-        fold_speakers[best_fold].append(spk)
-        fold_sizes[best_fold] += spk_size
-
-    # 6. 현재 fold의 held-out / train 분리
-    held_out_spks = fold_speakers[fold_index - 1]
-    train_spks = []
-    for i in range(num_folds):
-        if i != fold_index - 1:
-            train_spks.extend(fold_speakers[i])
-
-    # held-out 인덱스 수집
-    held_out_indices = []
-    for spk in held_out_spks:
-        held_out_indices.extend(speaker_to_indices[spk])
-
-    train_indices = []
-    for spk in train_spks:
-        train_indices.extend(speaker_to_indices[spk])
-
-    # 7. held-out 화자를 dev/test로 speaker 단위 분할
-    held_out_total = len(held_out_indices)
-    dev_target = int(held_out_total * dev_ratio)
-
-    dev_spks = []
-    test_spks = []
-    dev_count = 0
-
-    # 화자 리스트를 seed 기반으로 셔플 후 누적 할당
-    held_out_spks_shuffled = list(held_out_spks)
-    rng.shuffle(held_out_spks_shuffled)
-
-    for spk in held_out_spks_shuffled:
-        spk_size = len(speaker_to_indices[spk])
-        if dev_count + spk_size <= dev_target or len(dev_spks) == 0:
-            dev_spks.append(spk)
-            dev_count += spk_size
-        else:
-            test_spks.append(spk)
-
-    dev_indices = []
-    for spk in dev_spks:
-        dev_indices.extend(speaker_to_indices[spk])
-
-    test_indices = []
-    for spk in test_spks:
-        test_indices.extend(speaker_to_indices[spk])
-
-    # Dataset 생성
-    trainset = dataset.select(train_indices)
-    devset = dataset.select(dev_indices)
-    testset = dataset.select(test_indices)
-
-    # speaker_to_fold 매핑 생성
-    speaker_to_fold = {}
-    for fi in range(num_folds):
-        for spk in fold_speakers[fi]:
-            speaker_to_fold[spk] = fi + 1  # 1-based
-
-    # 재현성 검증용 정보
-    fold_info = {
-        "fold_index": fold_index,
-        "num_folds": num_folds,
-        "seed": seed,
-        "shuffle": shuffle,
-        "total_samples": total,
-        "total_speakers": total_speakers,
-        "train_size": len(trainset),
-        "dev_size": len(devset),
-        "test_size": len(testset),
-        "held_out_size_config": held_out_size,
-        "held_out_size_actual": len(held_out_indices),
-        "dev_ratio": dev_ratio,
-        "all_fold_sizes": fold_sizes,
-        "held_out_speakers": sorted(held_out_spks),
-        "dev_speakers": sorted(dev_spks),
-        "test_speakers": sorted(test_spks),
-        "speaker_to_fold": speaker_to_fold,
-    }
-
-    return trainset, devset, testset, fold_info
-
-
 def terminate_child_processes():
     current_process = psutil.Process(os.getpid())
     children = current_process.children(recursive=True)
@@ -244,23 +105,14 @@ def run(args):
         # Collect pretrained parameters (mapping + masking)
         pretrained_params = list(model.mapping.parameters()) + list(model.masking.parameters())
 
-        # Collect fusion module parameters (BAFNet v1 or v2)
+        # Collect fusion module parameters (CNN-based fusion)
         fusion_params = []
-        if hasattr(model, 'conv_depth'):
-            # BAFNet v1: CNN-based fusion
-            for i in range(model.conv_depth):
-                fusion_params.extend(getattr(model, f"convblock_{i}").parameters())
-            fusion_params.extend(model.sigmoid.parameters())
-            fusion_name = 'bafnet_cnn'
-        elif hasattr(model, 'fusion'):
-            # BAFNet v2: Mamba-based fusion
-            fusion_params.extend(model.fusion.parameters())
-            fusion_name = 'bafnet_fusion'
-        else:
-            raise ValueError("Model must have either 'conv_depth' (v1) or 'fusion' (v2) attribute")
+        for i in range(model.conv_depth):
+            fusion_params.extend(getattr(model, f"convblock_{i}").parameters())
+        fusion_params.extend(model.sigmoid.parameters())
 
         # Build param_groups
-        fusion_lr = finetune_cfg.get('fusion_lr', finetune_cfg.get('cnn_lr', args.lr))
+        fusion_lr = finetune_cfg.get('fusion_lr', args.lr)
         param_groups = [
             {
                 'params': pretrained_params,
@@ -272,7 +124,7 @@ def run(args):
                 'params': fusion_params,
                 'lr': fusion_lr,
                 'weight_decay': weight_decay,
-                'name': fusion_name
+                'name': 'fusion'
             }
         ]
 
@@ -329,40 +181,9 @@ def run(args):
     elif dset == "Vibravox":
         _dataset = load_dataset("yskim3271/vibravox_16k")
 
-    # K-Fold Cross Validation
-    cv_config = args.get("cv", {})
-    if cv_config.get("enabled", False):
-        # 전체 데이터 합치기
-        all_data = concatenate_datasets([
-            _dataset['train'],
-            _dataset['dev'],
-            _dataset['test']
-        ])
-        logger.info(f"[K-Fold CV] Fold {cv_config.fold_index}/{cv_config.num_folds}")
-        logger.info(f"[K-Fold CV] Total samples: {len(all_data)}")
-
-        # Fold별 분할
-        trainset, validset, testset, fold_info = create_kfold_splits(
-            dataset=all_data,
-            fold_index=cv_config.fold_index,
-            num_folds=cv_config.num_folds,
-            held_out_size=cv_config.get("held_out_size", 5587),
-            dev_ratio=cv_config.get("dev_ratio", 0.4516),
-            shuffle=cv_config.get("shuffle", True),
-            seed=args.seed
-        )
-
-        logger.info(f"[K-Fold CV] Train: {len(trainset)}, Dev: {len(validset)}, Test: {len(testset)}")
-
-        # fold 정보 저장 (재현성 검증용)
-        fold_info_path = os.path.join(os.getcwd(), "fold_info.yaml")
-        OmegaConf.save(OmegaConf.create(fold_info), fold_info_path)
-        logger.info(f"[K-Fold CV] Fold info saved to: {fold_info_path}")
-    else:
-        # 기존 방식 (원본 스플릿 사용)
-        trainset = _dataset['train']
-        validset = _dataset['dev']
-        testset = _dataset['test']
+    trainset = _dataset['train']
+    validset = _dataset['dev']
+    testset = _dataset['test']
 
     testset_list = [testset] * args.dset.test_augment_numb
     testset = concatenate_datasets(testset_list)

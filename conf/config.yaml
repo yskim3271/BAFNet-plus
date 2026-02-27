@@ -1,6 +1,5 @@
 defaults:
   - _self_
-  - cv: default
   - override hydra/job_logging: colorlog
   - override hydra/hydra_logging: colorlog
 
@@ -42,7 +41,6 @@ test_noise:
   deterministic: true
 
 batch_size: 4
-batch_size_valid: 1
 epochs: 200
 
 eval_every: 100  # compute test metrics every so epochs
@@ -68,17 +66,12 @@ device: cuda
 num_prints: 10
 num_workers: 5
 
-continue_from: 
-samples_dir: samples
+continue_from:
 log_dir: tensorbd
 save_code: true
 
 # Other stuff
 seed: 2039
-
-# NaN Debugging (enable these only when debugging NaN issues)
-debug_nan: false  # Enable comprehensive NaN detection and logging
-enable_anomaly_detection: false  # Enable PyTorch's anomaly detection (very slow!)
 
 # Hydra config
 hydra:

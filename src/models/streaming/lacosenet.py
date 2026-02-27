@@ -30,6 +30,9 @@ This approach provides:
 - Real future context from delayed processing (encoder/decoder lookahead)
 - Minimal additional latency beyond the required lookahead frames
 
+Note: Streaming TSBlock conversion is always enabled for optimal
+    streaming performance.
+
 Example (decoder-only asymmetric):
     >>> streaming = LaCoSENet.from_checkpoint(
     ...     chkpt_dir="results/experiments/prk_1117_1",
@@ -97,7 +100,7 @@ class LaCoSENet(nn.Module):
         win_size: int = 400,
         compress_factor: float = 0.3,
         sample_rate: int = 16000,
-        rf_sequence_block: Optional[nn.ModuleList] = None,
+        streaming_tsblocks: nn.ModuleList = None,
         freq_size: int = 100,
         stft_center: bool = True,
         disable_state_guard: bool = False,
@@ -117,7 +120,7 @@ class LaCoSENet(nn.Module):
             win_size: Window size
             compress_factor: Magnitude compression factor
             sample_rate: Audio sample rate in Hz
-            rf_sequence_block: Reshape-free TSBlock ModuleList (if enabled)
+            streaming_tsblocks: Streaming TSBlock ModuleList (required)
             freq_size: Frequency bins (for state initialization)
             disable_state_guard: If True, disable StateFramesContext so all
                 frames (including lookahead) update streaming state buffers.
@@ -125,8 +128,14 @@ class LaCoSENet(nn.Module):
         """
         super().__init__()
 
+        if streaming_tsblocks is None:
+            raise ValueError("streaming_tsblocks is required")
+
         # Ablation: disable selective state update
         self.disable_state_guard = disable_state_guard
+
+        # Infer type from model
+        self.infer_type = getattr(model, 'infer_type', 'masking')
 
         # Store model reference
         self.model = model
@@ -169,11 +178,10 @@ class LaCoSENet(nn.Module):
         self.latency_samples = self.total_lookahead * hop_size + self.stft_center_delay_samples
         self.latency_ms = self.latency_samples / sample_rate * 1000
 
-        # Reshape-free TSBlock support
-        self.rf_sequence_block = rf_sequence_block
-        self.use_reshape_free = rf_sequence_block is not None
+        # Reshape-free TSBlock (always enabled)
+        self.streaming_tsblocks = streaming_tsblocks
         self.freq_size = freq_size
-        self._rf_states: Optional[List[List[Dict[str, Tensor]]]] = None
+        self._tsblock_states: Optional[List[List[Dict[str, Tensor]]]] = None
 
         # Initialize buffers
         self._reset_buffers()
@@ -194,20 +202,16 @@ class LaCoSENet(nn.Module):
         self._ola_buffer = torch.zeros(self.ola_tail_size, dtype=torch.float32)
         self._ola_norm = torch.zeros(self.ola_tail_size, dtype=torch.float32)
 
-        if self.use_reshape_free and self.rf_sequence_block is not None:
-            self._rf_states = self._init_rf_states()
+        self._tsblock_states = self._init_tsblock_states()
 
-    def _init_rf_states(self) -> List[List[Dict[str, Tensor]]]:
-        """Initialize reshape-free TSBlock states."""
-        if self.rf_sequence_block is None:
-            return []
-
+    def _init_tsblock_states(self) -> List[List[Dict[str, Tensor]]]:
+        """Initialize streaming TSBlock states."""
         device = self.device
         dtype = next(self.model.parameters()).dtype
 
         all_states = []
-        for rf_block in self.rf_sequence_block:
-            block_states = rf_block.init_state(
+        for block in self.streaming_tsblocks:
+            block_states = block.init_state(
                 batch_size=1,
                 freq_size=self.freq_size,
                 device=device,
@@ -217,17 +221,14 @@ class LaCoSENet(nn.Module):
 
         return all_states
 
-    def _reset_rf_states(self) -> None:
-        """Reset reshape-free TSBlock states."""
-        if self.use_reshape_free:
-            self._rf_states = self._init_rf_states()
+    def _reset_tsblock_states(self) -> None:
+        """Reset streaming TSBlock states."""
+        self._tsblock_states = self._init_tsblock_states()
 
     def reset_state(self) -> None:
         """Reset all streaming state for a new audio stream."""
         self._reset_buffers()
-
-        if self.use_reshape_free:
-            self._reset_rf_states()
+        self._reset_tsblock_states()
 
         from src.models.streaming.converters.conv_converter import (
             reset_streaming_state,
@@ -258,7 +259,6 @@ class LaCoSENet(nn.Module):
             "latency_ms": self.latency_ms,
             "hop_size": self.hop_size,
             "sample_rate": self.sample_rate,
-            "use_reshape_free": self.use_reshape_free,
             "freq_size": self.freq_size,
         }
 
@@ -270,8 +270,6 @@ class LaCoSENet(nn.Module):
         chunk_size: int = 64,
         encoder_lookahead: int = 0,
         decoder_lookahead: int = 7,
-        use_reshape_free: bool = False,
-        fold_bn: bool = False,
         device: Optional[str] = None,
         verbose: bool = True,
         disable_state_guard: bool = False,
@@ -285,8 +283,6 @@ class LaCoSENet(nn.Module):
             chunk_size: Number of STFT frames per chunk
             encoder_lookahead: Frames for encoder lookahead
             decoder_lookahead: Frames for decoder lookahead
-            use_reshape_free: Convert TSBlocks to reshape-free versions
-            fold_bn: Apply BN folding for CPU inference
             device: Device to load model on
             verbose: Print loading information
             disable_state_guard: Disable selective state update (ablation)
@@ -303,8 +299,6 @@ class LaCoSENet(nn.Module):
             chkpt_dir=chkpt_dir,
             chkpt_file=chkpt_file,
             use_stateful_conv=True,
-            use_reshape_free=use_reshape_free,
-            fold_bn=fold_bn,
             device=device,
             verbose=verbose,
         )
@@ -312,8 +306,8 @@ class LaCoSENet(nn.Module):
         model_args = metadata["model_args"]
         model_params = model_args
         stateful_conv_count = metadata.get("stateful_conv_count", 0)
-        rf_sequence_block = metadata.get("rf_sequence_block", None)
-        rf_block_count = metadata.get("rf_block_count", 0)
+        streaming_tsblocks = metadata["streaming_tsblocks"]
+        tsblock_count = metadata.get("tsblock_count", 0)
 
         enc_padding = getattr(model_params, 'encoder_padding_ratio', [1.0, 0.0])
         dec_padding = getattr(model_params, 'decoder_padding_ratio', [1.0, 0.0])
@@ -342,7 +336,7 @@ class LaCoSENet(nn.Module):
             n_fft=n_fft,
             win_size=win_size,
             compress_factor=compress_factor,
-            rf_sequence_block=rf_sequence_block,
+            streaming_tsblocks=streaming_tsblocks,
             freq_size=freq_size,
             stft_center=stft_center,
             disable_state_guard=disable_state_guard,
@@ -350,11 +344,10 @@ class LaCoSENet(nn.Module):
 
         instance._streaming_config = {
             "chkpt_dir": chkpt_dir,
-            "use_reshape_free": use_reshape_free,
             "encoder_padding_ratio": enc_padding,
             "decoder_padding_ratio": dec_padding,
             "stateful_conv_count": stateful_conv_count,
-            "rf_block_count": rf_block_count,
+            "tsblock_count": tsblock_count,
             "model_class": "Backbone",
         }
 
@@ -363,8 +356,7 @@ class LaCoSENet(nn.Module):
             print(f"  Encoder lookahead: {encoder_lookahead} frames")
             print(f"  Decoder lookahead: {decoder_lookahead} frames")
             print(f"  Total latency: {instance.latency_ms:.1f}ms")
-            if use_reshape_free:
-                print(f"  Reshape-Free: {rf_block_count} TSBlocks converted")
+            print(f"  Streaming TSBlocks: {tsblock_count} blocks converted")
 
         return instance
 
@@ -400,22 +392,15 @@ class LaCoSENet(nn.Module):
 
         with StateFramesContext(None if self.disable_state_guard else valid_frames):
             encoded = self.model.dense_encoder(x)
-
-            if self.use_reshape_free and self.rf_sequence_block is not None:
-                ts_out = self._process_rf_sequence_block(encoded)
-            else:
-                ts_out = self.model.sequence_block(encoded)
+            ts_out = self._process_streaming_tsblocks(encoded)
 
         return mag, ts_out, valid_frames
 
-    def _process_rf_sequence_block(self, x: Tensor) -> Tensor:
-        """Process through reshape-free TSBlocks with explicit state management."""
-        if self.rf_sequence_block is None or self._rf_states is None:
-            raise RuntimeError("Reshape-free sequence block not initialized")
-
-        for i, rf_block in enumerate(self.rf_sequence_block):
-            x, new_states = rf_block(x, self._rf_states[i])
-            self._rf_states[i] = new_states
+    def _process_streaming_tsblocks(self, x: Tensor) -> Tensor:
+        """Process through streaming TSBlocks with explicit state management."""
+        for i, block in enumerate(self.streaming_tsblocks):
+            x, new_states = block(x, self._tsblock_states[i])
+            self._tsblock_states[i] = new_states
 
         return x
 
@@ -440,7 +425,10 @@ class LaCoSENet(nn.Module):
             mask = self.model.mask_decoder(features).squeeze(1).transpose(1, 2)
             est_pha = self.model.phase_decoder(features).squeeze(1).transpose(1, 2)
 
-        est_mag = chunk_mag * mask
+        if self.infer_type == 'masking':
+            est_mag = chunk_mag * mask
+        else:
+            est_mag = mask
 
         return est_mag, est_pha
 
@@ -475,7 +463,10 @@ class LaCoSENet(nn.Module):
             mask = self.model.mask_decoder(extended_features).squeeze(1).transpose(1, 2)
             est_pha = self.model.phase_decoder(extended_features).squeeze(1).transpose(1, 2)
 
-        est_mag = extended_mag * mask
+        if self.infer_type == 'masking':
+            est_mag = extended_mag * mask
+        else:
+            est_mag = mask
 
         est_mag = est_mag[:, :, :self.chunk_size]
         est_pha = est_pha[:, :, :self.chunk_size]
@@ -721,13 +712,10 @@ class LaCoSENet(nn.Module):
 
     def __repr__(self) -> str:
         config = self._streaming_config
-        rf_info = ""
-        if self.use_reshape_free:
-            rf_count = config.get('rf_block_count', 0)
-            rf_info = f"  use_reshape_free=True ({rf_count} blocks),\n"
+        count = config.get('tsblock_count', len(self.streaming_tsblocks))
         return (
             f"{self.__class__.__name__}(\n"
-            f"{rf_info}"
+            f"  streaming_tsblocks={count} blocks,\n"
             f"  chunk_size={self.chunk_size},\n"
             f"  encoder_lookahead={self.encoder_lookahead},\n"
             f"  decoder_lookahead={self.decoder_lookahead},\n"
