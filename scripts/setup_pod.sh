@@ -11,9 +11,8 @@
 #
 # Known issues (RTX 5090 + PyTorch 2.8 + Ubuntu 24.04):
 #   - pip install --break-system-packages 필수 (PEP 668)
-#   - datasets 4.x는 torchcodec 필요 → FFmpeg6 + PyTorch 2.8 ABI 불일치
-#     → datasets<4 사용 (soundfile 기반 오디오 디코딩)
-#   - transformers, accelerate, pystoi는 requirements.txt에 없지만 필요
+#   - datasets 4.x는 torchcodec + FFmpeg ABI 불일치 → datasets<4 고정
+#     (datasets 3.x는 librosa + soundfile 기반 오디오 디코딩)
 
 set -euo pipefail
 
@@ -51,7 +50,8 @@ cd "$REMOTE_PROJECT"
 # ---- 3. Python dependencies ----
 # Quick check: if all critical imports work, skip installation
 DEPS_OK=$(python3 -c "
-import hydra, pesq, pystoi, datasets, transformers, tensorboard, joblib, scipy, librosa, soundfile
+import hydra, pesq, datasets, transformers, tensorboard
+import joblib, scipy, librosa, soundfile
 print('OK')
 " 2>/dev/null || echo "MISSING")
 
@@ -59,19 +59,7 @@ if [[ "$DEPS_OK" == "OK" ]]; then
     echo "[3/4] Python dependencies already installed, skipping"
 else
     echo "[3/4] Installing Python dependencies..."
-    PIP_OPTS="--break-system-packages -q"
-
-    # 3a. Main requirements
-    echo "  Installing main requirements..."
-    pip install $PIP_OPTS -r requirements.txt
-
-    # 3b. Additional packages not in requirements.txt
-    echo "  Installing additional packages..."
-    pip install $PIP_OPTS \
-        'datasets>=3.0,<4' \
-        transformers \
-        accelerate \
-        pystoi
+    pip install --break-system-packages -q -r requirements.txt
 fi
 
 # ---- 4. Verification ----
@@ -81,10 +69,12 @@ import numpy; print(f'  numpy:        {numpy.__version__}')
 import torch; print(f'  torch:        {torch.__version__} (CUDA: {torch.cuda.is_available()}, {torch.cuda.get_device_name(0)})')
 import torchaudio; print(f'  torchaudio:   {torchaudio.__version__}')
 import hydra; print(f'  hydra:        {hydra.__version__}')
+import librosa; print(f'  librosa:      {librosa.__version__}')
 from pesq import pesq; print(f'  pesq:         OK')
-from pystoi import stoi; print(f'  pystoi:       OK')
 import datasets; print(f'  datasets:     {datasets.__version__}')
 import transformers; print(f'  transformers: {transformers.__version__}')
+import scipy; print(f'  scipy:        {scipy.__version__}')
+import joblib; print(f'  joblib:       {joblib.__version__}')
 import tensorboard; print(f'  tensorboard:  {tensorboard.__version__}')
 print()
 print('All imports OK')
