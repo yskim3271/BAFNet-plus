@@ -75,8 +75,8 @@ android_export_ExecuTorch/
 # android
 android/
 
-# scripts
-scripts/
+# scripts (private run scripts tracked for pod automation)
+# scripts/
 
 # ablation experiments
 ablation/
