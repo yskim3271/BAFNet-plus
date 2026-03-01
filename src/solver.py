@@ -61,7 +61,7 @@ class Solver(object):
         
         self.writer = None
         self.best_state = None
-        self.best_loss = 0.0
+        self.best_pesq = 0.0
         self.history = []
         self.log_dir = args.log_dir
         self.num_prints = args.num_prints
@@ -83,7 +83,7 @@ class Solver(object):
         package['scheduler_disc'] = self.scheduler_disc.state_dict() if self.scheduler_disc is not None else None
         package['args'] = self.args
         package['history'] = self.history
-        package['best_loss'] = self.best_loss
+        package['best_pesq'] = self.best_pesq
         # Write to a temporary file first
         tmp_path = "checkpoint.tmp"
         torch.save(package, tmp_path)
@@ -129,7 +129,7 @@ class Solver(object):
             optim_disc_state = package.get('optimizer_disc', None)
             scheduler_state = package.get('scheduler', None)
             scheduler_disc_state = package.get('scheduler_disc', None)
-            self.best_loss = package.get('best_loss', 0.0)
+            self.best_pesq = package.get('best_pesq', 0.0)
             self.best_state = package.get('best_state', None)
             self.history = package.get('history', [])
                     
@@ -179,22 +179,22 @@ class Solver(object):
             self.logger.info('-' * 70)
             self.logger.info('Validation...')
             with torch.no_grad():
-                valid_loss = self._run_one_step(epoch, valid=True)
-            
+                valid_pesq = self._run_validation(epoch)
+
             self.logger.info(
-                f"Valid Summary | End of Epoch {epoch + 1} | Time {time.time() - start:.2f}s | Valid Loss {valid_loss:.5f}"
+                f"Valid Summary | End of Epoch {epoch + 1} | Time {time.time() - start:.2f}s | Valid PESQ {valid_pesq:.4f}"
             )
 
-            best_loss = min(pull_metric(self.history, 'valid') + [valid_loss])
-            metrics = {'train': train_loss, 'valid': valid_loss, 'best': best_loss}
+            best_pesq = max(pull_metric(self.history, 'valid_pesq') + [valid_pesq])
+            metrics = {'train': train_loss, 'valid_pesq': valid_pesq, 'best_pesq': best_pesq}
             self.history.append(metrics)
             info = " | ".join(f"{k} {v:.5f}" for k, v in metrics.items())
-            self.best_loss = min(self.best_loss, best_loss)
+            self.best_pesq = max(self.best_pesq, best_pesq)
             self.logger.info('-' * 70)
             self.logger.info(f"Overall Summary | Epoch {epoch + 1} | {info}")
-            
-            if valid_loss == best_loss:
-                self.logger.info(f'New best valid loss {valid_loss:.4f}')
+
+            if valid_pesq >= best_pesq:
+                self.logger.info(f'New best valid PESQ {valid_pesq:.4f}')
                 self.best_state = {'model': copy_state(self.model.state_dict())}
 
             self._serialize()
@@ -222,18 +222,16 @@ class Solver(object):
         self.logger.info("-" * 70)
         self.writer.close()
 
-    def _run_one_step(self, epoch, valid=False):
-        
+    def _run_one_step(self, epoch):
+        """Run one training epoch."""
         total_loss = 0.0
-        data_loader = self.tr_loader if not valid else self.va_loader
-
-        label = ["Train", "Valid"][valid]
-        name = label + f" | Epoch {epoch + 1}"
+        data_loader = self.tr_loader
+        name = f"Train | Epoch {epoch + 1}"
 
         logprog = LogProgress(self.logger, data_loader, updates=self.num_prints, name=name)
 
         for i, data in enumerate(logprog):
-            
+
             bcs, noisy_acs, clean_acs = data
             if self.input_type == "acs":
                 input = mag_pha_stft(noisy_acs, **self.stft_args)[2].to(self.device)
@@ -254,28 +252,30 @@ class Solver(object):
             clean_acs_hat = mag_pha_istft(clean_mag_hat, clean_pha_hat, **self.stft_args)
             clean_mag_hat_recon, clean_pha_hat_recon, clean_com_hat_recon = mag_pha_stft(clean_acs_hat, **self.stft_args)
 
-            if not valid:
-                clean_acs_list, clean_acs_list_hat = list(clean_acs.cpu().numpy()), list(clean_acs_hat.detach().cpu().numpy())
-                batch_pesq_score = batch_pesq(clean_acs_list, clean_acs_list_hat, workers=self.num_workers)
+            # Discriminator step
+            clean_acs_list = list(clean_acs.cpu().numpy())
+            clean_acs_list_hat = list(clean_acs_hat.detach().cpu().numpy())
+            batch_pesq_score = batch_pesq(clean_acs_list, clean_acs_list_hat, workers=self.num_workers)
 
-                disc_score_real = self.discriminator(clean_mag.unsqueeze(1), clean_mag.unsqueeze(1))
-                disc_score_fake = self.discriminator(clean_mag.unsqueeze(1), clean_mag_hat_recon.detach().unsqueeze(1))
+            disc_score_real = self.discriminator(clean_mag.unsqueeze(1), clean_mag.unsqueeze(1))
+            disc_score_fake = self.discriminator(clean_mag.unsqueeze(1), clean_mag_hat_recon.detach().unsqueeze(1))
 
-                loss_disc_r = F.mse_loss(one_labels, disc_score_real.flatten())
+            loss_disc_r = F.mse_loss(one_labels, disc_score_real.flatten())
 
-                if batch_pesq_score is not None:
-                    loss_disc_g = F.mse_loss(batch_pesq_score.to(self.device), disc_score_fake.flatten())
-                else:
-                    loss_disc_g = 0
+            if batch_pesq_score is not None:
+                loss_disc_g = F.mse_loss(batch_pesq_score.to(self.device), disc_score_fake.flatten())
+            else:
+                loss_disc_g = 0
 
-                loss_disc = loss_disc_r + loss_disc_g
+            loss_disc = loss_disc_r + loss_disc_g
 
-                self.optim_disc.zero_grad()
-                loss_disc.backward()
-                self.optim_disc.step()
+            self.optim_disc.zero_grad()
+            loss_disc.backward()
+            self.optim_disc.step()
 
-                logprog.append(**{f"Disc_Loss": format(loss_disc.item(), "4.5f")})
+            logprog.append(**{"Disc_Loss": format(loss_disc.item(), "4.5f")})
 
+            # Generator losses
             loss_magnitude = F.mse_loss(clean_mag, clean_mag_hat)
             loss_phase = phase_losses(clean_pha, clean_pha_hat)
             loss_complex = F.mse_loss(clean_com, clean_com_hat) * 2
@@ -290,44 +290,70 @@ class Solver(object):
                     loss_magnitude * self.loss.magnitude + \
                     loss_phase * self.loss.phase
 
-            # Prepare loss dict for logging
-            loss_dict = {
-                "Magnitude_Loss": loss_magnitude,
-                "Phase_Loss": loss_phase,
-                "Complex_Loss": loss_complex,
-                "Consistency_Loss": loss_consistency,
-                "Metric_Loss": loss_metric,
-                "Gen_Loss": loss_gen
+            # Generator optimizer step
+            self.optim.zero_grad()
+            loss_gen.backward()
+
+            max_grad_norm = getattr(self.args, 'max_grad_norm', 5.0)
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=max_grad_norm)
+            if hasattr(self.discriminator, 'parameters'):
+                torch.nn.utils.clip_grad_norm_(self.discriminator.parameters(), max_norm=max_grad_norm)
+
+            self.optim.step()
+
+            # Logging
+            loss_dict_scalar = {
+                "Magnitude_Loss": loss_magnitude.item(),
+                "Phase_Loss": loss_phase.item(),
+                "Complex_Loss": loss_complex.item(),
+                "Consistency_Loss": loss_consistency.item(),
+                "Metric_Loss": loss_metric.item(),
+                "Gen_Loss": loss_gen.item(),
             }
-
-            # Convert loss dict to scalar values for logging
-            loss_dict_scalar = {k: v.item() if isinstance(v, torch.Tensor) else v
-                               for k, v in loss_dict.items()}
-
-            if not valid:
-                self.optim.zero_grad()
-                loss_gen.backward()
-
-                # Gradient clipping
-                max_grad_norm = getattr(self.args, 'max_grad_norm', 5.0)
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=max_grad_norm)
-                if hasattr(self.discriminator, 'parameters'):
-                    torch.nn.utils.clip_grad_norm_(self.discriminator.parameters(), max_norm=max_grad_norm)
-
-                self.optim.step()
 
             for k, v in loss_dict_scalar.items():
                 if v != 0.0:
-                    logprog.append(**{f"{k}": format(v, "4.5f")})
+                    logprog.append(**{k: format(v, "4.5f")})
                     if i % (self.num_prints * 10) == 0:
-                        self.writer.add_scalar(f"{label}/{k}", v, epoch * len(data_loader) + i)
+                        self.writer.add_scalar(f"Train/{k}", v, epoch * len(data_loader) + i)
 
             total_loss += loss_gen.item()
 
-        if not valid:
-            if self.scheduler is not None:
-                self.scheduler.step()
-            if self.scheduler_disc is not None:
-                self.scheduler_disc.step()
+        if self.scheduler is not None:
+            self.scheduler.step()
+        if self.scheduler_disc is not None:
+            self.scheduler_disc.step()
 
         return total_loss / len(data_loader)
+
+    def _run_validation(self, epoch):
+        """Validate model by computing average PESQ on validation set."""
+        name = f"Valid | Epoch {epoch + 1}"
+        logprog = LogProgress(self.logger, self.va_loader, updates=self.num_prints, name=name)
+        pesq_scores = []
+
+        for i, data in enumerate(logprog):
+
+            bcs, noisy_acs, clean_acs = data
+            if self.input_type == "acs":
+                input = mag_pha_stft(noisy_acs, **self.stft_args)[2].to(self.device)
+            elif self.input_type == "bcs":
+                input = mag_pha_stft(bcs, **self.stft_args)[2].to(self.device)
+            elif self.input_type == "acs+bcs":
+                input = mag_pha_stft(bcs, **self.stft_args)[2].to(self.device), \
+                        mag_pha_stft(noisy_acs, **self.stft_args)[2].to(self.device)
+
+            clean_mag_hat, clean_pha_hat, _ = self.model(input)
+            clean_acs_hat = mag_pha_istft(clean_mag_hat, clean_pha_hat, **self.stft_args)
+
+            clean_acs_list = list(clean_acs.cpu().numpy())
+            clean_acs_list_hat = list(clean_acs_hat.detach().cpu().numpy())
+            score = batch_pesq(clean_acs_list, clean_acs_list_hat,
+                               workers=self.num_workers, normalize=False)
+
+            if score is not None:
+                pesq_scores.extend(score.tolist())
+                logprog.append(PESQ=format(score.mean().item(), ".4f"))
+
+        avg_pesq = sum(pesq_scores) / len(pesq_scores) if pesq_scores else 0.0
+        return avg_pesq
