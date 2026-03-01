@@ -40,7 +40,7 @@ test_noise:
   silence_length: 0.2
   deterministic: true
 
-batch_size: 4
+batch_size: 8
 epochs: 200
 
 eval_every: 100  # compute test metrics every so epochs

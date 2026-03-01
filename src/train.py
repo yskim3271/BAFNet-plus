@@ -204,23 +204,24 @@ def run(args):
     # Determine training segment size
     raw_segment = args.segment
     if str(raw_segment) == "auto":
-        segment = rf_to_segment(args.model.param, sampling_rate=args.sampling_rate)
+        rf_samples = rf_to_segment(args.model.param, sampling_rate=args.sampling_rate)
+        segment = rf_samples * 2
         rf = compute_receptive_field(args.model.param, sampling_rate=args.sampling_rate)
         logger.info(
             f"Auto segment from RF: {rf.total_rf_frames} frames = "
-            f"{rf.total_rf_samples} samples -> aligned to {segment} samples "
-            f"({segment / args.sampling_rate * 1000:.1f} ms)"
+            f"{rf.total_rf_samples} samples -> aligned RF={rf_samples} samples, "
+            f"segment={segment} samples ({segment / args.sampling_rate * 1000:.1f} ms)"
         )
     else:
         segment = int(raw_segment)
 
     if str(args.stride) == "auto":
-        stride = segment // 2
+        stride = rf_samples
     else:
         stride = int(args.stride)
 
     if str(args.shift) == "auto":
-        shift = segment // 2
+        shift = rf_samples
     else:
         shift = int(args.shift)
 
