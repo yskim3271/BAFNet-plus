@@ -51,7 +51,7 @@ cd "$REMOTE_PROJECT"
 # ---- 3. Python dependencies ----
 # Quick check: if all critical imports work, skip installation
 DEPS_OK=$(python3 -c "
-import hydra, pesq, pystoi, datasets, transformers, tensorboard
+import hydra, pesq, pystoi, datasets, transformers, tensorboard, joblib, scipy
 print('OK')
 " 2>/dev/null || echo "MISSING")
 
