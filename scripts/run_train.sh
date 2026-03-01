@@ -27,6 +27,7 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 RESULTS_DIR="$PROJECT_DIR/results/experiments"
 REMOTE_PROJECT="/workspace/BAFNet-plus"
 POD_NAME="bafnet-train"
+MODEL_NAME="backbone_mapping"
 KEEP_POD=false
 
 SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR"
@@ -36,6 +37,7 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         --keep-pod) KEEP_POD=true; shift ;;
         --pod-name) POD_NAME="$2"; shift 2 ;;
+        --model) MODEL_NAME="$2"; shift 2 ;;
         -*) echo "Unknown option: $1"; exit 1 ;;
         *) break ;;
     esac
@@ -122,7 +124,7 @@ remote_exec "$SSH_HOST" "$SSH_PORT" "bash $REMOTE_PROJECT/scripts/setup_pod.sh" 
 
 # 4. Build training command
 HYDRA_DIR="./results/experiments/${EXP_NAME}"
-TRAIN_CMD="cd $REMOTE_PROJECT && python3 -m src.train +model=backbone_mapping +dset=taps hydra.run.dir=$HYDRA_DIR"
+TRAIN_CMD="cd $REMOTE_PROJECT && python3 -m src.train +model=$MODEL_NAME +dset=taps hydra.run.dir=$HYDRA_DIR"
 for override in "${HYDRA_OVERRIDES[@]:-}"; do
     if [[ -n "$override" ]]; then
         TRAIN_CMD="$TRAIN_CMD $override"
