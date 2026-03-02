@@ -134,7 +134,7 @@ done
 log "Training command: $TRAIN_CMD"
 
 # 5. Run training via nohup (survives SSH disconnection)
-REMOTE_LOG="$REMOTE_PROJECT/results/experiments/${EXP_NAME}/trainer.log"
+REMOTE_LOG="/tmp/${EXP_NAME}_stdout.log"
 REMOTE_PID_FILE="/tmp/${EXP_NAME}_train.pid"
 REMOTE_EXIT_FILE="/tmp/${EXP_NAME}_train.exit"
 

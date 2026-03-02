@@ -113,8 +113,8 @@ class Solver(object):
                 else:
                     # If the new log dir already exists, just issue a warning and do not overwrite
                     self.logger.warning(f"TensorBoard log dir {dst_tb_dir} already exists. Skipping copy.")
-                # Initialize the SummaryWriter to continue logging in the (possibly copied) directory
-                self.writer = SummaryWriter(log_dir=dst_tb_dir)
+            # Initialize the SummaryWriter (with copied logs or fresh)
+            self.writer = SummaryWriter(log_dir=dst_tb_dir)
                         
             # loads the checkpoint file from disk
             ckpt_path = os.path.join(self.continue_from, 'checkpoint.th')
