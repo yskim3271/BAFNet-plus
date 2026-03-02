@@ -62,7 +62,17 @@ log() {
 }
 
 find_pod_id() {
-    runpodctl get pod 2>/dev/null | grep "$POD_NAME" | grep "RUNNING" | head -1 | awk '{print $1}'
+    local matches
+    matches=$(runpodctl get pod 2>/dev/null | grep "$POD_NAME" | grep "RUNNING")
+    local count
+    count=$(echo "$matches" | grep -c . 2>/dev/null || true)
+    if [[ "$count" -gt 1 ]]; then
+        log "ERROR: Multiple RUNNING pods match '$POD_NAME':"
+        echo "$matches" | tee -a "$LOG_FILE"
+        log "Use --pod-name to specify an exact pod name."
+        exit 1
+    fi
+    echo "$matches" | head -1 | awk '{print $1}'
 }
 
 get_ssh_cmd() {
@@ -158,8 +168,11 @@ done
 
 # Stream logs via tail -f (reconnects if SSH drops)
 log "Streaming training logs..."
+LOCAL_LINE_COUNT=0
 while true; do
-    remote_exec "$SSH_HOST" "$SSH_PORT" "tail -n +1 -f $REMOTE_LOG" 2>&1 | tee -a "$LOG_FILE" || true
+    SKIP=$((LOCAL_LINE_COUNT + 1))
+    remote_exec "$SSH_HOST" "$SSH_PORT" "tail -n +${SKIP} -f $REMOTE_LOG" 2>&1 | tee -a "$LOG_FILE" || true
+    LOCAL_LINE_COUNT=$(wc -l < "$LOG_FILE")
 
     # Check if training process is still running
     if remote_exec "$SSH_HOST" "$SSH_PORT" "test -f $REMOTE_EXIT_FILE" 2>/dev/null; then

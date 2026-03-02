@@ -37,7 +37,14 @@ def terminate_child_processes():
 def setup_logger(name):
     """Set up logger"""
     hydra_conf = OmegaConf.load(".hydra/hydra.yaml")
-    logging.config.dictConfig(OmegaConf.to_container(hydra_conf.hydra.job_logging, resolve=True))
+    log_cfg = OmegaConf.to_container(hydra_conf.hydra.job_logging, resolve=True)
+    log_cfg["disable_existing_loggers"] = False
+    logging.config.dictConfig(log_cfg)
+
+    # Suppress noisy library loggers
+    for lib in ("httpx", "huggingface_hub", "datasets", "fsspec", "urllib3"):
+        logging.getLogger(lib).setLevel(logging.WARNING)
+
     return logging.getLogger(name)
 
 def run(args):
