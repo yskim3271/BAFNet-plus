@@ -133,15 +133,49 @@ done
 
 log "Training command: $TRAIN_CMD"
 
-# 5. Run training (stream output to local log)
-log "Starting training..."
-remote_exec "$SSH_HOST" "$SSH_PORT" "$TRAIN_CMD" 2>&1 | tee -a "$LOG_FILE"
-TRAIN_EXIT=${PIPESTATUS[0]}
+# 5. Run training via nohup (survives SSH disconnection)
+REMOTE_LOG="$REMOTE_PROJECT/results/experiments/${EXP_NAME}/trainer.log"
+REMOTE_PID_FILE="/tmp/${EXP_NAME}_train.pid"
+REMOTE_EXIT_FILE="/tmp/${EXP_NAME}_train.exit"
 
-if [[ $TRAIN_EXIT -ne 0 ]]; then
+log "Starting training (nohup)..."
+remote_exec "$SSH_HOST" "$SSH_PORT" \
+    "nohup bash -c '$TRAIN_CMD > /tmp/${EXP_NAME}_stdout.log 2>&1; echo \$? > $REMOTE_EXIT_FILE' &
+     echo \$! > $REMOTE_PID_FILE
+     sleep 1
+     cat $REMOTE_PID_FILE"
+REMOTE_PID=$(remote_exec "$SSH_HOST" "$SSH_PORT" "cat $REMOTE_PID_FILE 2>/dev/null")
+log "Remote training PID: $REMOTE_PID"
+
+# Wait for trainer.log to appear
+log "Waiting for training to initialize..."
+for i in $(seq 1 60); do
+    if remote_exec "$SSH_HOST" "$SSH_PORT" "test -f $REMOTE_LOG" 2>/dev/null; then
+        break
+    fi
+    sleep 5
+done
+
+# Stream logs via tail -f (reconnects if SSH drops)
+log "Streaming training logs..."
+while true; do
+    remote_exec "$SSH_HOST" "$SSH_PORT" "tail -n +1 -f $REMOTE_LOG" 2>&1 | tee -a "$LOG_FILE" || true
+
+    # Check if training process is still running
+    if remote_exec "$SSH_HOST" "$SSH_PORT" "test -f $REMOTE_EXIT_FILE" 2>/dev/null; then
+        TRAIN_EXIT=$(remote_exec "$SSH_HOST" "$SSH_PORT" "cat $REMOTE_EXIT_FILE")
+        break
+    fi
+
+    # SSH dropped but training may still be running, retry after delay
+    log "SSH connection lost, reconnecting in 30s..."
+    sleep 30
+done
+
+if [[ "$TRAIN_EXIT" -ne 0 ]]; then
     log "ERROR: Training failed with exit code $TRAIN_EXIT"
     log "Pod will NOT be terminated due to training failure."
-    exit $TRAIN_EXIT
+    exit "$TRAIN_EXIT"
 fi
 
 log "Training completed successfully!"
