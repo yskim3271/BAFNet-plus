@@ -140,7 +140,7 @@ REMOTE_EXIT_FILE="/tmp/${EXP_NAME}_train.exit"
 
 log "Starting training (nohup)..."
 remote_exec "$SSH_HOST" "$SSH_PORT" \
-    "nohup bash -c '$TRAIN_CMD > /tmp/${EXP_NAME}_stdout.log 2>&1; echo \$? > $REMOTE_EXIT_FILE' &
+    "nohup bash -c '$TRAIN_CMD > /tmp/${EXP_NAME}_stdout.log 2>&1; echo \$? > $REMOTE_EXIT_FILE' </dev/null >/dev/null 2>&1 &
      echo \$! > $REMOTE_PID_FILE
      sleep 1
      cat $REMOTE_PID_FILE"
