@@ -20,9 +20,56 @@ import shutil
 from src.data import Noise_Augmented_Dataset, StepSampler
 from src.receptive_field import compute_receptive_field, rf_to_segment
 from src.solver import Solver
-from src.utils import load_model, parse_file_list
+from src.utils import load_model, load_model_config_from_checkpoint, parse_file_list
 
 torch.backends.cudnn.benchmark = True
+
+
+def _resolve_rf_param(args, logger):
+    """Resolve the param dict to use for receptive field computation.
+
+    For BAFNet (or any model with checkpoint_mapping/checkpoint_masking),
+    load backbone params from each checkpoint, verify they produce the same RF,
+    and return the shared param. For other models, return args.model.param directly.
+    """
+    param = args.model.param
+    checkpoint_mapping = getattr(param, "checkpoint_mapping", None)
+    checkpoint_masking = getattr(param, "checkpoint_masking", None)
+
+    if checkpoint_mapping is None and checkpoint_masking is None:
+        return param
+
+    # Load backbone params from checkpoints
+    configs = {}
+    for name, ckpt_path in [("mapping", checkpoint_mapping), ("masking", checkpoint_masking)]:
+        if ckpt_path is None:
+            continue
+        config = load_model_config_from_checkpoint(ckpt_path)
+        configs[name] = config["param"]
+        logger.info(f"[RF] Loaded {name} backbone param from: {ckpt_path}")
+
+    if len(configs) < 2:
+        # Only one backbone checkpoint provided, use it directly
+        rf_param = next(iter(configs.values()))
+        return rf_param
+
+    # Both checkpoints provided — compute RF for each and verify they match
+    names = list(configs.keys())
+    rf_a = compute_receptive_field(configs[names[0]], sampling_rate=args.sampling_rate)
+    rf_b = compute_receptive_field(configs[names[1]], sampling_rate=args.sampling_rate)
+
+    if rf_a.total_rf_frames != rf_b.total_rf_frames:
+        raise ValueError(
+            f"Receptive field mismatch between backbone models: "
+            f"{names[0]}={rf_a.total_rf_frames} frames ({rf_a.total_rf_ms:.1f}ms) vs "
+            f"{names[1]}={rf_b.total_rf_frames} frames ({rf_b.total_rf_ms:.1f}ms). "
+            f"Both backbones must have the same receptive field for BAFNet training."
+        )
+
+    logger.info(
+        f"[RF] Both backbones have matching RF: {rf_a.total_rf_frames} frames ({rf_a.total_rf_ms:.1f}ms)"
+    )
+    return configs[names[0]]
 
 
 def terminate_child_processes():
@@ -37,14 +84,7 @@ def terminate_child_processes():
 def setup_logger(name):
     """Set up logger"""
     hydra_conf = OmegaConf.load(".hydra/hydra.yaml")
-    log_cfg = OmegaConf.to_container(hydra_conf.hydra.job_logging, resolve=True)
-    log_cfg["disable_existing_loggers"] = False
-    logging.config.dictConfig(log_cfg)
-
-    # Suppress noisy library loggers
-    for lib in ("httpx", "huggingface_hub", "datasets", "fsspec", "urllib3"):
-        logging.getLogger(lib).setLevel(logging.WARNING)
-
+    logging.config.dictConfig(OmegaConf.to_container(hydra_conf.hydra.job_logging, resolve=True))
     return logging.getLogger(name)
 
 def run(args):
@@ -211,9 +251,10 @@ def run(args):
     # Determine training segment size
     raw_segment = args.segment
     if str(raw_segment) == "auto":
-        rf_samples = rf_to_segment(args.model.param, sampling_rate=args.sampling_rate)
+        rf_param = _resolve_rf_param(args, logger)
+        rf_samples = rf_to_segment(rf_param, sampling_rate=args.sampling_rate)
         segment = rf_samples * 2
-        rf = compute_receptive_field(args.model.param, sampling_rate=args.sampling_rate)
+        rf = compute_receptive_field(rf_param, sampling_rate=args.sampling_rate)
         logger.info(
             f"Auto segment from RF: {rf.total_rf_frames} frames = "
             f"{rf.total_rf_samples} samples -> aligned RF={rf_samples} samples, "
