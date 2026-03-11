@@ -1,0 +1,88 @@
+model_lib: bafnetplus
+model_class: BAFNetPlus
+input_type: acs+bcs
+
+param:
+  # BAFNetPlus fusion parameters
+  conv_depth: 4
+  conv_channels: 16
+  conv_kernel_size: 7
+
+  # Calibration parameters
+  calibration_hidden_channels: 16
+  calibration_depth: 2
+  calibration_kernel_size: 5
+  calibration_max_common_log_gain: 0.5
+  calibration_max_relative_log_gain: 1.0
+
+  # ============================================================================
+  # Mapping Model Configuration
+  # ============================================================================
+  # Option 1 (RECOMMENDED): Provide only checkpoint path
+  #   - Model config (model_lib, model_class, param) will be auto-loaded
+  checkpoint_mapping: null  # e.g., outputs/backbone_mapping_exp/best.th
+
+  # Option 2 (ADVANCED): Provide full config manually
+  # args_mapping:
+  #   model_lib: backbone
+  #   model_class: Backbone
+  #   param:
+  #     win_size: 400
+  #     hop_size: 100
+  #     n_fft: 400
+  #     compress_factor: 0.3
+  #     dense_channel: 64
+  #     sigmoid_beta: 2.0
+  #     num_tsblock: 4
+  #     dense_depth: 4
+  #     time_dw_kernel_size: 3
+  #     time_block_kernel: [3, 5, 7, 11]
+  #     freq_block_kernel: [3, 11, 23, 31]
+  #     time_block_num: 2
+  #     freq_block_num: 2
+  #     causal_ts_block: true
+  #     encoder_padding_ratio: [0.5, 0.5]
+  #     decoder_padding_ratio: [0.5, 0.5]
+  #     sca_kernel_size: 11
+  #     infer_type: mapping
+
+  # ============================================================================
+  # Masking Model Configuration
+  # ============================================================================
+  # Option 1 (RECOMMENDED): Provide only checkpoint path
+  checkpoint_masking: null  # e.g., outputs/backbone_masking_exp/best.th
+
+  # Option 2 (ADVANCED): Provide full config manually
+  # args_masking:
+  #   model_lib: backbone
+  #   model_class: Backbone
+  #   param:
+  #     win_size: 400
+  #     hop_size: 100
+  #     n_fft: 400
+  #     compress_factor: 0.3
+  #     dense_channel: 64
+  #     sigmoid_beta: 2.0
+  #     num_tsblock: 4
+  #     dense_depth: 4
+  #     time_dw_kernel_size: 3
+  #     time_block_kernel: [3, 5, 7, 11]
+  #     freq_block_kernel: [3, 11, 23, 31]
+  #     time_block_num: 2
+  #     freq_block_num: 2
+  #     causal_ts_block: true
+  #     encoder_padding_ratio: [0.5, 0.5]
+  #     decoder_padding_ratio: [0.5, 0.5]
+  #     sca_kernel_size: 11
+  #     infer_type: masking
+
+# ============================================================================
+# Finetune Configuration (Differential LR for pretrained models)
+# ============================================================================
+finetune:
+  enabled: false             # Set to true to enable finetune mode
+  pretrained_lr: 0.0001      # Learning rate for pretrained models (mapping + masking)
+  cnn_lr: 0.0005             # Learning rate for BAFNetPlus CNN (alpha + calibration)
+  weight_decay: 0.01         # Weight decay for CNN parameters
+  warmup_epochs: 5           # Number of warmup epochs
+  warmup_start_factor: 0.2   # Initial LR multiplier during warmup
