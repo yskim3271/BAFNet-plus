@@ -591,7 +591,7 @@ class Backbone(nn.Module):
         self.phase_decoder = PhaseDecoder(dense_channel, out_channel=1, depth=dense_depth,
                                          causal=causal_ts_block, padding_ratio=decoder_padding_ratio)
 
-    def forward(self, noisy_com):
+    def forward(self, noisy_com, return_mask=False):
         # Input shape: [B, F, T, 2]
         mag, pha = complex_to_mag_pha(noisy_com, stack_dim=-1)  # [B, F, T] each
 
@@ -609,4 +609,6 @@ class Backbone(nn.Module):
         est_pha = self.phase_decoder(x).squeeze(1).transpose(1, 2)  # [B, F, T]
         est_com = mag_pha_to_complex(est_mag, est_pha, stack_dim=-1)
 
+        if return_mask:
+            return est_mag, est_pha, est_com, mask
         return est_mag, est_pha, est_com

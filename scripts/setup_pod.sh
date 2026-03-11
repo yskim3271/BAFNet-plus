@@ -40,7 +40,7 @@ fi
 echo "[2/4] Setting up repository..."
 if [[ -d "$REMOTE_PROJECT/.git" ]]; then
     echo "  Repository exists, pulling latest..."
-    cd "$REMOTE_PROJECT" && git pull --ff-only
+    cd "$REMOTE_PROJECT" && git pull --ff-only || echo "  git pull failed (non-fatal), continuing with current version"
 else
     echo "  Cloning repository..."
     cd /workspace && git clone "$REPO_URL"

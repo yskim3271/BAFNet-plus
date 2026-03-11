@@ -54,6 +54,20 @@ HYDRA_OVERRIDES=("$@")
 LOG_FILE="$PROJECT_DIR/${EXP_NAME}_train.log"
 
 mkdir -p "$RESULTS_DIR"
+mkdir -p "$(dirname "$LOG_FILE")"
+
+# ---- Lock file (prevent duplicate runs for the same experiment) ----
+LOCK_FILE="/tmp/run_train_${EXP_NAME//\//_}.lock"
+if [[ -f "$LOCK_FILE" ]]; then
+    OLD_PID=$(cat "$LOCK_FILE")
+    if kill -0 "$OLD_PID" 2>/dev/null; then
+        echo "ERROR: Training for '$EXP_NAME' is already running (PID $OLD_PID)"
+        echo "If stale, remove $LOCK_FILE"
+        exit 1
+    fi
+fi
+echo $$ > "$LOCK_FILE"
+trap "rm -f '$LOCK_FILE'" EXIT
 
 # ---- Helper functions ----
 
@@ -123,16 +137,7 @@ SSH_HOST=$(echo "$SSH_CMD" | awk '{print $2}')
 SSH_PORT=$(echo "$SSH_CMD" | awk '{print $4}')
 log "SSH: $SSH_HOST port $SSH_PORT"
 
-# 2. Pod setup: ensure repo exists, then run setup script
-log "Setting up pod (repo + dependencies)..."
-# Ensure repo exists on network volume (first-time clone or pull)
-remote_exec "$SSH_HOST" "$SSH_PORT" \
-    "if [ -d $REMOTE_PROJECT/.git ]; then cd $REMOTE_PROJECT && git pull --ff-only; else cd /workspace && git clone https://github.com/yskim3271/BAFNet-plus.git; fi" \
-    2>&1 | tee -a "$LOG_FILE"
-# Run full setup (system packages + python deps + verification)
-remote_exec "$SSH_HOST" "$SSH_PORT" "bash $REMOTE_PROJECT/scripts/setup_pod.sh" 2>&1 | tee -a "$LOG_FILE"
-
-# 4. Build training command
+# 2. Build training command
 HYDRA_DIR="./results/experiments/${EXP_NAME}"
 TRAIN_CMD="cd $REMOTE_PROJECT && python3 -m src.train +model=$MODEL_NAME +dset=taps hydra.run.dir=$HYDRA_DIR"
 for override in "${HYDRA_OVERRIDES[@]:-}"; do
@@ -143,18 +148,22 @@ done
 
 log "Training command: $TRAIN_CMD"
 
-# 5. Run training via nohup (survives SSH disconnection)
-REMOTE_LOG="/tmp/${EXP_NAME}_stdout.log"
-REMOTE_PID_FILE="/tmp/${EXP_NAME}_train.pid"
-REMOTE_EXIT_FILE="/tmp/${EXP_NAME}_train.exit"
+# 3. Run training via nohup (survives SSH disconnection)
+SAFE_NAME="${EXP_NAME//\//_}"
+REMOTE_LOG="/tmp/${SAFE_NAME}_stdout.log"
+REMOTE_PID_FILE="/tmp/${SAFE_NAME}_train.pid"
+REMOTE_EXIT_FILE="/tmp/${SAFE_NAME}_train.exit"
+
+# Kill stale training process from previous runs and clean temp files
+remote_exec "$SSH_HOST" "$SSH_PORT" \
+    "if [ -f $REMOTE_PID_FILE ]; then OLD_PID=\$(cat $REMOTE_PID_FILE); kill \$OLD_PID 2>/dev/null && echo 'Killed stale remote process '\$OLD_PID || true; fi; rm -f $REMOTE_EXIT_FILE $REMOTE_PID_FILE $REMOTE_LOG"
 
 log "Starting training (nohup)..."
-remote_exec "$SSH_HOST" "$SSH_PORT" \
-    "nohup bash -c '$TRAIN_CMD > /tmp/${EXP_NAME}_stdout.log 2>&1; echo \$? > $REMOTE_EXIT_FILE' </dev/null >/dev/null 2>&1 &
+REMOTE_PID=$(remote_exec "$SSH_HOST" "$SSH_PORT" \
+    "nohup bash -c '$TRAIN_CMD > $REMOTE_LOG 2>&1; echo \$? > $REMOTE_EXIT_FILE' </dev/null >/dev/null 2>&1 &
      echo \$! > $REMOTE_PID_FILE
      sleep 1
-     cat $REMOTE_PID_FILE"
-REMOTE_PID=$(remote_exec "$SSH_HOST" "$SSH_PORT" "cat $REMOTE_PID_FILE 2>/dev/null")
+     cat $REMOTE_PID_FILE")
 log "Remote training PID: $REMOTE_PID"
 
 # Wait for trainer.log to appear
@@ -168,21 +177,23 @@ done
 
 # Stream logs via tail -f (reconnects if SSH drops)
 log "Streaming training logs..."
-LOCAL_LINE_COUNT=0
+SKIP=1
 while true; do
-    SKIP=$((LOCAL_LINE_COUNT + 1))
-    remote_exec "$SSH_HOST" "$SSH_PORT" "tail -n +${SKIP} -f $REMOTE_LOG" 2>&1 | tee -a "$LOG_FILE" || true
-    LOCAL_LINE_COUNT=$(wc -l < "$LOG_FILE")
+    remote_exec "$SSH_HOST" "$SSH_PORT" \
+        "tail -n +${SKIP} -f $REMOTE_LOG | stdbuf -oL uniq & TAIL_PID=\$!; while ! test -f $REMOTE_EXIT_FILE; do sleep 10; done; kill \$TAIL_PID 2>/dev/null; wait \$TAIL_PID 2>/dev/null" \
+        2>&1 | tee -a "$LOG_FILE" || true
 
-    # Check if training process is still running
+    # Check if training finished
     if remote_exec "$SSH_HOST" "$SSH_PORT" "test -f $REMOTE_EXIT_FILE" 2>/dev/null; then
         TRAIN_EXIT=$(remote_exec "$SSH_HOST" "$SSH_PORT" "cat $REMOTE_EXIT_FILE")
         break
     fi
 
-    # SSH dropped but training may still be running, retry after delay
+    # SSH dropped — get remote line count for correct resume position
     log "SSH connection lost, reconnecting in 30s..."
     sleep 30
+    SKIP=$(remote_exec "$SSH_HOST" "$SSH_PORT" "wc -l < $REMOTE_LOG 2>/dev/null || echo 0")
+    SKIP=$((SKIP + 1))
 done
 
 if [[ "$TRAIN_EXIT" -ne 0 ]]; then
@@ -193,7 +204,7 @@ fi
 
 log "Training completed successfully!"
 
-# 6. Transfer results
+# 4. Transfer results
 log "Transferring results from pod..."
 LOCAL_EXP_DIR="$RESULTS_DIR/$EXP_NAME"
 mkdir -p "$LOCAL_EXP_DIR"
@@ -216,7 +227,7 @@ else
     log "WARNING: Could not transfer result files. Check pod manually."
 fi
 
-# 7. Terminate pod (unless --keep-pod)
+# 5. Terminate pod (unless --keep-pod)
 if [[ "$KEEP_POD" == "false" ]]; then
     log "Terminating pod $POD_ID..."
     runpodctl remove pod "$POD_ID" 2>&1 | tee -a "$LOG_FILE"
