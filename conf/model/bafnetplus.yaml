@@ -3,6 +3,9 @@ model_class: BAFNetPlus
 input_type: acs+bcs
 
 param:
+  # Ablation mode: full | no_calibration | mask_only_alpha | common_gain_only
+  ablation_mode: full
+
   # BAFNetPlus fusion parameters
   conv_depth: 4
   conv_channels: 16

@@ -7,6 +7,13 @@ from src.models.backbone import CausalConv1d, CausalConv2d, get_padding, get_pad
 
 
 class BAFNetPlus(torch.nn.Module):
+    # Ablation modes:
+    #   'full'              - A3: proposed model (calibration + 3ch alpha fusion + relative gain)
+    #   'no_calibration'    - A1: skip calibration, use raw backbone outputs
+    #   'mask_only_alpha'   - A2: alpha fusion with mask-only 1ch input (BAFNet-style)
+    #   'common_gain_only'  - B1: calibration with common gain only (relative=0)
+    VALID_ABLATION_MODES = ('full', 'no_calibration', 'mask_only_alpha', 'common_gain_only')
+
     def __init__(self,
                  conv_depth=4,
                  conv_channels=16,
@@ -16,6 +23,7 @@ class BAFNetPlus(torch.nn.Module):
                  calibration_kernel_size=5,
                  calibration_max_common_log_gain=0.5,
                  calibration_max_relative_log_gain=1.0,
+                 ablation_mode='full',
                  args_mapping=None,
                  args_masking=None,
                  checkpoint_mapping=None,
@@ -23,6 +31,16 @@ class BAFNetPlus(torch.nn.Module):
                  load_pretrained_weights=True,
                  ):
         super(BAFNetPlus, self).__init__()
+
+        if ablation_mode not in self.VALID_ABLATION_MODES:
+            raise ValueError(f"Invalid ablation_mode '{ablation_mode}'. Must be one of {self.VALID_ABLATION_MODES}")
+        self.ablation_mode = ablation_mode
+        self.use_calibration = ablation_mode not in ('no_calibration',)
+        self.use_relative_gain = ablation_mode not in ('no_calibration', 'common_gain_only')
+        self.mask_only_alpha = ablation_mode == 'mask_only_alpha'
+        print(f"[BAFNetPlus] ablation_mode={ablation_mode} "
+              f"(calibration={self.use_calibration}, relative_gain={self.use_relative_gain}, "
+              f"alpha_input={'1ch_mask' if self.mask_only_alpha else '3ch'})")
 
         self.conv_depth = conv_depth
         self.conv_channels = conv_channels
@@ -75,8 +93,8 @@ class BAFNetPlus(torch.nn.Module):
         self.mapping = mapping_class(**mapping_params)
         self.masking = masking_class(**masking_params)
 
-        # Alpha fusion conv stack (3ch input: bcs_mag_cal, acs_mag_cal, acs_mask)
-        alpha_in_channels = 3
+        # Alpha fusion conv stack
+        alpha_in_channels = 1 if self.mask_only_alpha else 3
         self.alpha_convblocks = nn.ModuleList()
         for i in range(self.conv_depth):
             in_ch = alpha_in_channels if i == 0 else self.conv_channels
@@ -94,22 +112,24 @@ class BAFNetPlus(torch.nn.Module):
         self.alpha_out = nn.Conv2d(self.conv_channels, 2, kernel_size=1)
 
         # Calibration encoder (5ch input: bcs/acs log-energy, diff, mask mean/var)
-        calibration_in_channels = 5
-        calibration_layers = []
-        for i in range(self.calibration_depth):
-            in_ch = calibration_in_channels if i == 0 else self.calibration_hidden_channels
-            calibration_layers.append(nn.Sequential(
-                CausalConv1d(
-                    in_channels=in_ch,
-                    out_channels=self.calibration_hidden_channels,
-                    kernel_size=self.calibration_kernel_size,
-                    padding=get_padding(self.calibration_kernel_size),
-                ),
-                nn.PReLU(self.calibration_hidden_channels),
-            ))
-        self.calibration_encoder = nn.Sequential(*calibration_layers)
-        self.common_gain_head = nn.Conv1d(self.calibration_hidden_channels, 1, kernel_size=1)
-        self.relative_gain_head = nn.Conv1d(self.calibration_hidden_channels, 1, kernel_size=1)
+        if self.use_calibration:
+            calibration_in_channels = 5
+            calibration_layers = []
+            for i in range(self.calibration_depth):
+                in_ch = calibration_in_channels if i == 0 else self.calibration_hidden_channels
+                calibration_layers.append(nn.Sequential(
+                    CausalConv1d(
+                        in_channels=in_ch,
+                        out_channels=self.calibration_hidden_channels,
+                        kernel_size=self.calibration_kernel_size,
+                        padding=get_padding(self.calibration_kernel_size),
+                    ),
+                    nn.PReLU(self.calibration_hidden_channels),
+                ))
+            self.calibration_encoder = nn.Sequential(*calibration_layers)
+            self.common_gain_head = nn.Conv1d(self.calibration_hidden_channels, 1, kernel_size=1)
+            if self.use_relative_gain:
+                self.relative_gain_head = nn.Conv1d(self.calibration_hidden_channels, 1, kernel_size=1)
 
         # Init only BAFNetPlus-owned layers (not pretrained backbones)
         self._init_fusion_modules()
@@ -144,8 +164,11 @@ class BAFNetPlus(torch.nn.Module):
 
     def _init_fusion_modules(self):
         """Initialize only BAFNetPlus-owned layers (alpha conv, calibration, gain heads)."""
-        owned_modules = [self.alpha_convblocks, self.alpha_out,
-                         self.calibration_encoder, self.common_gain_head, self.relative_gain_head]
+        owned_modules = [self.alpha_convblocks, self.alpha_out]
+        if self.use_calibration:
+            owned_modules.extend([self.calibration_encoder, self.common_gain_head])
+            if self.use_relative_gain:
+                owned_modules.append(self.relative_gain_head)
         for parent in owned_modules:
             for m in parent.modules():
                 if isinstance(m, (nn.Conv1d, nn.Conv2d)):
@@ -176,11 +199,14 @@ class BAFNetPlus(torch.nn.Module):
 
         common_log_gain = torch.tanh(self.common_gain_head(calibration_hidden))
         common_log_gain = common_log_gain * self.calibration_max_common_log_gain
-        relative_log_gain = torch.tanh(self.relative_gain_head(calibration_hidden))
-        relative_log_gain = relative_log_gain * self.calibration_max_relative_log_gain
 
-        bcs_gain = torch.exp(common_log_gain - 0.5 * relative_log_gain)
-        acs_gain = torch.exp(common_log_gain + 0.5 * relative_log_gain)
+        if self.use_relative_gain:
+            relative_log_gain = torch.tanh(self.relative_gain_head(calibration_hidden))
+            relative_log_gain = relative_log_gain * self.calibration_max_relative_log_gain
+            bcs_gain = torch.exp(common_log_gain - 0.5 * relative_log_gain)
+            acs_gain = torch.exp(common_log_gain + 0.5 * relative_log_gain)
+        else:
+            bcs_gain = acs_gain = torch.exp(common_log_gain)
 
         bcs_gain = bcs_gain.transpose(1, 2).unsqueeze(1)
         acs_gain = acs_gain.transpose(1, 2).unsqueeze(1)
@@ -216,24 +242,33 @@ class BAFNetPlus(torch.nn.Module):
         bcs_mag, _, bcs_com_out = self.mapping(bcs_com)
         acs_mag, _, acs_com_out, acs_mask = self.masking(acs_com, return_mask=True)
 
-        bcs_com_cal, acs_com_cal = self._apply_calibration(
-            bcs_com_out=bcs_com_out,
-            acs_com_out=acs_com_out,
-            bcs_mag=bcs_mag,
-            acs_mag=acs_mag,
-            acs_mask=acs_mask,
-        )
+        # Calibration: apply frame-wise gain or pass through
+        if self.use_calibration:
+            bcs_com_fused, acs_com_fused = self._apply_calibration(
+                bcs_com_out=bcs_com_out,
+                acs_com_out=acs_com_out,
+                bcs_mag=bcs_mag,
+                acs_mag=acs_mag,
+                acs_mask=acs_mask,
+            )
+        else:
+            bcs_com_fused = bcs_com_out
+            acs_com_fused = acs_com_out
 
-        alpha = self._build_alpha_features(bcs_com_cal, acs_com_cal, acs_mask)
+        # Alpha fusion: 3ch (proposed) or 1ch mask-only (BAFNet-style ablation)
+        if self.mask_only_alpha:
+            alpha = acs_mask.unsqueeze(1).transpose(2, 3)  # [B, 1, T, F]
+        else:
+            alpha = self._build_alpha_features(bcs_com_fused, acs_com_fused, acs_mask)
+
         for block in self.alpha_convblocks:
             alpha = block(alpha)
-
         alpha = self.alpha_out(alpha)
         alpha = alpha.transpose(2, 3)
         alpha = torch.softmax(alpha, dim=1)
         alpha_bcs = alpha[:, 0].unsqueeze(-1)
         alpha_acs = alpha[:, 1].unsqueeze(-1)
+        est_com = bcs_com_fused * alpha_bcs + acs_com_fused * alpha_acs
 
-        est_com = bcs_com_cal * alpha_bcs + acs_com_cal * alpha_acs
         est_mag, est_pha = complex_to_mag_pha(est_com)
         return est_mag, est_pha, est_com
