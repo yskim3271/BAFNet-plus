@@ -58,6 +58,7 @@ class Solver(object):
         self.epochs = args.epochs
         self.continue_from = args.continue_from
         self.eval_every = args.eval_every
+        self.valid_start_epoch = getattr(args, 'valid_start_epoch', 0)
         
         self.writer = None
         self.best_state = None
@@ -89,10 +90,11 @@ class Solver(object):
         torch.save(package, tmp_path)
         os.rename(tmp_path, f"checkpoint.th")
 
-        best_path = "best.tmp"
-        best_package = {**self.best_state, 'args': self.args}
-        torch.save(best_package, best_path)
-        os.rename(best_path, "best.th")
+        if self.best_state is not None:
+            best_path = "best.tmp"
+            best_package = {**self.best_state, 'args': self.args}
+            torch.save(best_package, best_path)
+            os.rename(best_path, "best.th")
 
     def _reset(self):
         """Load checkpoint if 'continue_from' is specified, or create a fresh writer if not."""
@@ -157,7 +159,10 @@ class Solver(object):
                 info = " ".join(f"{k.capitalize()}={v:.5f}" for k, v in metrics.items())
                 self.logger.info(f"Epoch {epoch + 1}: {info}")
 
-        self.logger.info(f"Training for {self.epochs} epochs")
+        if self.valid_start_epoch > 0:
+            self.logger.info(f"Training for {self.epochs} epochs (validation starts at epoch {self.valid_start_epoch + 1})")
+        else:
+            self.logger.info(f"Training for {self.epochs} epochs")
 
         for epoch in range(len(self.history), self.epochs):
 
@@ -173,44 +178,50 @@ class Solver(object):
                 f"Train Summary | End of Epoch {epoch + 1} | Time {time.time() - start:.2f}s | Train Loss {train_loss:.5f}"
             )
 
-            self.model.eval()
+            # Validation: skip if before valid_start_epoch
+            run_validation = epoch >= self.valid_start_epoch
+            if run_validation:
+                self.model.eval()
 
-            start = time.time()
-            self.logger.info('-' * 70)
-            self.logger.info('Validation...')
-            with torch.no_grad():
-                valid_pesq = self._run_validation(epoch)
+                start = time.time()
+                self.logger.info('-' * 70)
+                self.logger.info('Validation...')
+                with torch.no_grad():
+                    valid_pesq = self._run_validation(epoch)
 
-            self.logger.info(
-                f"Valid Summary | End of Epoch {epoch + 1} | Time {time.time() - start:.2f}s | Valid PESQ {valid_pesq:.4f}"
-            )
+                self.logger.info(
+                    f"Valid Summary | End of Epoch {epoch + 1} | Time {time.time() - start:.2f}s | Valid PESQ {valid_pesq:.4f}"
+                )
 
-            best_pesq = max(pull_metric(self.history, 'valid_pesq') + [valid_pesq])
-            metrics = {'train': train_loss, 'valid_pesq': valid_pesq, 'best_pesq': best_pesq}
+                best_pesq = max(pull_metric(self.history, 'valid_pesq') + [valid_pesq])
+                metrics = {'train': train_loss, 'valid_pesq': valid_pesq, 'best_pesq': best_pesq}
+                self.best_pesq = max(self.best_pesq, best_pesq)
+
+                if valid_pesq >= best_pesq:
+                    self.logger.info(f'New best valid PESQ {valid_pesq:.4f}')
+                    self.best_state = {'model': copy_state(self.model.state_dict())}
+            else:
+                metrics = {'train': train_loss}
+
             self.history.append(metrics)
             info = " | ".join(f"{k} {v:.5f}" for k, v in metrics.items())
-            self.best_pesq = max(self.best_pesq, best_pesq)
             self.logger.info('-' * 70)
             self.logger.info(f"Overall Summary | Epoch {epoch + 1} | {info}")
 
-            if valid_pesq >= best_pesq:
-                self.logger.info(f'New best valid PESQ {valid_pesq:.4f}')
-                self.best_state = {'model': copy_state(self.model.state_dict())}
-
             self._serialize()
-           
-            if (epoch + 1) % self.eval_every == 0:
+
+            if run_validation and (epoch + 1) % self.eval_every == 0 and self.best_state is not None:
                 self.logger.info('-' * 70)
                 self.logger.info('Evaluating on the test set...')
                 with swap_state(self.model, self.best_state['model']):
                     ev_metric = evaluate(
-                        args=self.args, 
-                        model=self.model, 
-                        data_loader_list=self.ev_loader_list, 
-                        logger=self.logger, 
+                        args=self.args,
+                        model=self.model,
+                        data_loader_list=self.ev_loader_list,
+                        logger=self.logger,
                         epoch=epoch,
                         stft_args=self.stft_args)
-                
+
                 for snr, metric_item in ev_metric.items():
                     for k, v in metric_item.items():
                         self.writer.add_scalar(f"test/{snr}/{k}", v, epoch)
