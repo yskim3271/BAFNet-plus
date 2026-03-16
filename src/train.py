@@ -107,7 +107,7 @@ def run(args):
 
     # Prepare model params (skip pretrained loading if resuming from checkpoint)
     model_params = OmegaConf.to_container(model_args.param, resolve=True)
-    if args.continue_from is not None and 'load_pretrained_weights' in model_params:
+    if args.continue_from is not None:
         model_params['load_pretrained_weights'] = False
         logger.info("[Resume] Skipping pretrained weights loading (will load from checkpoint)")
 
