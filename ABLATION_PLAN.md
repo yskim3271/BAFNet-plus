@@ -18,7 +18,7 @@ eval_every=50
 batch_size=16
 valid_start_epoch=100    # 초반 100 epoch validation 스킵 (시간 절감)
 lr=0.0005
-lr_decay=0.99
+warmup_ratio=0.1
 
 # Backbone checkpoints (Pod 내 경로)
 checkpoint_mapping=/workspace/BAFNet-plus/results/experiments/taps/bm_50ms/best.th

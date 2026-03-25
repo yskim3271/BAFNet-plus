@@ -182,7 +182,7 @@ n_fft: 400
 hop_size: 100
 batch_size: 4
 learning_rate: 5e-4
-lr_decay: 0.99  # exponential decay
+warmup_ratio: 0.1  # cosine annealing with linear warmup
 optimizer: AdamW
 epochs: 200
 ```

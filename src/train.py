@@ -140,85 +140,54 @@ def run(args):
 
     discriminator = MetricGANDiscriminator().to(device)
 
-    # optimizer
-    if hasattr(args.model, 'finetune') and args.model.finetune.get('enabled', False):
-        # ============================================================
-        # Finetune: Differential LR for pretrained models
-        # ============================================================
-        finetune_cfg = args.model.finetune
-        pretrained_lr = finetune_cfg.get('pretrained_lr', 0.0001)
-        weight_decay = finetune_cfg.get('weight_decay', 0.01)
+    # optimizer — auto-enable finetune for models with pretrained submodels
+    finetune_enabled = hasattr(model, 'mapping') and hasattr(model, 'masking')
+    if finetune_enabled:
+        ft = args.finetune
+        # Pretrained params = mapping + masking, fusion params = everything else
+        pretrained_ids = {id(p) for p in model.mapping.parameters()} \
+                       | {id(p) for p in model.masking.parameters()}
+        pretrained_params = [p for p in model.parameters() if id(p) in pretrained_ids]
+        fusion_params = [p for p in model.parameters() if id(p) not in pretrained_ids]
+        if not fusion_params:
+            logger.warning("[Finetune] No fusion parameters found — all params belong to pretrained submodules.")
 
-        # Collect pretrained parameters (mapping + masking)
-        pretrained_params = list(model.mapping.parameters()) + list(model.masking.parameters())
-
-        # Collect fusion module parameters (CNN-based fusion)
-        fusion_params = []
-        for i in range(model.conv_depth):
-            fusion_params.extend(getattr(model, f"convblock_{i}").parameters())
-        fusion_params.extend(model.sigmoid.parameters())
-
-        # Build param_groups
-        fusion_lr = finetune_cfg.get('fusion_lr', args.lr)
         param_groups = [
-            {
-                'params': pretrained_params,
-                'lr': pretrained_lr,
-                'weight_decay': 0.0,  # No decay for pretrained (preserve features)
-                'name': 'pretrained'
-            },
-            {
-                'params': fusion_params,
-                'lr': fusion_lr,
-                'weight_decay': weight_decay,
-                'name': 'fusion'
-            }
+            {'params': pretrained_params, 'lr': ft.pretrained_lr,
+             'weight_decay': ft.pretrained_weight_decay, 'name': 'pretrained'},
+            {'params': fusion_params, 'lr': ft.fusion_lr,
+             'weight_decay': ft.fusion_weight_decay, 'name': 'fusion'},
         ]
-
         optim = optim_class(param_groups, betas=args.betas)
 
-        # Log configuration
         logger.info(f"[Finetune] Created {args.optim} with differential learning rates:")
         for group in param_groups:
             num_params = sum(p.numel() for p in group['params'])
             logger.info(f"  {group['name']:15s}: LR={group['lr']:.2e}, WD={group['weight_decay']:.4f}, Params={num_params:,}")
     else:
-        # Standard optimizer
-        optim = optim_class(model.parameters(), lr=args.lr, betas=args.betas)
+        optim = optim_class(model.parameters(), lr=args.lr,
+                            weight_decay=args.weight_decay, betas=args.betas)
 
-    optim_disc = optim_class(discriminator.parameters(), lr=args.lr, betas=args.betas)
-    
-    # scheduler
-    scheduler = None
-    scheduler_disc = None
+    optim_disc = optim_class(discriminator.parameters(), lr=args.lr,
+                             weight_decay=args.weight_decay, betas=args.betas)
 
-    if args.lr_decay is not None:
-        # Determine warmup settings from finetune config
-        warmup_epochs = 0
-        warmup_start_factor = 0.2
+    # scheduler (Cosine Annealing + Linear Warmup)
+    warmup_epochs = int(args.epochs * args.warmup_ratio)
+    logger.info(f"[Scheduler] Cosine Annealing (warmup={warmup_epochs} epochs, eta_min={args.eta_min})")
 
-        if hasattr(args.model, 'finetune') and args.model.finetune.get('enabled', False):
-            warmup_epochs = args.model.finetune.get('warmup_epochs', 0)
-            warmup_start_factor = args.model.finetune.get('warmup_start_factor', 0.2)
-
+    def build_cosine_warmup_scheduler(optimizer):
         if warmup_epochs > 0:
-            logger.info(f"[Scheduler] Warmup enabled: {warmup_epochs} epochs (start_factor={warmup_start_factor})")
+            warmup = torch.optim.lr_scheduler.LinearLR(
+                optimizer, start_factor=args.warmup_start_factor, total_iters=warmup_epochs)
+            cosine = torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer, T_max=args.epochs - warmup_epochs, eta_min=args.eta_min)
+            return torch.optim.lr_scheduler.SequentialLR(
+                optimizer, schedulers=[warmup, cosine], milestones=[warmup_epochs])
+        return torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=args.epochs, eta_min=args.eta_min)
 
-            warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
-                optim, start_factor=warmup_start_factor, total_iters=warmup_epochs
-            )
-            exp_scheduler = torch.optim.lr_scheduler.ExponentialLR(
-                optim, gamma=args.lr_decay, last_epoch=-1
-            )
-            scheduler = torch.optim.lr_scheduler.SequentialLR(
-                optim, schedulers=[warmup_scheduler, exp_scheduler], milestones=[warmup_epochs]
-            )
-        else:
-            # Standard scheduler without warmup
-            scheduler = torch.optim.lr_scheduler.ExponentialLR(optim, gamma=args.lr_decay, last_epoch=-1)
-
-        # Discriminator scheduler (no warmup)
-        scheduler_disc = torch.optim.lr_scheduler.ExponentialLR(optim_disc, gamma=args.lr_decay, last_epoch=-1)
+    scheduler = build_cosine_warmup_scheduler(optim)
+    scheduler_disc = build_cosine_warmup_scheduler(optim_disc)
 
     # Load dataset from Huggingface
     dset = args.dset.get("dataset", "TAPS")

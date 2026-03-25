@@ -55,14 +55,3 @@ param:
   #   model_class: Backbone
   #   param:
   #     # ... (same structure as args_mapping)
-
-# ============================================================================
-# Finetune Configuration (Differential LR for pretrained models)
-# ============================================================================
-finetune:
-  enabled: false             # Set to true to enable finetune mode
-  pretrained_lr: 0.0001      # Learning rate for pretrained models (mapping + masking)
-  cnn_lr: 0.0005             # Learning rate for BAFNet CNN (alpha network)
-  weight_decay: 0.01         # Weight decay for CNN parameters
-  warmup_epochs: 5           # Number of warmup epochs
-  warmup_start_factor: 0.2   # Initial LR multiplier during warmup
