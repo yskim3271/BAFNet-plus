@@ -5,6 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 # author: yunsik kim
 import sys
+import json
 from pathlib import Path
 
 # Add project root to Python path
@@ -186,10 +187,22 @@ def evaluate(
         iterator = LogProgress(logger, data_loader, name=f"Evaluate on {snr}dB")
         enhanced = []
         results  = []
+        bcs_gain_db = getattr(args, 'bcs_gain_db', 0.0)
+        acs_gain_db = getattr(args, 'acs_gain_db', 0.0)
+        bcs_scalar = 10 ** (bcs_gain_db / 20) if bcs_gain_db != 0.0 else 1.0
+        acs_scalar = 10 ** (acs_gain_db / 20) if acs_gain_db != 0.0 else 1.0
+
         with torch.no_grad():
             for data in iterator:
                 bcs, noisy_acs, clean_acs, _, text = data
-                
+
+                # Apply independent gain perturbation to BCS and ACS
+                if bcs_scalar != 1.0:
+                    bcs = bcs * bcs_scalar
+                if acs_scalar != 1.0:
+                    noisy_acs = noisy_acs * acs_scalar
+                    clean_acs = clean_acs * acs_scalar
+
                 if args.model.input_type == "acs":
                     input = mag_pha_stft(noisy_acs, **stft_args)[2].to(args.device)
                 elif args.model.input_type == "bcs":
@@ -262,7 +275,10 @@ if __name__=="__main__":
     parser.add_argument("--log_file", type=str, default="output.log", help="Log file name. default is output.log")
     parser.add_argument("--eval_stt", default=False, action="store_true", help="Evaluate STT performance")
     parser.add_argument("--stt_language", type=str, default=None, help="STT language (korean, french, english, etc.). Auto-detected from dataset if not specified.")
-    
+    parser.add_argument("--output_json", type=str, default=None, help="Path to save evaluation results as JSON.")
+    parser.add_argument("--bcs_gain_db", type=float, default=0.0, help="Gain perturbation for BCS input in dB. default is 0.0")
+    parser.add_argument("--acs_gain_db", type=float, default=0.0, help="Gain perturbation for ACS input in dB. default is 0.0")
+
     args = parser.parse_args()
     chkpt_dir = args.chkpt_dir
     chkpt_file = args.chkpt_file
@@ -284,6 +300,8 @@ if __name__=="__main__":
     conf = OmegaConf.load(args.model_config)
     conf.device = device
     conf.eval_stt = args.eval_stt
+    conf.bcs_gain_db = args.bcs_gain_db
+    conf.acs_gain_db = args.acs_gain_db
     # Note: stt_language will be set after dataset is determined (see below)
     
     model_args = conf.model
@@ -368,10 +386,19 @@ if __name__=="__main__":
     logger.info(f"Input type: {model_args.input_type}")
     logger.info(f"Checkpoint: {chkpt_dir}")
     logger.info(f"Device: {device}")
-    
-    evaluate(args=conf,
-            model=model,
-            data_loader_list=ev_loader_list,
-            logger=logger,
-            epoch=None,
-            stft_args=stft_args)
+    if args.bcs_gain_db != 0.0 or args.acs_gain_db != 0.0:
+        logger.info(f"Gain perturbation: BCS={args.bcs_gain_db:+.1f}dB, ACS={args.acs_gain_db:+.1f}dB (relative={args.bcs_gain_db - args.acs_gain_db:+.1f}dB)")
+
+    metrics = evaluate(args=conf,
+                       model=model,
+                       data_loader_list=ev_loader_list,
+                       logger=logger,
+                       epoch=None,
+                       stft_args=stft_args)
+
+    if args.output_json:
+        output_path = Path(args.output_json)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_path, "w") as f:
+            json.dump(metrics, f, indent=2)
+        logger.info(f"Results saved to {output_path}")

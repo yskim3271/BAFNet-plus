@@ -48,7 +48,8 @@ class Noise_Augmented_Dataset:
                  with_id=False,
                  with_text=False,
                  deterministic=False,
-                 bcs_only=False
+                 bcs_only=False,
+                 bcs_gain_perturbation_db=0,
                  ):
         # Initialize variables with constructor arguments
         self.datapair_list = datapair_list
@@ -67,6 +68,7 @@ class Noise_Augmented_Dataset:
         self.with_text = with_text
         self.deterministic = deterministic
         self.bcs_only = bcs_only
+        self.bcs_gain_perturbation_db = bcs_gain_perturbation_db
         assert self.with_id if self.with_text else True, "with_id must be True if with_text is True"
         
         # Parse the SNR range into a list of possible SNR values
@@ -285,6 +287,12 @@ class Noise_Augmented_Dataset:
         noisy_acs, _, noisy_scalar = tailor_dB_FS(noisy_acs, noisy_target_dB_FS)
         clean_acs *= noisy_scalar
         bcs *= noisy_scalar
+
+        # Apply independent BCS gain perturbation (simulates sensor coupling variation)
+        if self.bcs_gain_perturbation_db > 0:
+            bcs_offset_db = random.uniform(-self.bcs_gain_perturbation_db,
+                                            self.bcs_gain_perturbation_db)
+            bcs = bcs * (10 ** (bcs_offset_db / 20))
 
         # Check if the noisy signal is clipped; if so, reduce the amplitude
         if is_clipped(noisy_acs):

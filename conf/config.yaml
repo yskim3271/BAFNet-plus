@@ -20,6 +20,7 @@ train_noise:
   target_dB_FS: -25
   target_dB_FS_floating_value: 10
   silence_length: 0.2
+  bcs_gain_perturbation_db: 10
 
 # noise augmentation for valid
 valid_noise:

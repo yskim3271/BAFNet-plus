@@ -289,7 +289,8 @@ def run(args):
         segment=segment,
         stride=stride,
         shift=shift,
-        bcs_only=bcs_only
+        bcs_only=bcs_only,
+        bcs_gain_perturbation_db=getattr(args.train_noise, 'bcs_gain_perturbation_db', 0),
     )
 
     tr_loader = DataLoader(
