@@ -348,6 +348,13 @@ export CUDA_VISIBLE_DEVICES=""
 - Add `-s` flag to see print statements: `pytest -s`
 - Use `--pdb` to drop into debugger on failure
 
+### Remote Training Log Duplication
+- `run_train.sh`가 원격 stdout을 `tail -f`로 스트리밍할 때, 일부 메시지가 2번 나타날 수 있음
+- 원인: 모델 코드의 `print()` (→ stdout)와 `logger.info()` (→ trainer.log → stdout)가 별도 경로로 출력
+- 예: `[BAFNetPlus]` 메시지, HuggingFace Warning 등
+- **학습 자체에는 영향 없음** — `trainer.log`에는 중복 없이 정상 기록됨
+- 해결: 모델 코드에서 `print()` 대신 `logger`를 사용하면 근본적으로 해결 가능
+
 ## Resources
 
 - **Hydra Docs**: https://hydra.cc/docs/intro/
