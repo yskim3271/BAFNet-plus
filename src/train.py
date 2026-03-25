@@ -172,7 +172,7 @@ def run(args):
                              weight_decay=args.weight_decay, betas=args.betas)
 
     # scheduler (Cosine Annealing + Linear Warmup)
-    warmup_epochs = int(args.epochs * args.warmup_ratio)
+    warmup_epochs = args.warmup_epochs
     logger.info(f"[Scheduler] Cosine Annealing (warmup={warmup_epochs} epochs, eta_min={args.eta_min})")
 
     def build_cosine_warmup_scheduler(optimizer):
