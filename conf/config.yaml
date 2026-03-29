@@ -58,7 +58,7 @@ loss:
 
 # Optimization related
 lr: 5e-4
-weight_decay: 0.0
+weight_decay: 0.01
 optim: adamW
 betas: [0.9, 0.99]
 max_grad_norm: 5.0
@@ -70,9 +70,9 @@ eta_min: 1e-6                  # cosine minimum LR
 
 # Finetune (auto-enabled for bafnet/bafnetplus models)
 finetune:
-  pretrained_lr: 1e-4
+  pretrained_lr: 4e-4
   pretrained_weight_decay: 0.0
-  fusion_lr: 5e-4
+  fusion_lr: 2e-3
   fusion_weight_decay: 0.01
 
 # Logging and printing, and does not impact training
