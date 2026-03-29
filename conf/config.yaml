@@ -20,7 +20,7 @@ train_noise:
   target_dB_FS: -25
   target_dB_FS_floating_value: 10
   silence_length: 0.2
-  bcs_gain_perturbation_db: 10
+  bcs_gain_perturbation_db: 10  # set to 0 for backbone training
 
 # noise augmentation for valid
 valid_noise:
@@ -42,11 +42,11 @@ test_noise:
   deterministic: true
 
 batch_size: 8
-epochs: 200
+epochs: 150
 
-eval_every: 100  # compute test metrics every so epochs
-eval_stt: true
-valid_start_epoch: 0  # skip validation before this epoch (0 = validate from start)
+eval_every: 150  # compute test metrics every so epochs
+eval_stt: false
+valid_start_epoch: 100  # skip validation before this epoch (0 = validate from start)
 
 # Loss related
 loss:
@@ -57,14 +57,14 @@ loss:
   metric: 0.05
 
 # Optimization related
-lr: 5e-4
+lr: 2e-3
 weight_decay: 0.01
 optim: adamW
 betas: [0.9, 0.99]
 max_grad_norm: 5.0
 
 # Schedule related (Cosine Annealing + Linear Warmup)
-warmup_epochs: 10              # number of warmup epochs
+warmup_epochs: 15              # number of warmup epochs
 warmup_start_factor: 0.1       # initial LR = base_lr * start_factor
 eta_min: 1e-6                  # cosine minimum LR
 
