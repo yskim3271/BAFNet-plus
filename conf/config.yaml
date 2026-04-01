@@ -60,7 +60,7 @@ loss:
 lr: 2e-3
 weight_decay: 0.01
 optim: adamW
-betas: [0.9, 0.99]
+betas: [0.9, 0.999]
 max_grad_norm: 5.0
 
 # Schedule related (Cosine Annealing + Linear Warmup)
