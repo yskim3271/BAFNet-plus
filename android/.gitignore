@@ -1,0 +1,55 @@
+# Android Studio / Gradle
+.gradle/
+build/
+*.iml
+.idea/
+local.properties
+
+# Build outputs
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# Generated files
+gen/
+out/
+captures/
+
+# Native build
+.cxx/
+*.so
+obj/
+
+# Java/Kotlin
+*.class
+*.war
+# gradle-wrapper.jar must be tracked for CI reproducibility; exclude other *.jar
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# Debug files
+*.hprof
+*.log
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDE
+*.swp
+*.swo
+*~
+
+# Keystore (keep secure)
+*.jks
+*.keystore
+
+# ONNX models (large files - download separately)
+# Uncomment if models should not be tracked
+# *.onnx
+
+# QNN context cache (generated on device at runtime; never in source tree).
+# Parity fixture .bin files under androidTest/assets/fixtures/ must be tracked.
+# *.bin        — commented out: too broad, would hide fixtures.
+*.serialized

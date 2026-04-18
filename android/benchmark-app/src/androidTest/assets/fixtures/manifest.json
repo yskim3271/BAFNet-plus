@@ -1,0 +1,4905 @@
+{
+  "version": 1,
+  "generator": "scripts/make_streaming_golden.py",
+  "generator_config": {
+    "seed": 42,
+    "duration_sec": 1.0,
+    "input_scale": 0.1,
+    "max_chunks": -1
+  },
+  "streaming_config_path": "android/benchmark-app/src/main/assets/streaming_config.json",
+  "model_path": "android/benchmark-app/src/main/assets/model.onnx",
+  "derived": {
+    "samples_per_chunk": 1200,
+    "output_samples_per_chunk": 800,
+    "stft_future_samples": 200,
+    "input_lookahead_frames": 3,
+    "total_frames_needed": 11,
+    "ola_tail_size": 300
+  },
+  "stft_config": {
+    "n_fft": 400,
+    "hop_size": 100,
+    "win_length": 400,
+    "sample_rate": 16000,
+    "center": true,
+    "compress_factor": 0.3
+  },
+  "streaming_config": {
+    "chunk_size_frames": 8,
+    "encoder_lookahead": 3,
+    "decoder_lookahead": 3,
+    "export_time_frames": 11,
+    "freq_bins": 201,
+    "freq_bins_encoded": 100
+  },
+  "state_layout": [
+    {
+      "name": "state_rf_0_tb0_cab_dwconv",
+      "shape": [
+        1,
+        128,
+        2,
+        100
+      ],
+      "offset_floats": 0,
+      "size_floats": 25600
+    },
+    {
+      "name": "state_rf_0_tb0_cab_ema",
+      "shape": [
+        1,
+        64,
+        10,
+        100
+      ],
+      "offset_floats": 25600,
+      "size_floats": 64000
+    },
+    {
+      "name": "state_rf_0_tb0_gpkffn_attn_dw_11",
+      "shape": [
+        1,
+        64,
+        10,
+        100
+      ],
+      "offset_floats": 89600,
+      "size_floats": 64000
+    },
+    {
+      "name": "state_rf_0_tb0_gpkffn_attn_dw_3",
+      "shape": [
+        1,
+        64,
+        2,
+        100
+      ],
+      "offset_floats": 153600,
+      "size_floats": 12800
+    },
+    {
+      "name": "state_rf_0_tb0_gpkffn_attn_dw_5",
+      "shape": [
+        1,
+        64,
+        4,
+        100
+      ],
+      "offset_floats": 166400,
+      "size_floats": 25600
+    },
+    {
+      "name": "state_rf_0_tb0_gpkffn_attn_dw_7",
+      "shape": [
+        1,
+        64,
+        6,
+        100
+      ],
+      "offset_floats": 192000,
+      "size_floats": 38400
+    },
+    {
+      "name": "state_rf_0_tb0_gpkffn_conv_11",
+      "shape": [
+        1,
+        64,
+        10,
+        100
+      ],
+      "offset_floats": 230400,
+      "size_floats": 64000
+    },
+    {
+      "name": "state_rf_0_tb0_gpkffn_conv_3",
+      "shape": [
+        1,
+        64,
+        2,
+        100
+      ],
+      "offset_floats": 294400,
+      "size_floats": 12800
+    },
+    {
+      "name": "state_rf_0_tb0_gpkffn_conv_5",
+      "shape": [
+        1,
+        64,
+        4,
+        100
+      ],
+      "offset_floats": 307200,
+      "size_floats": 25600
+    },
+    {
+      "name": "state_rf_0_tb0_gpkffn_conv_7",
+      "shape": [
+        1,
+        64,
+        6,
+        100
+      ],
+      "offset_floats": 332800,
+      "size_floats": 38400
+    },
+    {
+      "name": "state_rf_0_tb1_cab_dwconv",
+      "shape": [
+        1,
+        128,
+        2,
+        100
+      ],
+      "offset_floats": 371200,
+      "size_floats": 25600
+    },
+    {
+      "name": "state_rf_0_tb1_cab_ema",
+      "shape": [
+        1,
+        64,
+        10,
+        100
+      ],
+      "offset_floats": 396800,
+      "size_floats": 64000
+    },
+    {
+      "name": "state_rf_0_tb1_gpkffn_attn_dw_11",
+      "shape": [
+        1,
+        64,
+        10,
+        100
+      ],
+      "offset_floats": 460800,
+      "size_floats": 64000
+    },
+    {
+      "name": "state_rf_0_tb1_gpkffn_attn_dw_3",
+      "shape": [
+        1,
+        64,
+        2,
+        100
+      ],
+      "offset_floats": 524800,
+      "size_floats": 12800
+    },
+    {
+      "name": "state_rf_0_tb1_gpkffn_attn_dw_5",
+      "shape": [
+        1,
+        64,
+        4,
+        100
+      ],
+      "offset_floats": 537600,
+      "size_floats": 25600
+    },
+    {
+      "name": "state_rf_0_tb1_gpkffn_attn_dw_7",
+      "shape": [
+        1,
+        64,
+        6,
+        100
+      ],
+      "offset_floats": 563200,
+      "size_floats": 38400
+    },
+    {
+      "name": "state_rf_0_tb1_gpkffn_conv_11",
+      "shape": [
+        1,
+        64,
+        10,
+        100
+      ],
+      "offset_floats": 601600,
+      "size_floats": 64000
+    },
+    {
+      "name": "state_rf_0_tb1_gpkffn_conv_3",
+      "shape": [
+        1,
+        64,
+        2,
+        100
+      ],
+      "offset_floats": 665600,
+      "size_floats": 12800
+    },
+    {
+      "name": "state_rf_0_tb1_gpkffn_conv_5",
+      "shape": [
+        1,
+        64,
+        4,
+        100
+      ],
+      "offset_floats": 678400,
+      "size_floats": 25600
+    },
+    {
+      "name": "state_rf_0_tb1_gpkffn_conv_7",
+      "shape": [
+        1,
+        64,
+        6,
+        100
+      ],
+      "offset_floats": 704000,
+      "size_floats": 38400
+    },
+    {
+      "name": "state_rf_1_tb0_cab_dwconv",
+      "shape": [
+        1,
+        128,
+        2,
+        100
+      ],
+      "offset_floats": 742400,
+      "size_floats": 25600
+    },
+    {
+      "name": "state_rf_1_tb0_cab_ema",
+      "shape": [
+        1,
+        64,
+        10,
+        100
+      ],
+      "offset_floats": 768000,
+      "size_floats": 64000
+    },
+    {
+      "name": "state_rf_1_tb0_gpkffn_attn_dw_11",
+      "shape": [
+        1,
+        64,
+        10,
+        100
+      ],
+      "offset_floats": 832000,
+      "size_floats": 64000
+    },
+    {
+      "name": "state_rf_1_tb0_gpkffn_attn_dw_3",
+      "shape": [
+        1,
+        64,
+        2,
+        100
+      ],
+      "offset_floats": 896000,
+      "size_floats": 12800
+    },
+    {
+      "name": "state_rf_1_tb0_gpkffn_attn_dw_5",
+      "shape": [
+        1,
+        64,
+        4,
+        100
+      ],
+      "offset_floats": 908800,
+      "size_floats": 25600
+    },
+    {
+      "name": "state_rf_1_tb0_gpkffn_attn_dw_7",
+      "shape": [
+        1,
+        64,
+        6,
+        100
+      ],
+      "offset_floats": 934400,
+      "size_floats": 38400
+    },
+    {
+      "name": "state_rf_1_tb0_gpkffn_conv_11",
+      "shape": [
+        1,
+        64,
+        10,
+        100
+      ],
+      "offset_floats": 972800,
+      "size_floats": 64000
+    },
+    {
+      "name": "state_rf_1_tb0_gpkffn_conv_3",
+      "shape": [
+        1,
+        64,
+        2,
+        100
+      ],
+      "offset_floats": 1036800,
+      "size_floats": 12800
+    },
+    {
+      "name": "state_rf_1_tb0_gpkffn_conv_5",
+      "shape": [
+        1,
+        64,
+        4,
+        100
+      ],
+      "offset_floats": 1049600,
+      "size_floats": 25600
+    },
+    {
+      "name": "state_rf_1_tb0_gpkffn_conv_7",
+      "shape": [
+        1,
+        64,
+        6,
+        100
+      ],
+      "offset_floats": 1075200,
+      "size_floats": 38400
+    },
+    {
+      "name": "state_rf_1_tb1_cab_dwconv",
+      "shape": [
+        1,
+        128,
+        2,
+        100
+      ],
+      "offset_floats": 1113600,
+      "size_floats": 25600
+    },
+    {
+      "name": "state_rf_1_tb1_cab_ema",
+      "shape": [
+        1,
+        64,
+        10,
+        100
+      ],
+      "offset_floats": 1139200,
+      "size_floats": 64000
+    },
+    {
+      "name": "state_rf_1_tb1_gpkffn_attn_dw_11",
+      "shape": [
+        1,
+        64,
+        10,
+        100
+      ],
+      "offset_floats": 1203200,
+      "size_floats": 64000
+    },
+    {
+      "name": "state_rf_1_tb1_gpkffn_attn_dw_3",
+      "shape": [
+        1,
+        64,
+        2,
+        100
+      ],
+      "offset_floats": 1267200,
+      "size_floats": 12800
+    },
+    {
+      "name": "state_rf_1_tb1_gpkffn_attn_dw_5",
+      "shape": [
+        1,
+        64,
+        4,
+        100
+      ],
+      "offset_floats": 1280000,
+      "size_floats": 25600
+    },
+    {
+      "name": "state_rf_1_tb1_gpkffn_attn_dw_7",
+      "shape": [
+        1,
+        64,
+        6,
+        100
+      ],
+      "offset_floats": 1305600,
+      "size_floats": 38400
+    },
+    {
+      "name": "state_rf_1_tb1_gpkffn_conv_11",
+      "shape": [
+        1,
+        64,
+        10,
+        100
+      ],
+      "offset_floats": 1344000,
+      "size_floats": 64000
+    },
+    {
+      "name": "state_rf_1_tb1_gpkffn_conv_3",
+      "shape": [
+        1,
+        64,
+        2,
+        100
+      ],
+      "offset_floats": 1408000,
+      "size_floats": 12800
+    },
+    {
+      "name": "state_rf_1_tb1_gpkffn_conv_5",
+      "shape": [
+        1,
+        64,
+        4,
+        100
+      ],
+      "offset_floats": 1420800,
+      "size_floats": 25600
+    },
+    {
+      "name": "state_rf_1_tb1_gpkffn_conv_7",
+      "shape": [
+        1,
+        64,
+        6,
+        100
+      ],
+      "offset_floats": 1446400,
+      "size_floats": 38400
+    },
+    {
+      "name": "state_rf_2_tb0_cab_dwconv",
+      "shape": [
+        1,
+        128,
+        2,
+        100
+      ],
+      "offset_floats": 1484800,
+      "size_floats": 25600
+    },
+    {
+      "name": "state_rf_2_tb0_cab_ema",
+      "shape": [
+        1,
+        64,
+        10,
+        100
+      ],
+      "offset_floats": 1510400,
+      "size_floats": 64000
+    },
+    {
+      "name": "state_rf_2_tb0_gpkffn_attn_dw_11",
+      "shape": [
+        1,
+        64,
+        10,
+        100
+      ],
+      "offset_floats": 1574400,
+      "size_floats": 64000
+    },
+    {
+      "name": "state_rf_2_tb0_gpkffn_attn_dw_3",
+      "shape": [
+        1,
+        64,
+        2,
+        100
+      ],
+      "offset_floats": 1638400,
+      "size_floats": 12800
+    },
+    {
+      "name": "state_rf_2_tb0_gpkffn_attn_dw_5",
+      "shape": [
+        1,
+        64,
+        4,
+        100
+      ],
+      "offset_floats": 1651200,
+      "size_floats": 25600
+    },
+    {
+      "name": "state_rf_2_tb0_gpkffn_attn_dw_7",
+      "shape": [
+        1,
+        64,
+        6,
+        100
+      ],
+      "offset_floats": 1676800,
+      "size_floats": 38400
+    },
+    {
+      "name": "state_rf_2_tb0_gpkffn_conv_11",
+      "shape": [
+        1,
+        64,
+        10,
+        100
+      ],
+      "offset_floats": 1715200,
+      "size_floats": 64000
+    },
+    {
+      "name": "state_rf_2_tb0_gpkffn_conv_3",
+      "shape": [
+        1,
+        64,
+        2,
+        100
+      ],
+      "offset_floats": 1779200,
+      "size_floats": 12800
+    },
+    {
+      "name": "state_rf_2_tb0_gpkffn_conv_5",
+      "shape": [
+        1,
+        64,
+        4,
+        100
+      ],
+      "offset_floats": 1792000,
+      "size_floats": 25600
+    },
+    {
+      "name": "state_rf_2_tb0_gpkffn_conv_7",
+      "shape": [
+        1,
+        64,
+        6,
+        100
+      ],
+      "offset_floats": 1817600,
+      "size_floats": 38400
+    },
+    {
+      "name": "state_rf_2_tb1_cab_dwconv",
+      "shape": [
+        1,
+        128,
+        2,
+        100
+      ],
+      "offset_floats": 1856000,
+      "size_floats": 25600
+    },
+    {
+      "name": "state_rf_2_tb1_cab_ema",
+      "shape": [
+        1,
+        64,
+        10,
+        100
+      ],
+      "offset_floats": 1881600,
+      "size_floats": 64000
+    },
+    {
+      "name": "state_rf_2_tb1_gpkffn_attn_dw_11",
+      "shape": [
+        1,
+        64,
+        10,
+        100
+      ],
+      "offset_floats": 1945600,
+      "size_floats": 64000
+    },
+    {
+      "name": "state_rf_2_tb1_gpkffn_attn_dw_3",
+      "shape": [
+        1,
+        64,
+        2,
+        100
+      ],
+      "offset_floats": 2009600,
+      "size_floats": 12800
+    },
+    {
+      "name": "state_rf_2_tb1_gpkffn_attn_dw_5",
+      "shape": [
+        1,
+        64,
+        4,
+        100
+      ],
+      "offset_floats": 2022400,
+      "size_floats": 25600
+    },
+    {
+      "name": "state_rf_2_tb1_gpkffn_attn_dw_7",
+      "shape": [
+        1,
+        64,
+        6,
+        100
+      ],
+      "offset_floats": 2048000,
+      "size_floats": 38400
+    },
+    {
+      "name": "state_rf_2_tb1_gpkffn_conv_11",
+      "shape": [
+        1,
+        64,
+        10,
+        100
+      ],
+      "offset_floats": 2086400,
+      "size_floats": 64000
+    },
+    {
+      "name": "state_rf_2_tb1_gpkffn_conv_3",
+      "shape": [
+        1,
+        64,
+        2,
+        100
+      ],
+      "offset_floats": 2150400,
+      "size_floats": 12800
+    },
+    {
+      "name": "state_rf_2_tb1_gpkffn_conv_5",
+      "shape": [
+        1,
+        64,
+        4,
+        100
+      ],
+      "offset_floats": 2163200,
+      "size_floats": 25600
+    },
+    {
+      "name": "state_rf_2_tb1_gpkffn_conv_7",
+      "shape": [
+        1,
+        64,
+        6,
+        100
+      ],
+      "offset_floats": 2188800,
+      "size_floats": 38400
+    },
+    {
+      "name": "state_rf_3_tb0_cab_dwconv",
+      "shape": [
+        1,
+        128,
+        2,
+        100
+      ],
+      "offset_floats": 2227200,
+      "size_floats": 25600
+    },
+    {
+      "name": "state_rf_3_tb0_cab_ema",
+      "shape": [
+        1,
+        64,
+        10,
+        100
+      ],
+      "offset_floats": 2252800,
+      "size_floats": 64000
+    },
+    {
+      "name": "state_rf_3_tb0_gpkffn_attn_dw_11",
+      "shape": [
+        1,
+        64,
+        10,
+        100
+      ],
+      "offset_floats": 2316800,
+      "size_floats": 64000
+    },
+    {
+      "name": "state_rf_3_tb0_gpkffn_attn_dw_3",
+      "shape": [
+        1,
+        64,
+        2,
+        100
+      ],
+      "offset_floats": 2380800,
+      "size_floats": 12800
+    },
+    {
+      "name": "state_rf_3_tb0_gpkffn_attn_dw_5",
+      "shape": [
+        1,
+        64,
+        4,
+        100
+      ],
+      "offset_floats": 2393600,
+      "size_floats": 25600
+    },
+    {
+      "name": "state_rf_3_tb0_gpkffn_attn_dw_7",
+      "shape": [
+        1,
+        64,
+        6,
+        100
+      ],
+      "offset_floats": 2419200,
+      "size_floats": 38400
+    },
+    {
+      "name": "state_rf_3_tb0_gpkffn_conv_11",
+      "shape": [
+        1,
+        64,
+        10,
+        100
+      ],
+      "offset_floats": 2457600,
+      "size_floats": 64000
+    },
+    {
+      "name": "state_rf_3_tb0_gpkffn_conv_3",
+      "shape": [
+        1,
+        64,
+        2,
+        100
+      ],
+      "offset_floats": 2521600,
+      "size_floats": 12800
+    },
+    {
+      "name": "state_rf_3_tb0_gpkffn_conv_5",
+      "shape": [
+        1,
+        64,
+        4,
+        100
+      ],
+      "offset_floats": 2534400,
+      "size_floats": 25600
+    },
+    {
+      "name": "state_rf_3_tb0_gpkffn_conv_7",
+      "shape": [
+        1,
+        64,
+        6,
+        100
+      ],
+      "offset_floats": 2560000,
+      "size_floats": 38400
+    },
+    {
+      "name": "state_rf_3_tb1_cab_dwconv",
+      "shape": [
+        1,
+        128,
+        2,
+        100
+      ],
+      "offset_floats": 2598400,
+      "size_floats": 25600
+    },
+    {
+      "name": "state_rf_3_tb1_cab_ema",
+      "shape": [
+        1,
+        64,
+        10,
+        100
+      ],
+      "offset_floats": 2624000,
+      "size_floats": 64000
+    },
+    {
+      "name": "state_rf_3_tb1_gpkffn_attn_dw_11",
+      "shape": [
+        1,
+        64,
+        10,
+        100
+      ],
+      "offset_floats": 2688000,
+      "size_floats": 64000
+    },
+    {
+      "name": "state_rf_3_tb1_gpkffn_attn_dw_3",
+      "shape": [
+        1,
+        64,
+        2,
+        100
+      ],
+      "offset_floats": 2752000,
+      "size_floats": 12800
+    },
+    {
+      "name": "state_rf_3_tb1_gpkffn_attn_dw_5",
+      "shape": [
+        1,
+        64,
+        4,
+        100
+      ],
+      "offset_floats": 2764800,
+      "size_floats": 25600
+    },
+    {
+      "name": "state_rf_3_tb1_gpkffn_attn_dw_7",
+      "shape": [
+        1,
+        64,
+        6,
+        100
+      ],
+      "offset_floats": 2790400,
+      "size_floats": 38400
+    },
+    {
+      "name": "state_rf_3_tb1_gpkffn_conv_11",
+      "shape": [
+        1,
+        64,
+        10,
+        100
+      ],
+      "offset_floats": 2828800,
+      "size_floats": 64000
+    },
+    {
+      "name": "state_rf_3_tb1_gpkffn_conv_3",
+      "shape": [
+        1,
+        64,
+        2,
+        100
+      ],
+      "offset_floats": 2892800,
+      "size_floats": 12800
+    },
+    {
+      "name": "state_rf_3_tb1_gpkffn_conv_5",
+      "shape": [
+        1,
+        64,
+        4,
+        100
+      ],
+      "offset_floats": 2905600,
+      "size_floats": 25600
+    },
+    {
+      "name": "state_rf_3_tb1_gpkffn_conv_7",
+      "shape": [
+        1,
+        64,
+        6,
+        100
+      ],
+      "offset_floats": 2931200,
+      "size_floats": 38400
+    }
+  ],
+  "state_order": [
+    "state_rf_0_tb0_cab_dwconv",
+    "state_rf_0_tb0_cab_ema",
+    "state_rf_0_tb0_gpkffn_attn_dw_11",
+    "state_rf_0_tb0_gpkffn_attn_dw_3",
+    "state_rf_0_tb0_gpkffn_attn_dw_5",
+    "state_rf_0_tb0_gpkffn_attn_dw_7",
+    "state_rf_0_tb0_gpkffn_conv_11",
+    "state_rf_0_tb0_gpkffn_conv_3",
+    "state_rf_0_tb0_gpkffn_conv_5",
+    "state_rf_0_tb0_gpkffn_conv_7",
+    "state_rf_0_tb1_cab_dwconv",
+    "state_rf_0_tb1_cab_ema",
+    "state_rf_0_tb1_gpkffn_attn_dw_11",
+    "state_rf_0_tb1_gpkffn_attn_dw_3",
+    "state_rf_0_tb1_gpkffn_attn_dw_5",
+    "state_rf_0_tb1_gpkffn_attn_dw_7",
+    "state_rf_0_tb1_gpkffn_conv_11",
+    "state_rf_0_tb1_gpkffn_conv_3",
+    "state_rf_0_tb1_gpkffn_conv_5",
+    "state_rf_0_tb1_gpkffn_conv_7",
+    "state_rf_1_tb0_cab_dwconv",
+    "state_rf_1_tb0_cab_ema",
+    "state_rf_1_tb0_gpkffn_attn_dw_11",
+    "state_rf_1_tb0_gpkffn_attn_dw_3",
+    "state_rf_1_tb0_gpkffn_attn_dw_5",
+    "state_rf_1_tb0_gpkffn_attn_dw_7",
+    "state_rf_1_tb0_gpkffn_conv_11",
+    "state_rf_1_tb0_gpkffn_conv_3",
+    "state_rf_1_tb0_gpkffn_conv_5",
+    "state_rf_1_tb0_gpkffn_conv_7",
+    "state_rf_1_tb1_cab_dwconv",
+    "state_rf_1_tb1_cab_ema",
+    "state_rf_1_tb1_gpkffn_attn_dw_11",
+    "state_rf_1_tb1_gpkffn_attn_dw_3",
+    "state_rf_1_tb1_gpkffn_attn_dw_5",
+    "state_rf_1_tb1_gpkffn_attn_dw_7",
+    "state_rf_1_tb1_gpkffn_conv_11",
+    "state_rf_1_tb1_gpkffn_conv_3",
+    "state_rf_1_tb1_gpkffn_conv_5",
+    "state_rf_1_tb1_gpkffn_conv_7",
+    "state_rf_2_tb0_cab_dwconv",
+    "state_rf_2_tb0_cab_ema",
+    "state_rf_2_tb0_gpkffn_attn_dw_11",
+    "state_rf_2_tb0_gpkffn_attn_dw_3",
+    "state_rf_2_tb0_gpkffn_attn_dw_5",
+    "state_rf_2_tb0_gpkffn_attn_dw_7",
+    "state_rf_2_tb0_gpkffn_conv_11",
+    "state_rf_2_tb0_gpkffn_conv_3",
+    "state_rf_2_tb0_gpkffn_conv_5",
+    "state_rf_2_tb0_gpkffn_conv_7",
+    "state_rf_2_tb1_cab_dwconv",
+    "state_rf_2_tb1_cab_ema",
+    "state_rf_2_tb1_gpkffn_attn_dw_11",
+    "state_rf_2_tb1_gpkffn_attn_dw_3",
+    "state_rf_2_tb1_gpkffn_attn_dw_5",
+    "state_rf_2_tb1_gpkffn_attn_dw_7",
+    "state_rf_2_tb1_gpkffn_conv_11",
+    "state_rf_2_tb1_gpkffn_conv_3",
+    "state_rf_2_tb1_gpkffn_conv_5",
+    "state_rf_2_tb1_gpkffn_conv_7",
+    "state_rf_3_tb0_cab_dwconv",
+    "state_rf_3_tb0_cab_ema",
+    "state_rf_3_tb0_gpkffn_attn_dw_11",
+    "state_rf_3_tb0_gpkffn_attn_dw_3",
+    "state_rf_3_tb0_gpkffn_attn_dw_5",
+    "state_rf_3_tb0_gpkffn_attn_dw_7",
+    "state_rf_3_tb0_gpkffn_conv_11",
+    "state_rf_3_tb0_gpkffn_conv_3",
+    "state_rf_3_tb0_gpkffn_conv_5",
+    "state_rf_3_tb0_gpkffn_conv_7",
+    "state_rf_3_tb1_cab_dwconv",
+    "state_rf_3_tb1_cab_ema",
+    "state_rf_3_tb1_gpkffn_attn_dw_11",
+    "state_rf_3_tb1_gpkffn_attn_dw_3",
+    "state_rf_3_tb1_gpkffn_attn_dw_5",
+    "state_rf_3_tb1_gpkffn_attn_dw_7",
+    "state_rf_3_tb1_gpkffn_conv_11",
+    "state_rf_3_tb1_gpkffn_conv_3",
+    "state_rf_3_tb1_gpkffn_conv_5",
+    "state_rf_3_tb1_gpkffn_conv_7"
+  ],
+  "input_audio": {
+    "file": "input_audio.bin",
+    "shape": [
+      16000
+    ],
+    "dtype": "float32",
+    "bytes": 64000
+  },
+  "num_chunks": 22,
+  "chunks": [
+    {
+      "idx": 0,
+      "files": {
+        "input_samples": {
+          "file": "chunk_000/input_samples.bin",
+          "shape": [
+            1200
+          ],
+          "dtype": "float32",
+          "bytes": 4800
+        },
+        "stft_context_in": {
+          "file": "chunk_000/stft_context_in.bin",
+          "shape": [
+            200
+          ],
+          "dtype": "float32",
+          "bytes": 800
+        },
+        "stft_input": {
+          "file": "chunk_000/stft_input.bin",
+          "shape": [
+            1400
+          ],
+          "dtype": "float32",
+          "bytes": 5600
+        },
+        "stft_mag": {
+          "file": "chunk_000/stft_mag.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "stft_pha": {
+          "file": "chunk_000/stft_pha.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_mag_in": {
+          "file": "chunk_000/model_mag_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_pha_in": {
+          "file": "chunk_000/model_pha_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mask": {
+          "file": "chunk_000/est_mask.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_real": {
+          "file": "chunk_000/phase_real.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_imag": {
+          "file": "chunk_000/phase_imag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag": {
+          "file": "chunk_000/est_mag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_pha": {
+          "file": "chunk_000/est_pha.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag_crop": {
+          "file": "chunk_000/est_mag_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "est_pha_crop": {
+          "file": "chunk_000/est_pha_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "ola_buffer_in": {
+          "file": "chunk_000/ola_buffer_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_in": {
+          "file": "chunk_000/ola_norm_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_buffer_out": {
+          "file": "chunk_000/ola_buffer_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_out": {
+          "file": "chunk_000/ola_norm_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "istft_output": {
+          "file": "chunk_000/istft_output.bin",
+          "shape": [
+            800
+          ],
+          "dtype": "float32",
+          "bytes": 3200
+        }
+      }
+    },
+    {
+      "idx": 1,
+      "files": {
+        "input_samples": {
+          "file": "chunk_001/input_samples.bin",
+          "shape": [
+            1200
+          ],
+          "dtype": "float32",
+          "bytes": 4800
+        },
+        "stft_context_in": {
+          "file": "chunk_001/stft_context_in.bin",
+          "shape": [
+            200
+          ],
+          "dtype": "float32",
+          "bytes": 800
+        },
+        "stft_input": {
+          "file": "chunk_001/stft_input.bin",
+          "shape": [
+            1400
+          ],
+          "dtype": "float32",
+          "bytes": 5600
+        },
+        "stft_mag": {
+          "file": "chunk_001/stft_mag.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "stft_pha": {
+          "file": "chunk_001/stft_pha.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_mag_in": {
+          "file": "chunk_001/model_mag_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_pha_in": {
+          "file": "chunk_001/model_pha_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mask": {
+          "file": "chunk_001/est_mask.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_real": {
+          "file": "chunk_001/phase_real.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_imag": {
+          "file": "chunk_001/phase_imag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag": {
+          "file": "chunk_001/est_mag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_pha": {
+          "file": "chunk_001/est_pha.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag_crop": {
+          "file": "chunk_001/est_mag_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "est_pha_crop": {
+          "file": "chunk_001/est_pha_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "ola_buffer_in": {
+          "file": "chunk_001/ola_buffer_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_in": {
+          "file": "chunk_001/ola_norm_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_buffer_out": {
+          "file": "chunk_001/ola_buffer_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_out": {
+          "file": "chunk_001/ola_norm_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "istft_output": {
+          "file": "chunk_001/istft_output.bin",
+          "shape": [
+            800
+          ],
+          "dtype": "float32",
+          "bytes": 3200
+        }
+      }
+    },
+    {
+      "idx": 2,
+      "files": {
+        "input_samples": {
+          "file": "chunk_002/input_samples.bin",
+          "shape": [
+            1200
+          ],
+          "dtype": "float32",
+          "bytes": 4800
+        },
+        "stft_context_in": {
+          "file": "chunk_002/stft_context_in.bin",
+          "shape": [
+            200
+          ],
+          "dtype": "float32",
+          "bytes": 800
+        },
+        "stft_input": {
+          "file": "chunk_002/stft_input.bin",
+          "shape": [
+            1400
+          ],
+          "dtype": "float32",
+          "bytes": 5600
+        },
+        "stft_mag": {
+          "file": "chunk_002/stft_mag.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "stft_pha": {
+          "file": "chunk_002/stft_pha.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_mag_in": {
+          "file": "chunk_002/model_mag_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_pha_in": {
+          "file": "chunk_002/model_pha_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mask": {
+          "file": "chunk_002/est_mask.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_real": {
+          "file": "chunk_002/phase_real.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_imag": {
+          "file": "chunk_002/phase_imag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag": {
+          "file": "chunk_002/est_mag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_pha": {
+          "file": "chunk_002/est_pha.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag_crop": {
+          "file": "chunk_002/est_mag_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "est_pha_crop": {
+          "file": "chunk_002/est_pha_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "ola_buffer_in": {
+          "file": "chunk_002/ola_buffer_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_in": {
+          "file": "chunk_002/ola_norm_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_buffer_out": {
+          "file": "chunk_002/ola_buffer_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_out": {
+          "file": "chunk_002/ola_norm_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "istft_output": {
+          "file": "chunk_002/istft_output.bin",
+          "shape": [
+            800
+          ],
+          "dtype": "float32",
+          "bytes": 3200
+        }
+      }
+    },
+    {
+      "idx": 3,
+      "files": {
+        "input_samples": {
+          "file": "chunk_003/input_samples.bin",
+          "shape": [
+            1200
+          ],
+          "dtype": "float32",
+          "bytes": 4800
+        },
+        "stft_context_in": {
+          "file": "chunk_003/stft_context_in.bin",
+          "shape": [
+            200
+          ],
+          "dtype": "float32",
+          "bytes": 800
+        },
+        "stft_input": {
+          "file": "chunk_003/stft_input.bin",
+          "shape": [
+            1400
+          ],
+          "dtype": "float32",
+          "bytes": 5600
+        },
+        "stft_mag": {
+          "file": "chunk_003/stft_mag.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "stft_pha": {
+          "file": "chunk_003/stft_pha.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_mag_in": {
+          "file": "chunk_003/model_mag_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_pha_in": {
+          "file": "chunk_003/model_pha_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mask": {
+          "file": "chunk_003/est_mask.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_real": {
+          "file": "chunk_003/phase_real.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_imag": {
+          "file": "chunk_003/phase_imag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag": {
+          "file": "chunk_003/est_mag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_pha": {
+          "file": "chunk_003/est_pha.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag_crop": {
+          "file": "chunk_003/est_mag_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "est_pha_crop": {
+          "file": "chunk_003/est_pha_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "ola_buffer_in": {
+          "file": "chunk_003/ola_buffer_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_in": {
+          "file": "chunk_003/ola_norm_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_buffer_out": {
+          "file": "chunk_003/ola_buffer_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_out": {
+          "file": "chunk_003/ola_norm_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "istft_output": {
+          "file": "chunk_003/istft_output.bin",
+          "shape": [
+            800
+          ],
+          "dtype": "float32",
+          "bytes": 3200
+        }
+      }
+    },
+    {
+      "idx": 4,
+      "files": {
+        "input_samples": {
+          "file": "chunk_004/input_samples.bin",
+          "shape": [
+            1200
+          ],
+          "dtype": "float32",
+          "bytes": 4800
+        },
+        "stft_context_in": {
+          "file": "chunk_004/stft_context_in.bin",
+          "shape": [
+            200
+          ],
+          "dtype": "float32",
+          "bytes": 800
+        },
+        "stft_input": {
+          "file": "chunk_004/stft_input.bin",
+          "shape": [
+            1400
+          ],
+          "dtype": "float32",
+          "bytes": 5600
+        },
+        "stft_mag": {
+          "file": "chunk_004/stft_mag.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "stft_pha": {
+          "file": "chunk_004/stft_pha.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_mag_in": {
+          "file": "chunk_004/model_mag_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_pha_in": {
+          "file": "chunk_004/model_pha_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mask": {
+          "file": "chunk_004/est_mask.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_real": {
+          "file": "chunk_004/phase_real.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_imag": {
+          "file": "chunk_004/phase_imag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag": {
+          "file": "chunk_004/est_mag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_pha": {
+          "file": "chunk_004/est_pha.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag_crop": {
+          "file": "chunk_004/est_mag_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "est_pha_crop": {
+          "file": "chunk_004/est_pha_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "ola_buffer_in": {
+          "file": "chunk_004/ola_buffer_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_in": {
+          "file": "chunk_004/ola_norm_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_buffer_out": {
+          "file": "chunk_004/ola_buffer_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_out": {
+          "file": "chunk_004/ola_norm_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "istft_output": {
+          "file": "chunk_004/istft_output.bin",
+          "shape": [
+            800
+          ],
+          "dtype": "float32",
+          "bytes": 3200
+        }
+      }
+    },
+    {
+      "idx": 5,
+      "files": {
+        "input_samples": {
+          "file": "chunk_005/input_samples.bin",
+          "shape": [
+            1200
+          ],
+          "dtype": "float32",
+          "bytes": 4800
+        },
+        "stft_context_in": {
+          "file": "chunk_005/stft_context_in.bin",
+          "shape": [
+            200
+          ],
+          "dtype": "float32",
+          "bytes": 800
+        },
+        "stft_input": {
+          "file": "chunk_005/stft_input.bin",
+          "shape": [
+            1400
+          ],
+          "dtype": "float32",
+          "bytes": 5600
+        },
+        "stft_mag": {
+          "file": "chunk_005/stft_mag.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "stft_pha": {
+          "file": "chunk_005/stft_pha.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_mag_in": {
+          "file": "chunk_005/model_mag_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_pha_in": {
+          "file": "chunk_005/model_pha_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mask": {
+          "file": "chunk_005/est_mask.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_real": {
+          "file": "chunk_005/phase_real.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_imag": {
+          "file": "chunk_005/phase_imag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag": {
+          "file": "chunk_005/est_mag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_pha": {
+          "file": "chunk_005/est_pha.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag_crop": {
+          "file": "chunk_005/est_mag_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "est_pha_crop": {
+          "file": "chunk_005/est_pha_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "ola_buffer_in": {
+          "file": "chunk_005/ola_buffer_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_in": {
+          "file": "chunk_005/ola_norm_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_buffer_out": {
+          "file": "chunk_005/ola_buffer_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_out": {
+          "file": "chunk_005/ola_norm_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "istft_output": {
+          "file": "chunk_005/istft_output.bin",
+          "shape": [
+            800
+          ],
+          "dtype": "float32",
+          "bytes": 3200
+        }
+      }
+    },
+    {
+      "idx": 6,
+      "files": {
+        "input_samples": {
+          "file": "chunk_006/input_samples.bin",
+          "shape": [
+            1200
+          ],
+          "dtype": "float32",
+          "bytes": 4800
+        },
+        "stft_context_in": {
+          "file": "chunk_006/stft_context_in.bin",
+          "shape": [
+            200
+          ],
+          "dtype": "float32",
+          "bytes": 800
+        },
+        "stft_input": {
+          "file": "chunk_006/stft_input.bin",
+          "shape": [
+            1400
+          ],
+          "dtype": "float32",
+          "bytes": 5600
+        },
+        "stft_mag": {
+          "file": "chunk_006/stft_mag.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "stft_pha": {
+          "file": "chunk_006/stft_pha.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_mag_in": {
+          "file": "chunk_006/model_mag_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_pha_in": {
+          "file": "chunk_006/model_pha_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mask": {
+          "file": "chunk_006/est_mask.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_real": {
+          "file": "chunk_006/phase_real.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_imag": {
+          "file": "chunk_006/phase_imag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag": {
+          "file": "chunk_006/est_mag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_pha": {
+          "file": "chunk_006/est_pha.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag_crop": {
+          "file": "chunk_006/est_mag_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "est_pha_crop": {
+          "file": "chunk_006/est_pha_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "ola_buffer_in": {
+          "file": "chunk_006/ola_buffer_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_in": {
+          "file": "chunk_006/ola_norm_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_buffer_out": {
+          "file": "chunk_006/ola_buffer_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_out": {
+          "file": "chunk_006/ola_norm_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "istft_output": {
+          "file": "chunk_006/istft_output.bin",
+          "shape": [
+            800
+          ],
+          "dtype": "float32",
+          "bytes": 3200
+        }
+      }
+    },
+    {
+      "idx": 7,
+      "files": {
+        "input_samples": {
+          "file": "chunk_007/input_samples.bin",
+          "shape": [
+            1200
+          ],
+          "dtype": "float32",
+          "bytes": 4800
+        },
+        "stft_context_in": {
+          "file": "chunk_007/stft_context_in.bin",
+          "shape": [
+            200
+          ],
+          "dtype": "float32",
+          "bytes": 800
+        },
+        "stft_input": {
+          "file": "chunk_007/stft_input.bin",
+          "shape": [
+            1400
+          ],
+          "dtype": "float32",
+          "bytes": 5600
+        },
+        "stft_mag": {
+          "file": "chunk_007/stft_mag.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "stft_pha": {
+          "file": "chunk_007/stft_pha.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_mag_in": {
+          "file": "chunk_007/model_mag_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_pha_in": {
+          "file": "chunk_007/model_pha_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mask": {
+          "file": "chunk_007/est_mask.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_real": {
+          "file": "chunk_007/phase_real.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_imag": {
+          "file": "chunk_007/phase_imag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag": {
+          "file": "chunk_007/est_mag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_pha": {
+          "file": "chunk_007/est_pha.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag_crop": {
+          "file": "chunk_007/est_mag_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "est_pha_crop": {
+          "file": "chunk_007/est_pha_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "ola_buffer_in": {
+          "file": "chunk_007/ola_buffer_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_in": {
+          "file": "chunk_007/ola_norm_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_buffer_out": {
+          "file": "chunk_007/ola_buffer_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_out": {
+          "file": "chunk_007/ola_norm_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "istft_output": {
+          "file": "chunk_007/istft_output.bin",
+          "shape": [
+            800
+          ],
+          "dtype": "float32",
+          "bytes": 3200
+        }
+      }
+    },
+    {
+      "idx": 8,
+      "files": {
+        "input_samples": {
+          "file": "chunk_008/input_samples.bin",
+          "shape": [
+            1200
+          ],
+          "dtype": "float32",
+          "bytes": 4800
+        },
+        "stft_context_in": {
+          "file": "chunk_008/stft_context_in.bin",
+          "shape": [
+            200
+          ],
+          "dtype": "float32",
+          "bytes": 800
+        },
+        "stft_input": {
+          "file": "chunk_008/stft_input.bin",
+          "shape": [
+            1400
+          ],
+          "dtype": "float32",
+          "bytes": 5600
+        },
+        "stft_mag": {
+          "file": "chunk_008/stft_mag.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "stft_pha": {
+          "file": "chunk_008/stft_pha.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_mag_in": {
+          "file": "chunk_008/model_mag_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_pha_in": {
+          "file": "chunk_008/model_pha_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mask": {
+          "file": "chunk_008/est_mask.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_real": {
+          "file": "chunk_008/phase_real.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_imag": {
+          "file": "chunk_008/phase_imag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag": {
+          "file": "chunk_008/est_mag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_pha": {
+          "file": "chunk_008/est_pha.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag_crop": {
+          "file": "chunk_008/est_mag_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "est_pha_crop": {
+          "file": "chunk_008/est_pha_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "ola_buffer_in": {
+          "file": "chunk_008/ola_buffer_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_in": {
+          "file": "chunk_008/ola_norm_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_buffer_out": {
+          "file": "chunk_008/ola_buffer_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_out": {
+          "file": "chunk_008/ola_norm_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "istft_output": {
+          "file": "chunk_008/istft_output.bin",
+          "shape": [
+            800
+          ],
+          "dtype": "float32",
+          "bytes": 3200
+        }
+      }
+    },
+    {
+      "idx": 9,
+      "files": {
+        "input_samples": {
+          "file": "chunk_009/input_samples.bin",
+          "shape": [
+            1200
+          ],
+          "dtype": "float32",
+          "bytes": 4800
+        },
+        "stft_context_in": {
+          "file": "chunk_009/stft_context_in.bin",
+          "shape": [
+            200
+          ],
+          "dtype": "float32",
+          "bytes": 800
+        },
+        "stft_input": {
+          "file": "chunk_009/stft_input.bin",
+          "shape": [
+            1400
+          ],
+          "dtype": "float32",
+          "bytes": 5600
+        },
+        "stft_mag": {
+          "file": "chunk_009/stft_mag.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "stft_pha": {
+          "file": "chunk_009/stft_pha.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_mag_in": {
+          "file": "chunk_009/model_mag_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_pha_in": {
+          "file": "chunk_009/model_pha_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mask": {
+          "file": "chunk_009/est_mask.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_real": {
+          "file": "chunk_009/phase_real.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_imag": {
+          "file": "chunk_009/phase_imag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag": {
+          "file": "chunk_009/est_mag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_pha": {
+          "file": "chunk_009/est_pha.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag_crop": {
+          "file": "chunk_009/est_mag_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "est_pha_crop": {
+          "file": "chunk_009/est_pha_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "ola_buffer_in": {
+          "file": "chunk_009/ola_buffer_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_in": {
+          "file": "chunk_009/ola_norm_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_buffer_out": {
+          "file": "chunk_009/ola_buffer_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_out": {
+          "file": "chunk_009/ola_norm_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "istft_output": {
+          "file": "chunk_009/istft_output.bin",
+          "shape": [
+            800
+          ],
+          "dtype": "float32",
+          "bytes": 3200
+        }
+      }
+    },
+    {
+      "idx": 10,
+      "files": {
+        "input_samples": {
+          "file": "chunk_010/input_samples.bin",
+          "shape": [
+            1200
+          ],
+          "dtype": "float32",
+          "bytes": 4800
+        },
+        "stft_context_in": {
+          "file": "chunk_010/stft_context_in.bin",
+          "shape": [
+            200
+          ],
+          "dtype": "float32",
+          "bytes": 800
+        },
+        "stft_input": {
+          "file": "chunk_010/stft_input.bin",
+          "shape": [
+            1400
+          ],
+          "dtype": "float32",
+          "bytes": 5600
+        },
+        "stft_mag": {
+          "file": "chunk_010/stft_mag.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "stft_pha": {
+          "file": "chunk_010/stft_pha.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_mag_in": {
+          "file": "chunk_010/model_mag_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_pha_in": {
+          "file": "chunk_010/model_pha_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mask": {
+          "file": "chunk_010/est_mask.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_real": {
+          "file": "chunk_010/phase_real.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_imag": {
+          "file": "chunk_010/phase_imag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag": {
+          "file": "chunk_010/est_mag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_pha": {
+          "file": "chunk_010/est_pha.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag_crop": {
+          "file": "chunk_010/est_mag_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "est_pha_crop": {
+          "file": "chunk_010/est_pha_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "ola_buffer_in": {
+          "file": "chunk_010/ola_buffer_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_in": {
+          "file": "chunk_010/ola_norm_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_buffer_out": {
+          "file": "chunk_010/ola_buffer_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_out": {
+          "file": "chunk_010/ola_norm_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "istft_output": {
+          "file": "chunk_010/istft_output.bin",
+          "shape": [
+            800
+          ],
+          "dtype": "float32",
+          "bytes": 3200
+        }
+      }
+    },
+    {
+      "idx": 11,
+      "files": {
+        "input_samples": {
+          "file": "chunk_011/input_samples.bin",
+          "shape": [
+            1200
+          ],
+          "dtype": "float32",
+          "bytes": 4800
+        },
+        "stft_context_in": {
+          "file": "chunk_011/stft_context_in.bin",
+          "shape": [
+            200
+          ],
+          "dtype": "float32",
+          "bytes": 800
+        },
+        "stft_input": {
+          "file": "chunk_011/stft_input.bin",
+          "shape": [
+            1400
+          ],
+          "dtype": "float32",
+          "bytes": 5600
+        },
+        "stft_mag": {
+          "file": "chunk_011/stft_mag.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "stft_pha": {
+          "file": "chunk_011/stft_pha.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_mag_in": {
+          "file": "chunk_011/model_mag_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_pha_in": {
+          "file": "chunk_011/model_pha_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mask": {
+          "file": "chunk_011/est_mask.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_real": {
+          "file": "chunk_011/phase_real.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_imag": {
+          "file": "chunk_011/phase_imag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag": {
+          "file": "chunk_011/est_mag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_pha": {
+          "file": "chunk_011/est_pha.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag_crop": {
+          "file": "chunk_011/est_mag_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "est_pha_crop": {
+          "file": "chunk_011/est_pha_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "ola_buffer_in": {
+          "file": "chunk_011/ola_buffer_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_in": {
+          "file": "chunk_011/ola_norm_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_buffer_out": {
+          "file": "chunk_011/ola_buffer_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_out": {
+          "file": "chunk_011/ola_norm_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "istft_output": {
+          "file": "chunk_011/istft_output.bin",
+          "shape": [
+            800
+          ],
+          "dtype": "float32",
+          "bytes": 3200
+        }
+      }
+    },
+    {
+      "idx": 12,
+      "files": {
+        "input_samples": {
+          "file": "chunk_012/input_samples.bin",
+          "shape": [
+            1200
+          ],
+          "dtype": "float32",
+          "bytes": 4800
+        },
+        "stft_context_in": {
+          "file": "chunk_012/stft_context_in.bin",
+          "shape": [
+            200
+          ],
+          "dtype": "float32",
+          "bytes": 800
+        },
+        "stft_input": {
+          "file": "chunk_012/stft_input.bin",
+          "shape": [
+            1400
+          ],
+          "dtype": "float32",
+          "bytes": 5600
+        },
+        "stft_mag": {
+          "file": "chunk_012/stft_mag.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "stft_pha": {
+          "file": "chunk_012/stft_pha.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_mag_in": {
+          "file": "chunk_012/model_mag_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_pha_in": {
+          "file": "chunk_012/model_pha_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mask": {
+          "file": "chunk_012/est_mask.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_real": {
+          "file": "chunk_012/phase_real.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_imag": {
+          "file": "chunk_012/phase_imag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag": {
+          "file": "chunk_012/est_mag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_pha": {
+          "file": "chunk_012/est_pha.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag_crop": {
+          "file": "chunk_012/est_mag_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "est_pha_crop": {
+          "file": "chunk_012/est_pha_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "ola_buffer_in": {
+          "file": "chunk_012/ola_buffer_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_in": {
+          "file": "chunk_012/ola_norm_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_buffer_out": {
+          "file": "chunk_012/ola_buffer_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_out": {
+          "file": "chunk_012/ola_norm_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "istft_output": {
+          "file": "chunk_012/istft_output.bin",
+          "shape": [
+            800
+          ],
+          "dtype": "float32",
+          "bytes": 3200
+        }
+      }
+    },
+    {
+      "idx": 13,
+      "files": {
+        "input_samples": {
+          "file": "chunk_013/input_samples.bin",
+          "shape": [
+            1200
+          ],
+          "dtype": "float32",
+          "bytes": 4800
+        },
+        "stft_context_in": {
+          "file": "chunk_013/stft_context_in.bin",
+          "shape": [
+            200
+          ],
+          "dtype": "float32",
+          "bytes": 800
+        },
+        "stft_input": {
+          "file": "chunk_013/stft_input.bin",
+          "shape": [
+            1400
+          ],
+          "dtype": "float32",
+          "bytes": 5600
+        },
+        "stft_mag": {
+          "file": "chunk_013/stft_mag.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "stft_pha": {
+          "file": "chunk_013/stft_pha.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_mag_in": {
+          "file": "chunk_013/model_mag_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_pha_in": {
+          "file": "chunk_013/model_pha_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mask": {
+          "file": "chunk_013/est_mask.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_real": {
+          "file": "chunk_013/phase_real.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_imag": {
+          "file": "chunk_013/phase_imag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag": {
+          "file": "chunk_013/est_mag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_pha": {
+          "file": "chunk_013/est_pha.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag_crop": {
+          "file": "chunk_013/est_mag_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "est_pha_crop": {
+          "file": "chunk_013/est_pha_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "ola_buffer_in": {
+          "file": "chunk_013/ola_buffer_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_in": {
+          "file": "chunk_013/ola_norm_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_buffer_out": {
+          "file": "chunk_013/ola_buffer_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_out": {
+          "file": "chunk_013/ola_norm_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "istft_output": {
+          "file": "chunk_013/istft_output.bin",
+          "shape": [
+            800
+          ],
+          "dtype": "float32",
+          "bytes": 3200
+        }
+      }
+    },
+    {
+      "idx": 14,
+      "files": {
+        "input_samples": {
+          "file": "chunk_014/input_samples.bin",
+          "shape": [
+            1200
+          ],
+          "dtype": "float32",
+          "bytes": 4800
+        },
+        "stft_context_in": {
+          "file": "chunk_014/stft_context_in.bin",
+          "shape": [
+            200
+          ],
+          "dtype": "float32",
+          "bytes": 800
+        },
+        "stft_input": {
+          "file": "chunk_014/stft_input.bin",
+          "shape": [
+            1400
+          ],
+          "dtype": "float32",
+          "bytes": 5600
+        },
+        "stft_mag": {
+          "file": "chunk_014/stft_mag.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "stft_pha": {
+          "file": "chunk_014/stft_pha.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_mag_in": {
+          "file": "chunk_014/model_mag_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_pha_in": {
+          "file": "chunk_014/model_pha_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mask": {
+          "file": "chunk_014/est_mask.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_real": {
+          "file": "chunk_014/phase_real.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_imag": {
+          "file": "chunk_014/phase_imag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag": {
+          "file": "chunk_014/est_mag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_pha": {
+          "file": "chunk_014/est_pha.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag_crop": {
+          "file": "chunk_014/est_mag_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "est_pha_crop": {
+          "file": "chunk_014/est_pha_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "ola_buffer_in": {
+          "file": "chunk_014/ola_buffer_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_in": {
+          "file": "chunk_014/ola_norm_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_buffer_out": {
+          "file": "chunk_014/ola_buffer_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_out": {
+          "file": "chunk_014/ola_norm_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "istft_output": {
+          "file": "chunk_014/istft_output.bin",
+          "shape": [
+            800
+          ],
+          "dtype": "float32",
+          "bytes": 3200
+        }
+      }
+    },
+    {
+      "idx": 15,
+      "files": {
+        "input_samples": {
+          "file": "chunk_015/input_samples.bin",
+          "shape": [
+            1200
+          ],
+          "dtype": "float32",
+          "bytes": 4800
+        },
+        "stft_context_in": {
+          "file": "chunk_015/stft_context_in.bin",
+          "shape": [
+            200
+          ],
+          "dtype": "float32",
+          "bytes": 800
+        },
+        "stft_input": {
+          "file": "chunk_015/stft_input.bin",
+          "shape": [
+            1400
+          ],
+          "dtype": "float32",
+          "bytes": 5600
+        },
+        "stft_mag": {
+          "file": "chunk_015/stft_mag.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "stft_pha": {
+          "file": "chunk_015/stft_pha.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_mag_in": {
+          "file": "chunk_015/model_mag_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_pha_in": {
+          "file": "chunk_015/model_pha_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mask": {
+          "file": "chunk_015/est_mask.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_real": {
+          "file": "chunk_015/phase_real.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_imag": {
+          "file": "chunk_015/phase_imag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag": {
+          "file": "chunk_015/est_mag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_pha": {
+          "file": "chunk_015/est_pha.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag_crop": {
+          "file": "chunk_015/est_mag_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "est_pha_crop": {
+          "file": "chunk_015/est_pha_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "ola_buffer_in": {
+          "file": "chunk_015/ola_buffer_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_in": {
+          "file": "chunk_015/ola_norm_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_buffer_out": {
+          "file": "chunk_015/ola_buffer_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_out": {
+          "file": "chunk_015/ola_norm_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "istft_output": {
+          "file": "chunk_015/istft_output.bin",
+          "shape": [
+            800
+          ],
+          "dtype": "float32",
+          "bytes": 3200
+        }
+      }
+    },
+    {
+      "idx": 16,
+      "files": {
+        "input_samples": {
+          "file": "chunk_016/input_samples.bin",
+          "shape": [
+            1200
+          ],
+          "dtype": "float32",
+          "bytes": 4800
+        },
+        "stft_context_in": {
+          "file": "chunk_016/stft_context_in.bin",
+          "shape": [
+            200
+          ],
+          "dtype": "float32",
+          "bytes": 800
+        },
+        "stft_input": {
+          "file": "chunk_016/stft_input.bin",
+          "shape": [
+            1400
+          ],
+          "dtype": "float32",
+          "bytes": 5600
+        },
+        "stft_mag": {
+          "file": "chunk_016/stft_mag.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "stft_pha": {
+          "file": "chunk_016/stft_pha.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_mag_in": {
+          "file": "chunk_016/model_mag_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_pha_in": {
+          "file": "chunk_016/model_pha_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mask": {
+          "file": "chunk_016/est_mask.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_real": {
+          "file": "chunk_016/phase_real.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_imag": {
+          "file": "chunk_016/phase_imag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag": {
+          "file": "chunk_016/est_mag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_pha": {
+          "file": "chunk_016/est_pha.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag_crop": {
+          "file": "chunk_016/est_mag_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "est_pha_crop": {
+          "file": "chunk_016/est_pha_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "ola_buffer_in": {
+          "file": "chunk_016/ola_buffer_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_in": {
+          "file": "chunk_016/ola_norm_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_buffer_out": {
+          "file": "chunk_016/ola_buffer_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_out": {
+          "file": "chunk_016/ola_norm_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "istft_output": {
+          "file": "chunk_016/istft_output.bin",
+          "shape": [
+            800
+          ],
+          "dtype": "float32",
+          "bytes": 3200
+        }
+      }
+    },
+    {
+      "idx": 17,
+      "files": {
+        "input_samples": {
+          "file": "chunk_017/input_samples.bin",
+          "shape": [
+            1200
+          ],
+          "dtype": "float32",
+          "bytes": 4800
+        },
+        "stft_context_in": {
+          "file": "chunk_017/stft_context_in.bin",
+          "shape": [
+            200
+          ],
+          "dtype": "float32",
+          "bytes": 800
+        },
+        "stft_input": {
+          "file": "chunk_017/stft_input.bin",
+          "shape": [
+            1400
+          ],
+          "dtype": "float32",
+          "bytes": 5600
+        },
+        "stft_mag": {
+          "file": "chunk_017/stft_mag.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "stft_pha": {
+          "file": "chunk_017/stft_pha.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_mag_in": {
+          "file": "chunk_017/model_mag_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_pha_in": {
+          "file": "chunk_017/model_pha_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mask": {
+          "file": "chunk_017/est_mask.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_real": {
+          "file": "chunk_017/phase_real.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_imag": {
+          "file": "chunk_017/phase_imag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag": {
+          "file": "chunk_017/est_mag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_pha": {
+          "file": "chunk_017/est_pha.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag_crop": {
+          "file": "chunk_017/est_mag_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "est_pha_crop": {
+          "file": "chunk_017/est_pha_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "ola_buffer_in": {
+          "file": "chunk_017/ola_buffer_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_in": {
+          "file": "chunk_017/ola_norm_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_buffer_out": {
+          "file": "chunk_017/ola_buffer_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_out": {
+          "file": "chunk_017/ola_norm_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "istft_output": {
+          "file": "chunk_017/istft_output.bin",
+          "shape": [
+            800
+          ],
+          "dtype": "float32",
+          "bytes": 3200
+        }
+      }
+    },
+    {
+      "idx": 18,
+      "files": {
+        "input_samples": {
+          "file": "chunk_018/input_samples.bin",
+          "shape": [
+            1200
+          ],
+          "dtype": "float32",
+          "bytes": 4800
+        },
+        "stft_context_in": {
+          "file": "chunk_018/stft_context_in.bin",
+          "shape": [
+            200
+          ],
+          "dtype": "float32",
+          "bytes": 800
+        },
+        "stft_input": {
+          "file": "chunk_018/stft_input.bin",
+          "shape": [
+            1400
+          ],
+          "dtype": "float32",
+          "bytes": 5600
+        },
+        "stft_mag": {
+          "file": "chunk_018/stft_mag.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "stft_pha": {
+          "file": "chunk_018/stft_pha.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_mag_in": {
+          "file": "chunk_018/model_mag_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_pha_in": {
+          "file": "chunk_018/model_pha_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mask": {
+          "file": "chunk_018/est_mask.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_real": {
+          "file": "chunk_018/phase_real.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_imag": {
+          "file": "chunk_018/phase_imag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag": {
+          "file": "chunk_018/est_mag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_pha": {
+          "file": "chunk_018/est_pha.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag_crop": {
+          "file": "chunk_018/est_mag_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "est_pha_crop": {
+          "file": "chunk_018/est_pha_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "ola_buffer_in": {
+          "file": "chunk_018/ola_buffer_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_in": {
+          "file": "chunk_018/ola_norm_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_buffer_out": {
+          "file": "chunk_018/ola_buffer_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_out": {
+          "file": "chunk_018/ola_norm_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "istft_output": {
+          "file": "chunk_018/istft_output.bin",
+          "shape": [
+            800
+          ],
+          "dtype": "float32",
+          "bytes": 3200
+        }
+      }
+    },
+    {
+      "idx": 19,
+      "files": {
+        "input_samples": {
+          "file": "chunk_019/input_samples.bin",
+          "shape": [
+            1200
+          ],
+          "dtype": "float32",
+          "bytes": 4800
+        },
+        "stft_context_in": {
+          "file": "chunk_019/stft_context_in.bin",
+          "shape": [
+            200
+          ],
+          "dtype": "float32",
+          "bytes": 800
+        },
+        "stft_input": {
+          "file": "chunk_019/stft_input.bin",
+          "shape": [
+            1400
+          ],
+          "dtype": "float32",
+          "bytes": 5600
+        },
+        "stft_mag": {
+          "file": "chunk_019/stft_mag.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "stft_pha": {
+          "file": "chunk_019/stft_pha.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_mag_in": {
+          "file": "chunk_019/model_mag_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_pha_in": {
+          "file": "chunk_019/model_pha_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mask": {
+          "file": "chunk_019/est_mask.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_real": {
+          "file": "chunk_019/phase_real.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_imag": {
+          "file": "chunk_019/phase_imag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag": {
+          "file": "chunk_019/est_mag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_pha": {
+          "file": "chunk_019/est_pha.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag_crop": {
+          "file": "chunk_019/est_mag_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "est_pha_crop": {
+          "file": "chunk_019/est_pha_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "ola_buffer_in": {
+          "file": "chunk_019/ola_buffer_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_in": {
+          "file": "chunk_019/ola_norm_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_buffer_out": {
+          "file": "chunk_019/ola_buffer_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_out": {
+          "file": "chunk_019/ola_norm_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "istft_output": {
+          "file": "chunk_019/istft_output.bin",
+          "shape": [
+            800
+          ],
+          "dtype": "float32",
+          "bytes": 3200
+        }
+      }
+    },
+    {
+      "idx": 20,
+      "files": {
+        "input_samples": {
+          "file": "chunk_020/input_samples.bin",
+          "shape": [
+            1200
+          ],
+          "dtype": "float32",
+          "bytes": 4800
+        },
+        "stft_context_in": {
+          "file": "chunk_020/stft_context_in.bin",
+          "shape": [
+            200
+          ],
+          "dtype": "float32",
+          "bytes": 800
+        },
+        "stft_input": {
+          "file": "chunk_020/stft_input.bin",
+          "shape": [
+            1400
+          ],
+          "dtype": "float32",
+          "bytes": 5600
+        },
+        "stft_mag": {
+          "file": "chunk_020/stft_mag.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "stft_pha": {
+          "file": "chunk_020/stft_pha.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_mag_in": {
+          "file": "chunk_020/model_mag_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_pha_in": {
+          "file": "chunk_020/model_pha_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mask": {
+          "file": "chunk_020/est_mask.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_real": {
+          "file": "chunk_020/phase_real.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_imag": {
+          "file": "chunk_020/phase_imag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag": {
+          "file": "chunk_020/est_mag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_pha": {
+          "file": "chunk_020/est_pha.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag_crop": {
+          "file": "chunk_020/est_mag_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "est_pha_crop": {
+          "file": "chunk_020/est_pha_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "ola_buffer_in": {
+          "file": "chunk_020/ola_buffer_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_in": {
+          "file": "chunk_020/ola_norm_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_buffer_out": {
+          "file": "chunk_020/ola_buffer_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_out": {
+          "file": "chunk_020/ola_norm_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "istft_output": {
+          "file": "chunk_020/istft_output.bin",
+          "shape": [
+            800
+          ],
+          "dtype": "float32",
+          "bytes": 3200
+        }
+      }
+    },
+    {
+      "idx": 21,
+      "files": {
+        "input_samples": {
+          "file": "chunk_021/input_samples.bin",
+          "shape": [
+            1200
+          ],
+          "dtype": "float32",
+          "bytes": 4800
+        },
+        "stft_context_in": {
+          "file": "chunk_021/stft_context_in.bin",
+          "shape": [
+            200
+          ],
+          "dtype": "float32",
+          "bytes": 800
+        },
+        "stft_input": {
+          "file": "chunk_021/stft_input.bin",
+          "shape": [
+            1400
+          ],
+          "dtype": "float32",
+          "bytes": 5600
+        },
+        "stft_mag": {
+          "file": "chunk_021/stft_mag.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "stft_pha": {
+          "file": "chunk_021/stft_pha.bin",
+          "shape": [
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_mag_in": {
+          "file": "chunk_021/model_mag_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "model_pha_in": {
+          "file": "chunk_021/model_pha_in.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mask": {
+          "file": "chunk_021/est_mask.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_real": {
+          "file": "chunk_021/phase_real.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "phase_imag": {
+          "file": "chunk_021/phase_imag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag": {
+          "file": "chunk_021/est_mag.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_pha": {
+          "file": "chunk_021/est_pha.bin",
+          "shape": [
+            1,
+            201,
+            11
+          ],
+          "dtype": "float32",
+          "bytes": 8844
+        },
+        "est_mag_crop": {
+          "file": "chunk_021/est_mag_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "est_pha_crop": {
+          "file": "chunk_021/est_pha_crop.bin",
+          "shape": [
+            1,
+            201,
+            8
+          ],
+          "dtype": "float32",
+          "bytes": 6432
+        },
+        "ola_buffer_in": {
+          "file": "chunk_021/ola_buffer_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_in": {
+          "file": "chunk_021/ola_norm_in.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_buffer_out": {
+          "file": "chunk_021/ola_buffer_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "ola_norm_out": {
+          "file": "chunk_021/ola_norm_out.bin",
+          "shape": [
+            300
+          ],
+          "dtype": "float32",
+          "bytes": 1200
+        },
+        "istft_output": {
+          "file": "chunk_021/istft_output.bin",
+          "shape": [
+            800
+          ],
+          "dtype": "float32",
+          "bytes": 3200
+        }
+      }
+    }
+  ]
+}
