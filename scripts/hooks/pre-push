@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# Git pre-push hook — gate android/ parity tests before publishing.
+#
+# Triggers on `git push` when the range of commits being pushed touches
+# either `android/` or `scripts/make_streaming_golden.py`. Other paths
+# push through untouched. Bypass in an emergency with `git push --no-verify`.
+#
+# Install via: bash scripts/hooks/install-hooks.sh
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+ANDROID_DIR="$REPO_ROOT/android"
+ADB="${ADB:-$HOME/platform-tools/adb}"
+DEVICE="${DEVICE:-127.0.0.1:15555}"
+
+# stdin format (one line per ref being pushed):
+#   <local_ref> <local_sha> <remote_ref> <remote_sha>
+# A delete push has local_sha == all zeros; skip those.
+ZERO_SHA="0000000000000000000000000000000000000000"
+NEEDS_GATE=0
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+    if [[ "$local_sha" == "$ZERO_SHA" ]]; then
+        continue
+    fi
+
+    if [[ "$remote_sha" == "$ZERO_SHA" ]]; then
+        # New branch on remote — inspect full commit range reachable from local.
+        range="$local_sha"
+        range_desc="new branch $local_ref"
+    else
+        range="$remote_sha..$local_sha"
+        range_desc="$remote_sha..$local_sha"
+    fi
+
+    if git diff --name-only "$range" 2>/dev/null \
+         | grep -qE '^(android/|scripts/make_streaming_golden\.py$)'; then
+        echo "[pre-push] gate triggered: $range_desc"
+        NEEDS_GATE=1
+    fi
+done
+
+if [[ "$NEEDS_GATE" -eq 0 ]]; then
+    exit 0
+fi
+
+echo "[pre-push] running Kotlin↔Python parity suite before push."
+
+if ! [[ -x "$ADB" ]]; then
+    echo "[pre-push] ERROR: adb not found at $ADB. Override with ADB=<path> env." >&2
+    exit 1
+fi
+
+if ! "$ADB" -s "$DEVICE" shell true >/dev/null 2>&1; then
+    echo "[pre-push] ERROR: device $DEVICE unreachable. Ensure SSH tunnel + adb connect." >&2
+    echo "[pre-push] tip: 'git push --no-verify' bypasses this gate if the device is offline." >&2
+    exit 1
+fi
+
+cd "$ANDROID_DIR"
+echo "[pre-push] ./gradlew assembleDebug + assembleDebugAndroidTest (--no-daemon)"
+./gradlew --no-daemon \
+    :benchmark-app:assembleDebug \
+    :benchmark-app:assembleDebugAndroidTest >/tmp/prepush-build.log 2>&1 \
+    || { echo "[pre-push] ERROR: gradle build failed. See /tmp/prepush-build.log"; exit 1; }
+
+APP_APK="$ANDROID_DIR/benchmark-app/build/outputs/apk/debug/benchmark-app-debug.apk"
+TEST_APK="$ANDROID_DIR/benchmark-app/build/outputs/apk/androidTest/debug/benchmark-app-debug-androidTest.apk"
+
+echo "[pre-push] pushing APKs to device ($DEVICE)"
+"$ADB" -s "$DEVICE" push "$APP_APK" /data/local/tmp/app.apk >/dev/null
+"$ADB" -s "$DEVICE" push "$TEST_APK" /data/local/tmp/androidTest.apk >/dev/null
+"$ADB" -s "$DEVICE" shell pm install -r -t /data/local/tmp/app.apk >/dev/null
+"$ADB" -s "$DEVICE" shell pm install -r -t /data/local/tmp/androidTest.apk >/dev/null
+
+echo "[pre-push] running am instrument com.lacosenet.benchmark.parity"
+LOG=/tmp/prepush-parity.log
+"$ADB" -s "$DEVICE" shell am instrument -w -r \
+    -e package com.lacosenet.benchmark.parity \
+    com.lacosenet.benchmark.test/androidx.test.runner.AndroidJUnitRunner \
+    > "$LOG" 2>&1
+
+if grep -qE '^OK \(7 tests\)' "$LOG"; then
+    TIME_LINE=$(grep -E '^Time:' "$LOG" | tail -1 || echo "Time: ?")
+    echo "[pre-push] parity OK (7 tests) — $TIME_LINE"
+    exit 0
+else
+    echo "[pre-push] ERROR: parity did not report OK (7 tests). Full log: $LOG" >&2
+    tail -40 "$LOG" >&2
+    exit 1
+fi

@@ -50,6 +50,37 @@ android/
 - **Primary**: Samsung Galaxy S23+ (Snapdragon 8 Gen 2 / SM8550)
 - **Compatible**: Qualcomm Snapdragon SoC 탑재 기기 전반
 
+## Local parity gate (pre-push hook)
+
+`android/` 또는 `scripts/make_streaming_golden.py` 변경이 포함된 `git push` 직전에 Kotlin↔Python parity 7/7 을 자동 실행한다. 실패 시 push 가 차단된다.
+
+**설치** (clone 후 1회):
+```bash
+bash scripts/hooks/install-hooks.sh
+# → .git/hooks/pre-push → scripts/hooks/pre-push (symlink)
+```
+
+**전제 조건**:
+- Galaxy S25 Ultra (또는 QNN 호환 기기)가 `adb connect 127.0.0.1:15555` 로 접근 가능
+- `~/platform-tools/adb` 존재 (`ADB=<경로>` 환경변수로 override 가능)
+- Android SDK + JDK 17 (Gradle 이 참조)
+- `local.properties` 에 `sdk.dir` 설정
+
+**실행 흐름**:
+1. push 범위에 `android/` 또는 `scripts/make_streaming_golden.py` 변경 존재 여부 감지
+2. 감지되면 adb device 접속 확인 → gradle 빌드 (`assembleDebug` + `assembleDebugAndroidTest`)
+3. APK push + install
+4. `am instrument com.lacosenet.benchmark.parity` 실행
+5. `OK (7 tests)` 확인 → push 허용. 그 외는 push 차단
+
+**우회 (비상용)**:
+```bash
+git push --no-verify
+```
+hook 실패가 환경 문제(기기 offline 등)일 때만 사용. 코드 결함을 덮으려 쓰지 말 것.
+
+**로그**: `/tmp/prepush-build.log` (gradle), `/tmp/prepush-parity.log` (am instrument).
+
 ## 설치
 
 프로젝트에 라이브러리 모듈을 추가한다:
