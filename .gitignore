@@ -43,8 +43,9 @@ run.sh
 # Claude cli config
 *.claude
 
-# Private Docs
-docs/
+# Private Docs — selective tracking: docs/**/*.md ok to check in,
+# docs/review/logs/ (23 MB of runtime logs) stays local.
+docs/**/logs/
 CLAUDE.md
 Todo.md
 
@@ -72,8 +73,20 @@ android_export_ONNX/
 android_export_ExecuTorch/
 *.onnx
 
-# android
-android/
+# android/ — selective tracking for CI parity workflow.
+# Track: *.kt, *.kts, *.xml, *.properties, *.pro, *.md, *.json, *.gitignore,
+#        gradle/wrapper/*, gradlew, fixtures/ (3.8 MB, parity test data).
+# Ignore: build artifacts, local SDK paths, .apk/.so/.aar/.onnx binaries.
+android/**/build/
+android/**/.gradle/
+android/.gradle/
+android/.idea/
+android/**/*.iml
+android/local.properties
+android/**/local.properties
+android/**/*.apk
+android/**/*.aar
+android/**/*.so
 
 # scripts (private run scripts tracked for pod automation)
 # scripts/
