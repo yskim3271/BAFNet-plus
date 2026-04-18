@@ -64,6 +64,10 @@ vis/
 # Private inference data
 vinference/
 
+# Private manuscript workspace (BAFNet+ paper draft, review pipeline,
+# LaTeX build artifacts). Keep local only.
+paper_work/
+
 # Private samples
 generate_test_samples.py
 test_samples/
