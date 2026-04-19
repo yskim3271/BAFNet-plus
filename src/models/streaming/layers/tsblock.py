@@ -450,6 +450,13 @@ class StreamingConv2d(nn.Module):
             # Compute output
             out = self.conv(x_padded)
 
+            # Thread-local fallback: align with StatefulCausalConv1d/2d (see ..utils.get_state_frames_context).
+            # Lets LaCoSENet callers that do not thread state_frames explicitly still limit state updates to the causal chunk.
+            if state_frames is None:
+                from src.models.streaming.utils import get_state_frames_context
+
+                state_frames = get_state_frames_context()
+
             # Compute next state with optional gating
             effective_T = state_frames if state_frames is not None else x.shape[2]
             x_for_state = x[:, :, :effective_T, :]

@@ -270,7 +270,9 @@ def load_model_from_checkpoint(
     model_args = conf.model
 
     model = load_model(
-        model_args,
+        model_args.model_lib,
+        model_args.model_class,
+        model_args.param,
         device,
     )
     model = load_checkpoint(model, chkpt_dir, chkpt_file, device)
