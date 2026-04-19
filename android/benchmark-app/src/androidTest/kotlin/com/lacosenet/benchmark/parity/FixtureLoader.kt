@@ -155,6 +155,130 @@ class FixtureLoader(private val testContext: Context, private val fixtureRoot: S
 }
 
 /**
+ * Loader for BAFNetPlus Python-generated golden fixtures under
+ * androidTest/assets/bafnetplus_fixtures/ (schema from
+ * scripts/make_bafnetplus_streaming_golden.py).
+ *
+ * Schema differs from [FixtureLoader]:
+ *  - Two input audio streams: input_audio_bcs + input_audio_acs.
+ *  - No state_layout / state_order — Stage 3 builds the ONNX graph so the
+ *    native state contract is defined at export time.
+ *  - Per-chunk tensor keys mirror BAFNetPlus' dual-branch pipeline
+ *    (input_samples_bcs, bcs_mag, bcs_est_mag, acs_mask, calibration_feat,
+ *    common_log_gain, alpha_softmax, est_mag, istft_output, ...).
+ */
+class BafnetPlusFixtureLoader(
+    private val testContext: Context,
+    private val fixtureRoot: String = "bafnetplus_fixtures",
+) {
+    data class Manifest(
+        val version: Int,
+        val model: String,
+        val ablationMode: String,
+        val numChunks: Int,
+        val samplesPerChunk: Int,
+        val outputSamplesPerChunk: Int,
+        val totalFramesNeeded: Int,
+        val olaTailSize: Int,
+        val freqBins: Int,
+        val chunkSizeFrames: Int,
+        val hopSize: Int,
+        val winSize: Int,
+        val nFft: Int,
+        val compressFactor: Float,
+        val inputAudioBcs: FixtureLoader.TensorRef,
+        val inputAudioAcs: FixtureLoader.TensorRef,
+        val chunks: List<FixtureLoader.ChunkFixture>,
+        val calibrationDiagnostics: CalibrationDiagnostics,
+    )
+
+    data class CalibrationDiagnostics(
+        val commonLogGainStd: Float,
+        val relativeLogGainStd: Float,
+        val alphaSoftmaxStd: Float,
+        val exercised: Boolean,
+    )
+
+    val manifest: Manifest by lazy { loadManifest() }
+
+    private fun loadManifest(): Manifest {
+        val text = testContext.assets.open("$fixtureRoot/manifest.json").bufferedReader().use { it.readText() }
+        val json = JSONObject(text)
+        val version = json.getInt("version")
+        val derived = json.getJSONObject("derived")
+        val stft = json.getJSONObject("stft_config")
+        val streaming = json.getJSONObject("streaming_config")
+
+        fun parseTensorRef(o: JSONObject): FixtureLoader.TensorRef {
+            val shape = IntArray(o.getJSONArray("shape").length()) { o.getJSONArray("shape").getInt(it) }
+            return FixtureLoader.TensorRef(
+                file = o.getString("file"),
+                shape = shape,
+                bytes = o.getInt("bytes"),
+            )
+        }
+
+        val chunksJson = json.getJSONArray("chunks")
+        val chunks = (0 until chunksJson.length()).map { i ->
+            val c = chunksJson.getJSONObject(i)
+            val files = mutableMapOf<String, FixtureLoader.TensorRef>()
+            val filesJson = c.getJSONObject("files")
+            for (key in filesJson.keys()) {
+                files[key] = parseTensorRef(filesJson.getJSONObject(key))
+            }
+            FixtureLoader.ChunkFixture(idx = c.getInt("idx"), files = files)
+        }
+
+        val diag = json.getJSONObject("calibration_diagnostics")
+
+        return Manifest(
+            version = version,
+            model = json.getString("model"),
+            ablationMode = json.getString("ablation_mode"),
+            numChunks = json.getInt("num_chunks"),
+            samplesPerChunk = derived.getInt("samples_per_chunk"),
+            outputSamplesPerChunk = derived.getInt("output_samples_per_chunk"),
+            totalFramesNeeded = derived.getInt("total_frames_needed"),
+            olaTailSize = derived.getInt("ola_tail_size"),
+            freqBins = derived.getInt("freq_bins"),
+            chunkSizeFrames = streaming.getInt("chunk_size_frames"),
+            hopSize = stft.getInt("hop_size"),
+            winSize = stft.getInt("win_length"),
+            nFft = stft.getInt("n_fft"),
+            compressFactor = stft.getDouble("compress_factor").toFloat(),
+            inputAudioBcs = parseTensorRef(json.getJSONObject("input_audio_bcs")),
+            inputAudioAcs = parseTensorRef(json.getJSONObject("input_audio_acs")),
+            chunks = chunks,
+            calibrationDiagnostics = CalibrationDiagnostics(
+                commonLogGainStd = diag.getDouble("common_log_gain_overall_std").toFloat(),
+                relativeLogGainStd = diag.getDouble("relative_log_gain_overall_std").toFloat(),
+                alphaSoftmaxStd = diag.getDouble("alpha_softmax_overall_std").toFloat(),
+                exercised = diag.getBoolean("exercised"),
+            ),
+        )
+    }
+
+    fun readFloatArray(relativePath: String): FloatArray {
+        testContext.assets.open("$fixtureRoot/$relativePath").use { stream ->
+            val bytes = stream.readBytes()
+            require(bytes.size % 4 == 0) { "Binary length ${bytes.size} not multiple of 4" }
+            val bb = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+            val out = FloatArray(bytes.size / 4)
+            bb.asFloatBuffer().get(out)
+            return out
+        }
+    }
+
+    fun readTensor(ref: FixtureLoader.TensorRef): FloatArray {
+        val arr = readFloatArray(ref.file)
+        check(arr.size == ref.numElements) {
+            "Fixture size mismatch at ${ref.file}: got ${arr.size} floats, manifest expected ${ref.numElements}"
+        }
+        return arr
+    }
+}
+
+/**
  * Max absolute difference between two FloatArrays (same size).
  */
 fun maxAbsDiff(a: FloatArray, b: FloatArray): Float {
