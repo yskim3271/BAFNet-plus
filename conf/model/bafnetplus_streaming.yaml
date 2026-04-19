@@ -1,0 +1,14 @@
+# @package _group_
+# Stage 1 streaming config for BAFNetPlus.
+# Loaded by BAFNetPlusStreaming.from_checkpoint at inference time.
+model_lib: streaming.bafnetplus_streaming
+model_class: BAFNetPlusStreaming
+streaming:
+  chunk_size: 8
+  encoder_lookahead: 3
+  decoder_lookahead: 3
+  chkpt_dir_mapping: results/experiments/bm_map_50ms
+  chkpt_dir_masking: results/experiments/bm_mask_50ms
+  chkpt_file: best.th
+  ablation_mode: full
+  stft_center: true
