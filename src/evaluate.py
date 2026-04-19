@@ -143,6 +143,119 @@ class STTEvaluator:
         return cer, wer
 
 
+class MOSEvaluator:
+    """Non-intrusive MOS (Mean Opinion Score) evaluator.
+
+    Loads DNSMOS (torchmetrics ONNX) and UTMOSv2 once and reuses them for
+    multiple evaluations. DNSMOS returns a 4-tuple (P.808, SIG, BAK, OVR);
+    UTMOSv2 returns a single scalar.
+
+    Optional dependencies (lazy-imported):
+        - torchmetrics[audio] >= 1.9  (DNSMOS via bundled ONNX Runtime)
+        - utmosv2                    (pretrained UTMOSv2 checkpoint)
+
+    Example:
+        >>> evaluator = MOSEvaluator(device="cuda")
+        >>> # enhanced = [(wav_np, _text), ...] (text ignored)
+        >>> mos = evaluator.evaluate(enhanced)
+        >>> mos["dnsmos_ovr"]
+    """
+
+    def __init__(
+        self,
+        device: str = "cuda",
+        logger: Optional[logging.Logger] = None,
+    ):
+        """
+        Args:
+            device: Device for UTMOSv2 inference (cuda/cpu). DNSMOS internally
+                uses ONNX Runtime; ``device`` is passed through but may be
+                ignored by torchmetrics depending on version.
+            logger: Logger instance.
+        """
+        self.device = device
+        self.logger = logger or logging.getLogger(__name__)
+
+        self.logger.info("Loading DNSMOS (torchmetrics ONNX) ...")
+        try:
+            from torchmetrics.audio.dnsmos import DeepNoiseSuppressionMeanOpinionScore
+        except ImportError as e:
+            raise ImportError(
+                "MOSEvaluator requires torchmetrics>=1.9 with the audio extras. "
+                "Install with `pip install 'torchmetrics[audio]>=1.9'`."
+            ) from e
+        self.dnsmos = DeepNoiseSuppressionMeanOpinionScore(
+            fs=16000, personalized=False, device=device
+        )
+
+        self.logger.info("Loading UTMOSv2 model ...")
+        try:
+            import utmosv2  # noqa: F401
+        except ImportError as e:
+            raise ImportError(
+                "MOSEvaluator requires utmosv2. "
+                "Install from https://github.com/sarulab-speech/UTMOSv2 or "
+                "`pip install utmosv2`."
+            ) from e
+        self.utmos = utmosv2.create_model(pretrained=True, device=device)
+
+        self.logger.info("MOSEvaluator initialized (DNSMOS + UTMOSv2)")
+
+    def evaluate(
+        self,
+        enhanced: List[Tuple[np.ndarray, str]],
+    ) -> Dict[str, float]:
+        """Compute DNSMOS + UTMOSv2 averaged over samples.
+
+        Args:
+            enhanced: List of ``(audio_array, reference_text)`` tuples; the
+                text is ignored (non-intrusive metrics don't need it). The
+                tuple format matches :class:`STTEvaluator` for convenient reuse.
+
+        Returns:
+            Dict with keys: ``dnsmos_p808``, ``dnsmos_sig``, ``dnsmos_bak``,
+            ``dnsmos_ovr``, ``utmos``. All values are dataset-level means.
+        """
+        if not enhanced:
+            self.logger.warning("No samples to evaluate")
+            return {
+                "dnsmos_p808": 0.0,
+                "dnsmos_sig": 0.0,
+                "dnsmos_bak": 0.0,
+                "dnsmos_ovr": 0.0,
+                "utmos": 0.0,
+            }
+
+        self.logger.info(f"Evaluating {len(enhanced)} samples with MOS...")
+
+        dns_scores: List[np.ndarray] = []
+        utmos_scores: List[float] = []
+
+        with torch.no_grad():
+            for wav, _ in enhanced:
+                tensor = torch.from_numpy(np.asarray(wav)).to(dtype=torch.float32)
+                dns_scores.append(self.dnsmos(tensor).detach().cpu().numpy())
+                pred = self.utmos.predict(
+                    data=tensor, sr=16000, device=self.device, verbose=False
+                )
+                utmos_scores.append(float(pred))
+
+        dns_arr = np.stack(dns_scores, axis=0)  # [N, 4] = (P808, SIG, BAK, OVR)
+        result = {
+            "dnsmos_p808": float(dns_arr[:, 0].mean()),
+            "dnsmos_sig": float(dns_arr[:, 1].mean()),
+            "dnsmos_bak": float(dns_arr[:, 2].mean()),
+            "dnsmos_ovr": float(dns_arr[:, 3].mean()),
+            "utmos": float(np.mean(utmos_scores)),
+        }
+        self.logger.info(
+            f"MOS Evaluation complete: DNSMOS_OVR={result['dnsmos_ovr']:.4f}, "
+            f"DNSMOS_SIG={result['dnsmos_sig']:.4f}, DNSMOS_BAK={result['dnsmos_bak']:.4f}, "
+            f"UTMOS={result['utmos']:.4f}"
+        )
+        return result
+
+
 def evaluate(
     args: DictConfig,
     model: torch.nn.Module,
@@ -182,6 +295,11 @@ def evaluate(
             device=args.device,
             logger=logger
         )
+
+    # Initialize MOS evaluator once (reuse across SNRs)
+    mos_evaluator = None
+    if getattr(args, 'eval_mos', False):
+        mos_evaluator = MOSEvaluator(device=args.device, logger=logger)
 
     for snr, data_loader in data_loader_list.items():
         iterator = LogProgress(logger, data_loader, name=f"Evaluate on {snr}dB")
@@ -242,7 +360,19 @@ def evaluate(
             metrics[f'{snr}dB']['cer'] = cer
             metrics[f'{snr}dB']['wer'] = wer
             logger.info(bold(f"{prefix}Performance on {snr}dB: CER={cer:.4f}, WER={wer:.4f}"))
-   
+
+        # MOS evaluation (models reused!)
+        if mos_evaluator:
+            mos_metrics = mos_evaluator.evaluate(enhanced)
+            metrics[f'{snr}dB'].update(mos_metrics)
+            logger.info(bold(
+                f"{prefix}Performance on {snr}dB: "
+                f"DNSMOS_OVR={mos_metrics['dnsmos_ovr']:.4f}, "
+                f"DNSMOS_SIG={mos_metrics['dnsmos_sig']:.4f}, "
+                f"DNSMOS_BAK={mos_metrics['dnsmos_bak']:.4f}, "
+                f"UTMOS={mos_metrics['utmos']:.4f}"
+            ))
+
     return metrics
 
 
@@ -274,6 +404,7 @@ if __name__=="__main__":
     parser.add_argument("--num_workers", type=int, default=5, help="Number of workers. default is 5")
     parser.add_argument("--log_file", type=str, default="output.log", help="Log file name. default is output.log")
     parser.add_argument("--eval_stt", default=False, action="store_true", help="Evaluate STT performance")
+    parser.add_argument("--eval_mos", default=False, action="store_true", help="Evaluate non-intrusive MOS (DNSMOS + UTMOSv2). Requires torchmetrics>=1.9 and utmosv2.")
     parser.add_argument("--stt_language", type=str, default=None, help="STT language (korean, french, english, etc.). Auto-detected from dataset if not specified.")
     parser.add_argument("--output_json", type=str, default=None, help="Path to save evaluation results as JSON.")
     parser.add_argument("--bcs_gain_db", type=float, default=0.0, help="Gain perturbation for BCS input in dB. default is 0.0")
@@ -300,6 +431,7 @@ if __name__=="__main__":
     conf = OmegaConf.load(args.model_config)
     conf.device = device
     conf.eval_stt = args.eval_stt
+    conf.eval_mos = args.eval_mos
     conf.bcs_gain_db = args.bcs_gain_db
     conf.acs_gain_db = args.acs_gain_db
     # Note: stt_language will be set after dataset is determined (see below)

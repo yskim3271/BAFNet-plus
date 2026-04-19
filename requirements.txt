@@ -11,3 +11,8 @@ tensorboard>=2.15.0
 transformers>=4.30.0
 datasets>=3.0,<4
 accelerate>=0.20.0
+
+# Optional: non-intrusive MOS evaluation (--eval_mos)
+# Install alongside the base requirements to enable DNSMOS + UTMOSv2 scoring.
+# torchmetrics[audio]>=1.9
+# utmosv2

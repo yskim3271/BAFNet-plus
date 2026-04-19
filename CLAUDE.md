@@ -21,6 +21,13 @@ python -m src.enhance --chkpt_dir outputs/model_dir --chkpt_file best.th \
   --noise_dir /path/to/noise --rir_dir /path/to/rir \
   --snr 0 --output_dir samples
 
+# Run evaluation with optional non-intrusive MOS (DNSMOS + UTMOSv2)
+# Requires torchmetrics[audio]>=1.9 and utmosv2 (see "Non-intrusive MOS" below).
+python -m src.evaluate --model_config <cfg> --chkpt_dir <dir> --chkpt_file best.th \
+  --dataset taps --snr_step 0 --eval_mos \
+  --noise_dir <...> --noise_test dataset/taps/noise_test.txt \
+  --rir_dir <...>   --rir_test   dataset/taps/rir_test.txt
+
 # Track experiments (parse results to CSV/Markdown)
 python results/track_experiment.py --update
 
@@ -268,6 +275,25 @@ Layer-wise Breakdown:
 - **Symmetric models** with `encoder_padding_ratio=(0.5, 0.5)` have ~325ms latency but use future context
 - Latency is primarily determined by encoder padding ratio and receptive field size
 
+### Non-intrusive MOS (DNSMOS + UTMOSv2)
+
+`src/evaluate.py`의 `MOSEvaluator` 클래스는 `--eval_mos` 플래그로 활성화되는 비강제(non-intrusive) MOS 평가기입니다. DNSMOS (P.808, SIG, BAK, OVR 4 scores) + UTMOSv2 (1 scalar)를 계산하여 `metrics[snr]`에 `dnsmos_p808`, `dnsmos_sig`, `dnsmos_bak`, `dnsmos_ovr`, `utmos` 키로 병합합니다.
+
+**의존성 (선택사항, lazy import):**
+```bash
+pip install 'torchmetrics[audio]>=1.9' utmosv2
+```
+
+**환경 추천:** 로컬에서는 `fullcomplex` conda env에 이미 설치되어 있음:
+```bash
+/home/yskim/anaconda3/envs/fullcomplex/bin/python -m src.evaluate \
+  --eval_mos --model_config <cfg> --chkpt_dir <dir> ...
+```
+
+**비용:** 2000 clips 기준 ~2시간 추가 (GPU 1장). 빠른 디버깅/학습 중 validation에는 비활성화 권장.
+
+**유실 방지 주의:** 과거 이 코드가 uncommitted 상태로 `git reset --hard`에 의해 소실된 적이 있음 (2026-04-19). 기능을 수정/확장할 때는 반드시 커밋해둘 것.
+
 ### Tracking Experiments
 
 The `results/track_experiment.py` tool automatically parses experiment results from `results/experiments/` subdirectories and generates CSV and Markdown documentation.
@@ -382,3 +408,10 @@ export CUDA_VISIBLE_DEVICES=""
 ### 4. Goal-Driven Execution
 - 성공 기준을 먼저 정의하고, 검증될 때까지 루프한다.
 - 다단계 작업은 검증 체크포인트가 포함된 간단한 계획을 먼저 제시한다.
+
+## 사용자 워크플로 선호
+
+### Stage 프롬프트 전달 방식
+- 다음 Stage 착수용 프롬프트는 **파일로 저장하지 말고 세션 응답으로 직접 출력**한다.
+- `docs/review/BAFNETPLUS_STAGE<N>_PROMPT.md` 같은 파일 생성 금지 (사용자가 프롬프트를 복사해 다음 세션에 붙여넣는 용도이므로 파일 불필요).
+- Stage 실행 결과 / 포스트모템은 `docs/review/BAFNETPLUS_PORT_PLAN.md` 같은 상위 계획 문서에 기록하는 것만 허용.
