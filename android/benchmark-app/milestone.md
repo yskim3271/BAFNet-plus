@@ -233,12 +233,110 @@ Budget: 50.0ms
 
 [2.3] Dual QDQ INT8 [3,5,7,11]:
   ███████████████ 15.2ms  ✓✓✓  Dual large
+
+[4.1] BAFNetPlus full QDQ INT8 (unified):
+  █████████████ 13.4ms  ✓✓✓  Unified BAFNet+
 ```
 
 > **QDQ INT8 + HTP full opts가 최적 경로.**
 > 단일 backbone 6.2~10.1ms (budget 12~20%), dual backbone 10.2~15.2ms (budget 20~30%).
 > 모델 표현력(time_block_kernel 확대)을 키워도 budget 내 여유 충분.
 > BAFNet 전체 파이프라인(dual backbone + fusion)은 50ms budget 내에서 편안하게 동작.
+> BAFNetPlus unified graph 도 13.4ms (budget 27%) 로 실시간 여유.
+
+---
+
+## 4. BAFNetPlus (Unified Graph, Stage 5)
+
+BAFNetPlus 는 BAFNet 을 확장한 통합 아키텍처 — mapping + masking + calibration + fusion (alpha/gamma) 을 **단일 ONNX 그래프** 로 export. dual backbone 병렬 전략 대신 HTP 가 통합 그래프 내부의 parallelism 을 직접 최적화.
+
+### 4.1 Test Environment (Stage 5)
+
+| Item | Value |
+|---|---|
+| Device | SM-S938N (Galaxy S25+) — Snapdragon 8 Elite, Hexagon V79 |
+| VTCM | 16 MB available (provider option vtcm_mb=8) |
+| ORT | 1.24.2 (QNN SDK 2.42.0) |
+| Model | `bafnetplus_qdq.onnx` 6.98 MB (md5=9a1b533de08e03ba9bf08fc69cb03d3a) |
+| States | 166 (alpha 4 + calibration 2 + mapping 80 + masking 80) |
+| Budget | 50.0ms per chunk (8 frames × 6.25ms) |
+| Benchmark | 10 warmup + 50 sessions × 4 chunks = 200 chunks (per iter) |
+
+### 4.2 Scenario Results
+
+| Scenario | Backend | Mean | P50 | P95 | P99 | Peak PSS | Budget % (Mean) | Notes |
+|---|---|---|---|---|---|---|---|---|
+| A — cold-state | QNN HTP QDQ | **13.4ms** | 13.2ms | 14.0ms | 14.9ms | 440 MB | 27% | S5-1, REALTIME |
+| B — same-process 10x | QNN HTP QDQ | 13.4ms | 13.2ms | 14.3ms | 17.3ms | 440 MB | 27% | S5-2, drift Mean +1.3% / P99 −2.1% |
+| C1 — after LaCoSENet dual | QNN HTP QDQ | 13.3ms | — | 14.3ms | 16.0ms | 452 MB | 27% | S5-3, same-process sequence |
+| C2 — after LaCoSENet + BAFNet+ | QNN HTP QDQ | 13.7ms | 13.4ms | 14.7ms | 16.0ms | 452 MB | 27% | S5-3, 3rd position, drift Mean +5.7% / P99 +4.3% |
+| G — session lifecycle (×10) | QNN HTP QDQ | 27.9ms (1st chunk) | — | — | — | 443 MB / 260 MB | — | S5-7, init 8.3–9.0s, close 200–230ms, PSS recovers every cycle |
+
+### 4.3 Derived metrics
+
+Baselines measured same session (cold-state, SM-S938N):
+- LaCoSENet single QDQ Small [11] Mean: **6.2ms**
+- LaCoSENet dual concurrent QDQ Small [11] WallClock Mean: **10.2ms** (Overlap=0.637)
+
+Derived (BAFNetPlus vs LaCoSENet baseline):
+
+| Metric | Formula | Value | Target | Verdict |
+|---|---|---|---|---|
+| `fusion_overhead_ms` | BAFNet+ Mean − LaCoSENet Dual Mean | **+3.2ms** | 2–5 ms | ✅ within |
+| `parallel_efficiency` | 2 × LaCoSENet Single Mean / BAFNet+ Mean | **0.925** | 0.7–0.85 | ✅ exceeds (unified > dual-session) |
+| `budget_utilization_p95` | BAFNet+ P95 / 50ms | **0.28** | ≤ 0.8 | ✅ 72% margin |
+
+> **핵심 관찰**: BAFNetPlus unified 그래프(13.4ms)가 LaCoSENet dual concurrent(10.2ms) 대비 3.2 ms overhead만 발생. fusion + calibration + alpha/gamma + 추가 TS block 5개를 포함해도 dual 세션 대비 overhead 3.2ms. QNN HTP 가 통합 그래프에서 추가 최적화 기회를 활용.
+
+### 4.4 Acceptance checklist (plan §Stage 5)
+
+| Item | Target | Actual | Status |
+|---|---|---|---|
+| Cold-state Mean | ≤ 20ms (goal) / ≤ 25ms (fallback) | 13.4ms | ✅ goal |
+| Cold-state P95 | ≤ 40ms (budget 80%) | 14.0ms | ✅ 28% |
+| Cold-state P99 | ≤ 50ms (budget 100%) | 14.9ms | ✅ 30% |
+| Same-process RSS plateau | no growth | plateau 428–440 MB, no drift | ✅ |
+| Cross-load PSS delta | ≤ 100 MB | +12 MB (452 vs 440) | ✅ |
+| Milestone ±10% reproducibility | drift < 10% | +1.3% / +5.7% | ✅ |
+| Session lifecycle recovery | heap returns to baseline | PSS 443 → 260 MB/cycle | ✅ |
+
+### 4.5 Deployment verdict
+
+**✅ 배포 가능** — 모든 acceptance 통과, budget 마진 72%, 12개월 이상 thermal stability 을 장기 후속 과제로 유지.
+
+후속 최적화 여지 (모두 선택적, 배포 블로커 아님):
+- **Session init 8.3s**: 실 서비스 cold start 시 context cache 로 < 500 ms 단축 가능 (Stage 6 R5 참고)
+- **PSS 428 MB**: Scenario B 기준 일정 수준. 200 MB 대가 필요하면 VTCM 동적 해제 또는 배치/세션 lifecycle 조정 필요
+- **P99 스파이크 17.3ms (Scenario B)**: single-test 14.9ms 대비 tail 약간 증가. 실 사용 시나리오에서 1 % 이하 chunk 가 budget 의 ~35 % 차지하나 여전히 realtime
+
+### 4.6 Reproduction
+
+```bash
+# Cold-state
+adb shell am instrument -w -r \
+  -e class com.lacosenet.benchmark.StreamingBenchmarkTest#benchmarkBafnetplusFullQdq \
+  com.lacosenet.benchmark.test/androidx.test.runner.AndroidJUnitRunner
+
+# Same-process 10x
+adb shell am instrument -w -r \
+  -e class com.lacosenet.benchmark.StreamingBenchmarkTest#benchmarkBafnetplusFullQdqRepeat10x \
+  com.lacosenet.benchmark.test/androidx.test.runner.AndroidJUnitRunner
+
+# Cross-load sequence (3 tests in one process)
+adb shell am instrument -w -r \
+  -e class com.lacosenet.benchmark.StreamingBenchmarkTest#benchmarkDualBackboneConcurrentQdq,com.lacosenet.benchmark.StreamingBenchmarkTest#benchmarkBafnetplusFullQdq,com.lacosenet.benchmark.StreamingBenchmarkTest#benchmarkBafnetplusFullQdqRepeat10x \
+  com.lacosenet.benchmark.test/androidx.test.runner.AndroidJUnitRunner
+
+# Session lifecycle (10 cycles)
+adb shell am instrument -w -r \
+  -e class com.lacosenet.benchmark.StreamingBenchmarkTest#benchmarkBafnetplusSessionLifecycleQdq \
+  com.lacosenet.benchmark.test/androidx.test.runner.AndroidJUnitRunner
+
+# Meminfo sampling (0.5s interval, background):
+while :; do echo "$(date +%s.%3N) $(adb shell 'dumpsys meminfo com.lacosenet.benchmark | grep TOTAL\\ PSS')"; sleep 0.5; done > meminfo.log &
+```
+
+Logs: `docs/review/logs/stage5_bafnetplus_meminfo_*.log`, `stage5_crossload_meminfo_*.log`, `stage5_lifecycle_meminfo_*.log`.
 
 ---
 

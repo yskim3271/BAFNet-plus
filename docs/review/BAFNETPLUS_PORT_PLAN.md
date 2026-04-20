@@ -1209,6 +1209,144 @@ CLI diagnostic (`python scripts/compare_bafnetplus_batch_vs_stream.py --audio_le
 
 ---
 
+### Stage 4 실행 결과 (2026-04-21 완료)
+
+**상태**: ✅ 완료 — 핵심 acceptance 5/5 + 추가 acceptance 3/3 PASS. Stage 5 착수 가능.
+
+**산출물 실측 LoC**:
+
+| # | 파일 / 경로 | 실측 LoC | 예상 |
+|---|---|---|---|
+| S4-1 | `StatefulInference.kt` refactor (multi-input 일반화) | **+161 / -110 = +51 net** (total 477) | +60 |
+| S4-2 | `BAFNetPlusStreamingEnhancer.kt` (신규) | **383 LoC** | ~350 |
+| S4-3 | `bafnetplus-streaming` 모듈 (gradle + proguard + manifest) | **68 LoC** | ~70 |
+| S4-4 | `StreamingBenchmarkTest.kt` 확장 (`benchmarkBafnetplusFull{Cpu,Qdq}`, configFileName param) | **+77 / -1** | +100 |
+| S4-5 | `BAFNetPlusStatefulInferenceParityTest.kt` (신규, 2 @Test) | **314 LoC** | ~200 |
+| S4-6 | `DualChannelFeatureBuffer.kt` (신규) | **120 LoC** | ~100 |
+| S4-7 | `BAFNetPlusInferenceResult.kt` (신규) | **67 LoC** | ~60 |
+| S4-X | `BAFNetPlusEnhancerTest.kt` (신규, 2 @Test — CPU 100-chunk smoke + QDQ HTP smoke + memory 예산) | **178 LoC** | (원래 계획 외 추가) |
+| **합계** | | **~1,229 LoC 순증** (225 modified + 1,130 new) | 940~1,140 |
+
+**LoC 예측 초과 원인**: parity 테스트를 "raw ORT CPU vs StatefulInference" 비교로 설계하여 raw session 경로(오디오/state 텐서 수동 할당, next_state 수동 전달)가 ~200 LoC 차지. 또한 원래 plan 외 `BAFNetPlusEnhancerTest` 를 추가하여 memory 예산 + HTP E2E 를 자동화.
+
+**acceptance 결과**:
+
+- ✅ **LaCoSENet 7/7 parity 회귀 없음** — refactor 후 parity package 12/12 PASS (기존 smoke 포함). StatefulInference 의 `run(mag, pha)` 경로가 내부적으로 새 `run(audioInputs: Map)` 를 거치지만 기존 API 시멘틱 그대로 유지
+- ✅ **BAFNetPlusStatefulInferenceParityTest 2/2 PASS** — 3 chunks 연속 비교 + reset 재현성 비교, **RMS=0.0 / max=0.0 (bit-identical!)** — 166 states ordering, flatten, buffer swap 모두 정확
+- ✅ **BAFNetPlusStreamingEnhancer.processChunk E2E PASS** — 100 chunks 반복, 66 non-null 출력 × 800 samples = 52,800 samples, NPE/Crash/NaN/Inf 없음
+- ✅ **메모리 예산 통과** — 기준 native heap 98 MB → peak +143 MB delta = **total 241 MB** (LaCoSENet 292 MB × 1.4 = 409 MB 예산 대비 저여유)
+- ✅ **benchmarkBafnetplusFullQdq 실행 성공** — QNN HTP 로 **Mean 13.3ms / P95 14.0ms / P99 14.7ms** (real-time 50 ms 예산 대비 26% 사용, REALTIME 판정)
+- ✅ **추가 S4**: `benchmarkBafnetplusFullCpu` — CPU 4 threads Mean 102.6ms (NOT REALTIME, 예상대로 — HTP 가속 전환 없이는 real-time 어려움)
+- ✅ **추가 S4**: `qnnHtpEnhancerQdqSmoke` — `bafnetplus_qdq.onnx` + QNN HTP forceBackend 경로에서 E2E init + processChunk 성공 (HTP 로드 2946 ms → 첫 enhanced chunk 생성), output range min=-134.3, max=33.0 (NaN/Inf free)
+- ✅ **추가 S4**: State 이름 ordering 결정성 — Kotlin의 `sort()` 와 Python `sorted()` 가 166 state 이름을 동일한 알파벳 순으로 정렬 (C4 assertion 통과 — streaming_config.json 의 `state_info.state_names` 와 session input과 정확히 일치)
+
+**parity package 테스트 변화**: 12 → **16** (+4 신규)
+
+| 카테고리 | 파일 | @Test 개수 |
+|---|---|---|
+| StftParityTest | STFT bit-parity | 3 |
+| StatefulInferenceParityTest | LaCoSENet sequential + reset | 2 |
+| IstftParityTest | iSTFT bit-parity | 3 |
+| BafnetPlusFixtureSmokeTest | Stage 2 fixture loader | 4 |
+| BafnetPlusHtpProbeTest | Stage 3 HTP probe | 1 |
+| **BAFNetPlusStatefulInferenceParityTest** (신규) | raw ORT CPU vs StatefulInference | **2** |
+| **BAFNetPlusEnhancerTest** (신규) | CPU 100-chunk smoke + QDQ HTP E2E | **2** |
+| **합계** | | **16** |
+
+**실측 설계 결정**:
+
+- **StatefulInference 제네릭화 전략 (S4-1 vs 별도 클래스)**: 파일 내 `magBuffer/phaBuffer/estMaskArray/estPhaArray/phaseRealArray/phaseImagArray` 를 `audioBuffers/audioTensors/primaryOutputArrays` 로 일반화하고, LaCoSENet 의 `run(mag, pha)` 를 내부적으로 `run(audioInputs: Map)` 에 위임. 이 접근의 이점:
+  - BAFNetPlus 전용 class 불필요 (코드 중복 zero)
+  - StatefulInference 가 "다입력 스트리밍 세션" 추상화 — 미래 다른 모델도 재사용 가능
+  - LaCoSENet public API 완전 보존 (`run(mag, pha): InferenceResult` 시그니처 그대로)
+  - risk R4-1 (제네릭화 회귀) 실제 없음 — refactor 후 12/12 PASS
+- **atan2 host 계산**: BAFNetPlus 의 `est_pha = atan2(est_com_imag + eps, est_com_real + eps)` 을 `processChunk` 에서 직접 계산. LaCoSENet 의 `StatefulInference.run(mag, pha)` 는 `phase_output_mode=complex` 에서 자동 atan2 처리하지만, BAFNetPlus 의 `run(audioInputs: Map)` 경로는 raw output 만 리턴하므로 host-side atan2 가 `BAFNetPlusStreamingEnhancer.processChunk` 책임
+- **ONNX 출력 shape 차이**: LaCoSENet 은 `est_mask [1, 201, 11]` (export_time_frames 전체 반환 → host crop to 8), BAFNetPlus 는 `est_mag [1, 201, 8]` (그래프 내부에서 이미 chunk_size_frames crop 완료). `BAFNetPlusStreamingEnhancer` 는 추가 crop 하지 않음
+
+**Stage 5 착수 시 주의점**:
+
+- **CPU 기준 real-time 미달**: Mean 102.6ms > budget 50ms (2x 초과). Stage 5 에서 QNN HTP 강제 경로 (QDQ INT8) 를 주경로로 삼되 CPU fallback 은 "degraded mode" 로 분류
+- **HTP 로드 2,946 ms**: 첫 init 의 graph finalization 이 비교적 오래 걸림. Stage 5 context cache (Stage 6 LaCoSENet 과 동일 방식) 적용 시 <1s 로 단축 가능. 현재 plan S5-1 에서 cold-state 만 측정하지만, context cache benchmark 추가 고려
+- **QDQ 수치 drift**: `qnnHtpEnhancerQdqSmoke` 에서 synthetic 노이즈 입력에 대해 output range [-134.3, 33.0] 관측. 절대값이 합리적 범위인지 Stage 5 에서 fixture 비교 (PESQ/STOI) 로 검증. Plan L1155 주의사항 재확인
+- **Memory peak 241 MB**: double buffer 모드 기준. Stage 5 에서 시계열 `dumpsys meminfo` 로 단계별 확장 추적 (Stage 3 HTP 세션 + Stage 4 double buffer 23 MB × 2 + ORT 추가)
+- **Ablation 미지원**: 현재 `full` 만 load 성공. Stage 5 ablation 벤치마크 계획 (S5-2) 는 Stage 3 에서 ablation export 가 의미 없음(`mapping`/`masking` 는 checkpoint 분리 필요, `no_calibration` 도 별도 export wrapper 필요)으로 결정되어 사실상 drop — 본 문서 updating 시 명시화
+
+**신규 P0 / R4-X 없음**. R4-1 (제네릭화 회귀) 은 mitigation 적용으로 실제 회귀 zero 확인됨. Stage 5 진입 조건 모두 충족.
+
+---
+
+#### Stage 5 실행 결과 (2026-04-21)
+
+**기기**: SM-S938N, Snapdragon 8 Elite, Hexagon V79, VTCM 16 MB.
+**Assets**: `bafnetplus_qdq.onnx` md5=`9a1b533de08e03ba9bf08fc69cb03d3a` (Stage 3 동일).
+**Parity 회귀**: parity package **16/16 PASS** (Stage 4 결과 유지, 회귀 zero).
+**Scenario 매트릭스 완료 범위**: A, B, C, G (4/7, D/E/F 는 선택적으로 descope — §R5 참조).
+
+**S5 추가 코드**:
+
+| # | 산출물 | LoC (actual) | 비고 |
+|---|---|---|---|
+| S5-1 | `benchmarkBafnetplusFullQdq` (cold-state) | Stage 4 기존 활용 | — |
+| S5-2 | `benchmarkBafnetplusFullQdqRepeat10x` (신규) | +108 | single session 재로드 없이 10회 warmup+benchmark |
+| S5-3 | Cross-load 시퀀스 (스크립트화 없이 `am instrument -e class A,B,C`) | 0 | reproduction section 에 명시 |
+| S5-4 | `stage5_bafnetplus_meminfo_*.log`, `stage5_crossload_meminfo_*.log`, `stage5_lifecycle_meminfo_*.log` | 3 logs (각 16–70 KB) | 0.5s interval |
+| S5-5 | `milestone.md § 4 BAFNetPlus` | +120 | 단계 table + 파생지표 + reproduction |
+| S5-7 (G) | `benchmarkBafnetplusSessionLifecycleQdq` (신규) | +110 | 10 cycles of create/run/close |
+| **합계** | | **~338 LoC** | 예상 280~380 LoC 범위 |
+
+**Scenario 결과**:
+
+| Scenario | 지표 | 값 | 목표 | 판정 |
+|---|---|---|---|---|
+| A — cold-state | Mean / P95 / P99 | **13.4 / 14.0 / 14.9 ms** | Mean ≤ 20 ms / P99 ≤ 50 ms | ✅ |
+| B — same-process 10x (2000 chunks) | Overall Mean / P95 / P99 | 13.4 / 14.3 / 17.3 ms | drift < 10% | ✅ Mean +1.3% / P99 −2.1% |
+| B — same-process 10x | PSS plateau | 428–440 MB | no growth | ✅ |
+| C — LaCoSENet dual → BAFNet+ (3 tests) | BAFNet+ 2nd run | 13.3 / 14.3 / 16.0 ms | same-process 유지 | ✅ |
+| C — 3rd run (Repeat10x) | Last iter drift | Mean +5.7% / P99 +4.3% | drift < 10% | ✅ |
+| C — cross-load PSS delta | vs Scenario B peak 440 MB | +12 MB (452 MB peak) | ≤ 100 MB | ✅ |
+| G — session lifecycle ×10 | Init / Run / Close | 8.3–9.0 s / 27 ms / 200–230 ms | heap 회수 | ✅ |
+| G — PSS per cycle | peak → floor | 443 MB → 260 MB | 회수 확인 | ✅ |
+
+**파생 지표** (BAFNetPlus vs LaCoSENet 동일 기기 cold-state):
+
+| 지표 | 계산 | 결과 | 범위 | 판정 |
+|---|---|---|---|---|
+| `fusion_overhead_ms` | 13.4 − 10.2 | **+3.2 ms** | 2–5 ms 예상 | ✅ 범위 내 |
+| `parallel_efficiency` | 2 × 6.2 / 13.4 | **0.925** | 0.7–0.85 예상 | ✅ 예상 상회 (unified 가 dual session 보다 효율적) |
+| `budget_utilization_p95` | 14.0 / 50 | **0.28** | ≤ 0.8 | ✅ 72% 마진 |
+
+**핵심 관찰**:
+
+- **Unified graph 효율 > dual session**: BAFNetPlus unified(13.4 ms) − LaCoSENet dual concurrent(10.2 ms) = +3.2 ms. fusion + calibration + alpha/gamma + 추가 TS block 5개를 포함한 overhead 가 3.2 ms 로, 2-session orchestration overhead 보다 작음. QNN HTP 가 통합 그래프 내부 parallelism 을 직접 최적화.
+- **Budget margin 72%**: P95=14.0ms, budget 50ms 의 28% 만 소모. R5-2 mitigation 경로(ablation / Small 재학습 / chunk_size 증가 / FP32 descope) 모두 **불필요**.
+- **Long-run thermal probe (F)** 미수행 결정: budget margin 이 매우 크므로(14→50ms 여유 36ms) thermal drift 가 P99 를 50ms 밖으로 밀어내려면 252% 악화 필요, 현실적이지 않음. 후속 QA 에서 실제 현장 기기 조건으로 60s+ drift 모니터링은 Stage 6 closure 문서에 남은 작업으로 명시.
+- **Session init 8.3s**: 매 cycle 마다 QNN HTP graph finalization 재실행. Stage 6 context cache (LaCoSENet `benchmarkQnnHtpCached` 패턴과 동일) 적용 시 <500 ms 기대.
+- **No_calibration ablation (D/E)** 미수행 확정: Stage 4 에서 현재 full 만 export 성공 (R5-2 #1 는 불필요, full 만으로 budget 여유 확보됨).
+
+**acceptance 충족**:
+
+- [x] Cold-state Mean ≤ 20ms (goal) — 13.4 ms
+- [x] P95 ≤ 40ms — 14.0 ms
+- [x] P99 ≤ 50ms — 14.9 ms
+- [x] Same-process RSS plateau — 428–440 MB 일정
+- [x] Cross-load PSS delta ≤ 100 MB — +12 MB
+- [x] ±10% 재현성 — 최대 drift +5.7% (C 3rd position)
+- [x] Session lifecycle heap 회수 — PSS 443 → 260 MB per cycle
+
+**배포 판정**: ✅ **배포 가능 (Deployable)** — 모든 acceptance 통과, budget 마진 72%.
+
+**Stage 6 에 인계할 제약 / 후속 작업**:
+
+1. **Session init 8.3s cold start**: 실 서비스에서는 context cache 필요. Stage 6 에서 `benchmarkBafnetplusFullQdqCached` 추가 검토 (LaCoSENet `benchmarkQnnHtpQdqCached` 템플릿 복제)
+2. **PSS 428–440 MB**: 실 앱 통합 시 OS background-kill 위험 있으면 foreground service 구성 필요. 현재 벤치에는 instrumentation runner 가 포함되어 실제 사용자 앱보다 약 50–100 MB 더 큰 footprint 추정
+3. **Long-run thermal drift 미측정**: budget margin 이 충분하지만, 실 사용 시나리오에서 60s+ 스트리밍 P99 drift 를 QA 단계에서 모니터링할 것
+4. **Cross-model session leak**: Scenario C 에서 LaCoSENet dual → BAFNetPlus 경로로 +12 MB 관측. 완전 zero leak 이 아니므로 장시간 서비스 시 (수 시간 단위) 누적 여부 모니터링 필요
+5. **ablation export pipeline**: `no_calibration` / `mapping_only` / `masking_only` 의 export 자체가 Stage 3 에서 제외됨. 연구용 ablation 필요 시 `export_bafnetplus_onnx.py` 확장 필요
+
+**신규 P0 / R5-X 없음**. R5-2 mitigation 경로는 미진행 — full 만으로 budget 여유 확보.
+
+---
+
 ### Stage 5 — 실기기 벤치마크 + 재측정
 
 **기간 가정**: 1 세션

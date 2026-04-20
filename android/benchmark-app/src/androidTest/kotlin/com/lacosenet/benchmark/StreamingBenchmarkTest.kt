@@ -83,9 +83,9 @@ class StreamingBenchmarkTest {
         ortEnv.close()
     }
 
-    private fun loadModelConfig(): ModelConfig? {
+    private fun loadModelConfig(configFileName: String = "streaming_config.json"): ModelConfig? {
         return try {
-            val jsonStr = context.assets.open("streaming_config.json").bufferedReader().readText()
+            val jsonStr = context.assets.open(configFileName).bufferedReader().readText()
             val json = JSONObject(jsonStr)
 
             val modelInfo = json.optJSONObject("model_info")
@@ -425,6 +425,286 @@ class StreamingBenchmarkTest {
         cacheFile.delete()
     }
 
+    // --- BAFNetPlus benchmarks ------------------------------------------------
+
+    /** CPU benchmark for BAFNetPlus (FP32 `bafnetplus.onnx` via CPU EP). */
+    @Test
+    fun benchmarkBafnetplusFullCpu() {
+        val sessionOptions = OrtSession.SessionOptions().apply {
+            setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
+            setIntraOpNumThreads(4)
+        }
+        runBenchmark(
+            "BAFNetPlus CPU (4 threads, full)",
+            sessionOptions,
+            modelFileName = "bafnetplus.onnx",
+            configFileName = "bafnetplus_streaming_config.json",
+        )
+    }
+
+    /** QNN HTP benchmark for BAFNetPlus QDQ INT8 (`bafnetplus_qdq.onnx`). */
+    @Test
+    fun benchmarkBafnetplusFullQdq() {
+        if (!qnnAvailable) {
+            Log.w(TAG, "QNN HTP not available, skipping BAFNetPlus QDQ benchmark")
+            return
+        }
+
+        val qdqExists = try {
+            context.assets.open("bafnetplus_qdq.onnx").close()
+            true
+        } catch (e: Exception) {
+            false
+        }
+        if (!qdqExists) {
+            Log.w(TAG, "bafnetplus_qdq.onnx not found in assets, skipping")
+            return
+        }
+
+        val providerOptions = mapOf(
+            "backend_path" to "libQnnHtp.so",
+            "htp_performance_mode" to "burst",
+            "htp_graph_finalization_optimization_mode" to "3",
+            "enable_htp_fp16_precision" to "0",
+            "enable_htp_shared_memory_allocator" to "1",
+            "vtcm_mb" to "8",
+            "qnn_context_priority" to "high",
+        )
+
+        val sessionOptions = OrtSession.SessionOptions()
+        try {
+            sessionOptions.addQnn(providerOptions)
+            Log.i(TAG, "QNN EP registered for BAFNetPlus QDQ INT8")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to add QNN EP: ${e.message}")
+            return
+        }
+        runBenchmark(
+            "BAFNetPlus QNN HTP (QDQ INT8, full)",
+            sessionOptions,
+            modelFileName = "bafnetplus_qdq.onnx",
+            configFileName = "bafnetplus_streaming_config.json",
+        )
+    }
+
+    /**
+     * Scenario B: same-process 10x repeat of BAFNetPlus QDQ benchmark.
+     * Single session load, 10 outer iterations × (warmup + benchmark).
+     * Reports per-iteration Mean/P95/P99 to detect drift / leak.
+     */
+    @Test
+    fun benchmarkBafnetplusFullQdqRepeat10x() {
+        if (!qnnAvailable) {
+            Log.w(TAG, "QNN HTP not available, skipping BAFNetPlus repeat10x")
+            return
+        }
+
+        val qdqFile = "bafnetplus_qdq.onnx"
+        val qdqExists = try {
+            context.assets.open(qdqFile).close()
+            true
+        } catch (e: Exception) {
+            false
+        }
+        if (!qdqExists) {
+            Log.w(TAG, "$qdqFile not found, skipping")
+            return
+        }
+
+        val providerOptions = mapOf(
+            "backend_path" to "libQnnHtp.so",
+            "htp_performance_mode" to "burst",
+            "htp_graph_finalization_optimization_mode" to "3",
+            "enable_htp_fp16_precision" to "0",
+            "enable_htp_shared_memory_allocator" to "1",
+            "vtcm_mb" to "8",
+            "qnn_context_priority" to "high",
+        )
+        val sessionOptions = OrtSession.SessionOptions().apply { addQnn(providerOptions) }
+        val modelBytes = context.assets.open(qdqFile).readBytes()
+        val session = ortEnv.createSession(modelBytes, sessionOptions)
+        modelConfig = loadModelConfig("bafnetplus_streaming_config.json")
+        val chunkSizeFrames = modelConfig?.chunkSizeFrames ?: 8
+        val realtimeBudgetMs = chunkSizeFrames * HOP_SIZE_MS
+
+        // Build input map once; reuse across all repeats (zero-init states, random magnitudes)
+        val inputMap = mutableMapOf<String, OnnxTensor>()
+        val tensors = mutableListOf<OnnxTensor>()
+        for ((name, nodeInfo) in session.inputInfo) {
+            val tensorInfo = nodeInfo.info as ai.onnxruntime.TensorInfo
+            val shape = tensorInfo.shape
+            val size = shape.reduce { a, b -> a * b }.toInt()
+            val data = if (name.startsWith("state_")) FloatArray(size) else FloatArray(size) { Random.nextFloat() }
+            val tensor = OnnxTensor.createTensor(ortEnv, FloatBuffer.wrap(data), shape)
+            inputMap[name] = tensor
+            tensors.add(tensor)
+        }
+
+        val outerRepeats = 10
+        Log.i(TAG, "=".repeat(70))
+        Log.i(TAG, "BAFNetPlus SAME-PROCESS REPEAT [QDQ INT8, x$outerRepeats]")
+        Log.i(TAG, "=".repeat(70))
+        Log.i(TAG, "Budget: ${realtimeBudgetMs}ms per chunk")
+
+        // One-time warmup (outer runs expected to be hot already)
+        repeat(WARMUP_ITERATIONS) {
+            repeat(CHUNKS_PER_SESSION) { session.run(inputMap).close() }
+        }
+
+        val perIterStats = mutableListOf<Stats>()
+        val allLatencies = mutableListOf<Double>()
+        repeat(outerRepeats) { iterIdx ->
+            val iterLatencies = mutableListOf<Double>()
+            repeat(BENCHMARK_ITERATIONS) {
+                repeat(CHUNKS_PER_SESSION) {
+                    val start = System.nanoTime()
+                    val result = session.run(inputMap)
+                    val elapsed = (System.nanoTime() - start) / 1_000_000.0
+                    result.close()
+                    iterLatencies.add(elapsed)
+                    allLatencies.add(elapsed)
+                }
+            }
+            val stats = calculateStats(iterLatencies)
+            perIterStats.add(stats)
+            Log.i(TAG, String.format(
+                "[BafnetPlus repeat iter=%d/%d] Mean=%.2fms P50=%.2fms P95=%.2fms P99=%.2fms",
+                iterIdx + 1, outerRepeats, stats.mean, stats.p50, stats.p95, stats.p99,
+            ))
+        }
+
+        tensors.forEach { it.close() }
+        session.close()
+
+        // Drift analysis: compare iter 1 vs iter 10
+        val overallStats = calculateStats(allLatencies)
+        val firstIter = perIterStats.first()
+        val lastIter = perIterStats.last()
+        val meanDriftPct = 100.0 * (lastIter.mean - firstIter.mean) / firstIter.mean
+        val p99DriftPct = 100.0 * (lastIter.p99 - firstIter.p99) / firstIter.p99
+
+        Log.i(TAG, "")
+        Log.i(TAG, "=".repeat(70))
+        Log.i(TAG, "BAFNetPlus REPEAT SUMMARY")
+        Log.i(TAG, "=".repeat(70))
+        Log.i(TAG, String.format(
+            "Overall (n=%d): Mean=%.2fms P95=%.2fms P99=%.2fms",
+            allLatencies.size, overallStats.mean, overallStats.p95, overallStats.p99,
+        ))
+        Log.i(TAG, String.format(
+            "First iter:  Mean=%.2fms P99=%.2fms",
+            firstIter.mean, firstIter.p99,
+        ))
+        Log.i(TAG, String.format(
+            "Last iter:   Mean=%.2fms P99=%.2fms",
+            lastIter.mean, lastIter.p99,
+        ))
+        Log.i(TAG, String.format(
+            "Drift: Mean=%+.1f%%, P99=%+.1f%% (tolerance <10%%)",
+            meanDriftPct, p99DriftPct,
+        ))
+        Log.i(TAG, "=".repeat(70))
+    }
+
+    /**
+     * Scenario G: session create + 1-chunk run + close, 10 cycles.
+     * Measures per-cycle session init latency and validates clean release.
+     */
+    @Test
+    fun benchmarkBafnetplusSessionLifecycleQdq() {
+        if (!qnnAvailable) {
+            Log.w(TAG, "QNN HTP not available, skipping BAFNetPlus lifecycle")
+            return
+        }
+
+        val qdqFile = "bafnetplus_qdq.onnx"
+        val qdqExists = try {
+            context.assets.open(qdqFile).close()
+            true
+        } catch (e: Exception) {
+            false
+        }
+        if (!qdqExists) {
+            Log.w(TAG, "$qdqFile not found, skipping")
+            return
+        }
+
+        val providerOptions = mapOf(
+            "backend_path" to "libQnnHtp.so",
+            "htp_performance_mode" to "burst",
+            "htp_graph_finalization_optimization_mode" to "3",
+            "enable_htp_fp16_precision" to "0",
+            "enable_htp_shared_memory_allocator" to "1",
+            "vtcm_mb" to "8",
+            "qnn_context_priority" to "high",
+        )
+        val modelBytes = context.assets.open(qdqFile).readBytes()
+
+        val cycles = 10
+        Log.i(TAG, "=".repeat(70))
+        Log.i(TAG, "BAFNetPlus SESSION LIFECYCLE [QDQ INT8, ${cycles} cycles]")
+        Log.i(TAG, "=".repeat(70))
+
+        val initLatencies = mutableListOf<Double>()
+        val runLatencies = mutableListOf<Double>()
+        val closeLatencies = mutableListOf<Double>()
+
+        repeat(cycles) { cycleIdx ->
+            val initStart = System.nanoTime()
+            val sessionOptions = OrtSession.SessionOptions().apply { addQnn(providerOptions) }
+            val session = ortEnv.createSession(modelBytes, sessionOptions)
+            val initMs = (System.nanoTime() - initStart) / 1_000_000.0
+            initLatencies.add(initMs)
+
+            val inputMap = mutableMapOf<String, OnnxTensor>()
+            val tensors = mutableListOf<OnnxTensor>()
+            for ((name, nodeInfo) in session.inputInfo) {
+                val tensorInfo = nodeInfo.info as ai.onnxruntime.TensorInfo
+                val shape = tensorInfo.shape
+                val size = shape.reduce { a, b -> a * b }.toInt()
+                val data = if (name.startsWith("state_")) FloatArray(size) else FloatArray(size) { Random.nextFloat() }
+                val tensor = OnnxTensor.createTensor(ortEnv, FloatBuffer.wrap(data), shape)
+                inputMap[name] = tensor
+                tensors.add(tensor)
+            }
+
+            val runStart = System.nanoTime()
+            val result = session.run(inputMap)
+            val runMs = (System.nanoTime() - runStart) / 1_000_000.0
+            result.close()
+            runLatencies.add(runMs)
+
+            val closeStart = System.nanoTime()
+            tensors.forEach { it.close() }
+            session.close()
+            val closeMs = (System.nanoTime() - closeStart) / 1_000_000.0
+            closeLatencies.add(closeMs)
+
+            Log.i(TAG, String.format(
+                "[BafnetPlus lifecycle cycle=%d/%d] init=%.1fms run=%.2fms close=%.1fms",
+                cycleIdx + 1, cycles, initMs, runMs, closeMs,
+            ))
+        }
+
+        Log.i(TAG, "")
+        Log.i(TAG, "=".repeat(70))
+        Log.i(TAG, "BAFNetPlus LIFECYCLE SUMMARY")
+        Log.i(TAG, "=".repeat(70))
+        Log.i(TAG, String.format(
+            "Init:  mean=%.1fms first=%.1fms last=%.1fms",
+            initLatencies.average(), initLatencies.first(), initLatencies.last(),
+        ))
+        Log.i(TAG, String.format(
+            "Run:   mean=%.2fms first=%.2fms last=%.2fms",
+            runLatencies.average(), runLatencies.first(), runLatencies.last(),
+        ))
+        Log.i(TAG, String.format(
+            "Close: mean=%.1fms first=%.1fms last=%.1fms",
+            closeLatencies.average(), closeLatencies.first(), closeLatencies.last(),
+        ))
+        Log.i(TAG, "=".repeat(70))
+    }
+
     /**
      * Copy a model file from assets to filesDir for writable access.
      */
@@ -461,6 +741,7 @@ class StreamingBenchmarkTest {
         backendLabel: String,
         sessionOptions: OrtSession.SessionOptions,
         modelFileName: String = MODEL_FILE,
+        configFileName: String = "streaming_config.json",
     ) {
         // Load model from assets as bytes
         val modelExists = try {
@@ -475,7 +756,7 @@ class StreamingBenchmarkTest {
         }
         val modelBytes = context.assets.open(modelFileName).readBytes()
         val session = ortEnv.createSession(modelBytes, sessionOptions)
-        runBenchmarkWithSession(backendLabel, session)
+        runBenchmarkWithSession(backendLabel, session, configFileName)
     }
 
     private fun runBenchmarkWithPath(
@@ -487,9 +768,13 @@ class StreamingBenchmarkTest {
         runBenchmarkWithSession(backendLabel, session)
     }
 
-    private fun runBenchmarkWithSession(backendLabel: String, session: OrtSession) {
+    private fun runBenchmarkWithSession(
+        backendLabel: String,
+        session: OrtSession,
+        configFileName: String = "streaming_config.json",
+    ) {
         // Load and log model config for traceability
-        modelConfig = loadModelConfig()
+        modelConfig = loadModelConfig(configFileName)
 
         val chunkSizeFrames = modelConfig?.chunkSizeFrames ?: 32
         val exportTimeFrames = modelConfig?.exportTimeFrames ?: 40
