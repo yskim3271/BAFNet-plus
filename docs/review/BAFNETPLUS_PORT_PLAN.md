@@ -1085,6 +1085,79 @@ CLI diagnostic (`python scripts/compare_bafnetplus_batch_vs_stream.py --audio_le
 
 ---
 
+### Stage 3 실행 결과 (2026-04-21 완료)
+
+**상태**: ✅ 완료 — 핵심 acceptance 5/5 + 추가 acceptance 3/3 PASS. **단일 세션 전략 확정** (HTP 로드 + 1 chunk 실행 성공). Stage 4 착수 가능.
+
+**산출물 실측 LoC + 크기**:
+
+| # | 파일 | 실측 | 예상 |
+|---|---|---|---|
+| S3-1 | `src/models/streaming/onnx/export_bafnetplus_onnx.py` (신규) | **1,502 LoC** (docstring + CLI + verify + QDQ + config gen 모두 포함) | 500~700 |
+| S3-2 | `BAFNetPlusStatefulExportableNNCore` wrapper | (S3-1 포함, ~230 LoC) | ~150 |
+| S3-3 | `BafnetPlusCalibrationReader` — 4-input Stage 2 fixture 리더 | (S3-1 포함, ~70 LoC) | ~80 |
+| S3-4 | `bafnetplus.onnx` (FP32, simplified) | **11.63 MB** (md5 4b7663…) | ~15 MB |
+| S3-4 | `bafnetplus_qdq.onnx` (QDQ INT8) | **6.98 MB** (md5 9a1b53…) | ~10 MB |
+| S3-4 | `bafnetplus_streaming_config.json` | 59 KB, **166 states**, md5 38531a… | ~10 KB |
+| S3-5 | `verify_onnx_multi` + `verify_against_fixture` | (S3-1 포함, ~140 LoC) | ~100 |
+| S3-6 | `BafnetPlusHtpProbeTest.kt` (신규) | **206 LoC** | 80 |
+| **합계** | | **1,708 LoC + 18.67 MB** | 680~940 LoC + 30~50 MB |
+
+**LoC 예측 초과 원인**: 통합 그래프 wrapper 가 LaCoSENet 대비 입력/출력 대폭 확장 (4 audio + 166 states). `build_bafnetplus_state_registry`, `BafnetPlusStateRegistry`, `_unflatten_states/_flatten_states`, `_stateful_conv1d_inline/_stateful_conv2d_inline` 등 LaCoSENet 에 없던 헬퍼가 ~500 LoC 추가. Docstring + module description 이 ~200 LoC. 실제 로직 LoC 는 ~800 수준.
+
+**acceptance 결과**:
+
+- ✅ FP32 export 성공: `bafnetplus.onnx` 12.0 MB → simplify 후 11.6 MB (-3.1%)
+- ✅ onnx-simplifier 통과 (check OK)
+- ✅ **PyTorch wrapper vs ORT CPU EP parity (3 chunks 연속)**: est_mag max 2.84e-5, est_com_real max 5.93e-5, est_com_imag max 5.73e-5, RMS 전부 1e-5 미만 → **tolerance RMS<1e-5, max<1e-4 만족** ✅
+- ✅ QDQ INT8 export 성공: `bafnetplus_qdq.onnx` 7.0 MB (-40% vs FP32). Calibration: Stage 2 fixture 41 chunks
+- ✅ HTP 세션 초기화 성공 + **1-chunk inference 성공** (SM_S938N, 8.3s). 169 outputs (3 primary + 166 next_state), est_mag/real/imag 모두 NaN/Inf-free
+- ✅ streaming_config.json schema valid — `state_info.state_layout` 에 166 entries × shape/dtype/bytes 기록, `io_info.input_names` / `output_names` 명세
+- ✅ **추가 S3**: State 이름 체계 `state_alpha_conv_*` (4) < `state_calibration_conv_*` (2) < `state_mapping_rf_*` (80) < `state_masking_rf_*` (80) — Python `sorted()` + Kotlin `List.sort()` 결정적 순서 보장. `total_state_bytes` = 23.45 MB
+- ✅ **추가 S3**: LaCoSENet 기존 자산 무회귀 — `model.onnx`, `streaming_config.json`, `fixtures/` 건드리지 않음. `parity` 패키지 **12/12 PASS** (11 기존 + 1 신규 HTP probe, 9.8s)
+- ✅ **추가 S3 Stage 3 결정 포인트**: HTP 로드 + 1 chunk 실행 성공 → **단일 통합 세션 전략 확정**. 분리 2-session 으로 전환 불필요
+
+**실측 graph 구성 (166 states)**:
+
+| 카테고리 | prefix | count | state shape 예시 |
+|---|---|---|---|
+| Alpha fusion | `state_alpha_conv_0..3` | 4 | [1, 3, 6, 207] / [1, 16, 6, 207] (블록별 in_channels 상이) |
+| Calibration | `state_calibration_conv_0..1` | 2 | [1, 5, 8] / [1, 16, 8] |
+| Mapping TSBlocks | `state_mapping_rf_{0..3}_tb{0..1}_{cab\|gpkffn}_{key}` | 80 | [1, 64, 6, 100] (conv), [1, 64, 2] (ema) 등 |
+| Masking TSBlocks | `state_masking_rf_{0..3}_tb{0..1}_{cab\|gpkffn}_{key}` | 80 | 동일 |
+
+**핵심 설계 결정 (S3-β 완료)**:
+
+- **통합 단일 그래프**: mapping Backbone + masking Backbone + calibration + alpha fusion 모두 하나의 ONNX 에 포함. 분리 전략 불필요
+- **Backbone encoder/decoder = 비스트리밍 (zero-padded)** — LaCoSENet 컨벤션 따름. TSBlock 80 states 만 externalize (backbone 당)
+- **Fusion = inline 스트리밍** — `_stateful_conv1d_inline` / `_stateful_conv2d_inline` 헬퍼로 state I/O 를 graph 에 명시. `StatefulCausalConv1d/Conv2d._streaming = False` 유지 (내부 `_state` 비사용)
+- **atan2 을 그래프 밖으로 이동** — QNN HTP precision 우려로 `est_pha` 대신 `(est_mag, est_com_real, est_com_imag)` 출력. 초기에 atan2 을 in-graph 로 두었을 때 PT-ORT 파리티 max_err=3.05e-4 관찰 (atan2 FP32 구현 차이). 복소수 출력으로 전환 후 max_err=5.93e-5 까지 개선
+- **Kaiming init 시드 = 42** — Stage 2 fixture 와 동일. `prepare_bafnetplus_from_checkpoints` 가 `BAFNetPlusStreaming.from_checkpoint` 를 재사용해 RNG 상태 일치 보장
+
+**Stage 2 fixture 정합성 주의 (발견)**:
+
+- Stage 2 fixture 의 `chunk_000/est_mag.bin` 은 **실제 첫 모델 forward 의 2번째 호출 결과** — pre-warm chunk (first forward) 은 fixture 에 저장되지 않음. Stage 3 ORT 가 zero-state 로 시작하면 fixture `chunk_000` 과 일치 불가 (drift ~0.37 on est_mag)
+- 이 차이는 버그가 아니라 **설계상 기대되는 사항**. 정식 parity 검증은 `verify_onnx_multi` (PyTorch wrapper vs ORT, 동일 초기 state) 로 수행하며 위에서 PASS 확인됨
+- `verify_against_fixture` 는 정보 제공용 진단으로 분류됨 (drift 출력은 post-mortem 기록)
+
+**Stage 2 fixture 재현성 미세 drift 기록**:
+
+- `diff -rq` 재실행 시 `istft_output.bin`, `ola_buffer_{in,out}.bin` 에서 **1.86e-9 ULP-level 차이** 발견 (iFFT FP32 rounding + OLA 누적 비결정성). Stage 3 ONNX 비교 기준 텐서 (`est_mag.bin`, `est_pha.bin`, `alpha_softmax.bin`) 는 **bit-identical** 재현 확인. iSTFT 는 host-side 이므로 Stage 3 scope 외
+- 결정: Stage 2 fixture 는 그대로 유지 (critical 경로 bit-identical). 필요 시 Stage 4 regeneration 단계에서 iSTFT 경로 재결정성 조사
+
+**Stage 4 착수 시 주의점**:
+
+- **새 output 시그니처 (est_mag, est_com_real, est_com_imag)**: Stage 4 의 `BAFNetPlusInferenceResult` data class 는 LaCoSENet 의 `(estMask, phaseReal, phaseImag)` 와 다른 시멘틱 — BAFNetPlus 는 이미 fusion 완료된 complex, 즉 **iSTFT 직접 입력 가능**. mask 곱셈 없음
+- **State 이름 ordering = alphabetical**: Python `sorted()` 결과가 `state_info.state_names` 에 기록됨. Kotlin 에서 `stateNames.sorted()` 호출로 동일 순서 얻을 수 있으나, **직접 JSON 파싱 순서를 따르는 편이 안전** (shape metadata 도 동일 순서 기록됨)
+- **State 총 메모리 = 23.45 MB** per forward (both double-buffers on). Stage 4 R4-X 에서 메모리 예산 점검 필요 (LaCoSENet 대비 ~5x, 여전히 400 MB 예산 내)
+- **CausalConv1d padding 관계**: `StatefulCausalConv1d.padding_size = padding * 2` 라는 사실이 `_stateful_conv1d_inline` 의 state 모양 계산에 중요. Stage 4 Android 구현 시 이 정수 값을 config 에서 직접 읽어 사용 (config 의 `state_layout[*].shape` 참조)
+- **Git LFS 불필요**: 18.67 MB 합산으로 기존 `model.onnx` (6 MB) + 본 export 가 일반 Git tracking 범위 내
+- **QDQ 수치 drift**: PT-ORT QDQ 비교 시 chunk 0 est_mag max=1.12 (예상 — INT8 quantization 오차). HTP 에서는 FP16 누적 경로 포함해 더 달라질 수 있음. Stage 5 벤치마크에서 정식 PESQ/STOI 측정
+
+**신규 P0 / R3-X 없음**. Stage 3 결정 포인트 분기 경로 (2-session + host fusion) 불필요. Stage 4 진입 조건 모두 충족.
+
+---
+
 ### Stage 4 — Android 확장 (dual input / 160+α state)
 
 **기간 가정**: 2~3 세션

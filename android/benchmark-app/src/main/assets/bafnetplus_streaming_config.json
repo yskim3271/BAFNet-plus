@@ -1,0 +1,2400 @@
+{
+  "model_info": {
+    "name": "BAFNetPlus",
+    "version": "1.0.0",
+    "export_format": "bafnetplus_stateful_nncore",
+    "quantization": "qdq_int8",
+    "phase_output_mode": "complex",
+    "qnn_compatible": true,
+    "supported_backends": [
+      "qnn_htp",
+      "nnapi",
+      "cpu"
+    ],
+    "model_type": "BAFNetPlus",
+    "ablation_mode": "full",
+    "infer_type_mapping": "mapping",
+    "infer_type_masking": "masking"
+  },
+  "stft_config": {
+    "n_fft": 400,
+    "hop_size": 100,
+    "win_length": 400,
+    "sample_rate": 16000,
+    "center": true,
+    "compress_factor": 0.3
+  },
+  "streaming_config": {
+    "chunk_size_frames": 8,
+    "encoder_lookahead": 3,
+    "decoder_lookahead": 3,
+    "export_time_frames": 11,
+    "freq_bins": 201,
+    "freq_bins_encoded": 100
+  },
+  "qnn_config": {
+    "target_soc": "SM8550",
+    "htp_performance_mode": "burst",
+    "context_cache_enabled": true,
+    "vtcm_mb": 8,
+    "enable_htp_fp16_precision": false
+  },
+  "fusion_info": {
+    "use_calibration": true,
+    "use_relative_gain": true,
+    "alpha_input_channels": 3,
+    "calibration_max_common_log_gain": 0.5,
+    "calibration_max_relative_log_gain": 1.0
+  },
+  "io_info": {
+    "input_names": [
+      "bcs_mag",
+      "bcs_pha",
+      "acs_mag",
+      "acs_pha",
+      "state_alpha_conv_0",
+      "state_alpha_conv_1",
+      "state_alpha_conv_2",
+      "state_alpha_conv_3",
+      "state_calibration_conv_0",
+      "state_calibration_conv_1",
+      "state_mapping_rf_0_tb0_cab_dwconv",
+      "state_mapping_rf_0_tb0_cab_ema",
+      "state_mapping_rf_0_tb0_gpkffn_attn_dw_11",
+      "state_mapping_rf_0_tb0_gpkffn_attn_dw_3",
+      "state_mapping_rf_0_tb0_gpkffn_attn_dw_5",
+      "state_mapping_rf_0_tb0_gpkffn_attn_dw_7",
+      "state_mapping_rf_0_tb0_gpkffn_conv_11",
+      "state_mapping_rf_0_tb0_gpkffn_conv_3",
+      "state_mapping_rf_0_tb0_gpkffn_conv_5",
+      "state_mapping_rf_0_tb0_gpkffn_conv_7",
+      "state_mapping_rf_0_tb1_cab_dwconv",
+      "state_mapping_rf_0_tb1_cab_ema",
+      "state_mapping_rf_0_tb1_gpkffn_attn_dw_11",
+      "state_mapping_rf_0_tb1_gpkffn_attn_dw_3",
+      "state_mapping_rf_0_tb1_gpkffn_attn_dw_5",
+      "state_mapping_rf_0_tb1_gpkffn_attn_dw_7",
+      "state_mapping_rf_0_tb1_gpkffn_conv_11",
+      "state_mapping_rf_0_tb1_gpkffn_conv_3",
+      "state_mapping_rf_0_tb1_gpkffn_conv_5",
+      "state_mapping_rf_0_tb1_gpkffn_conv_7",
+      "state_mapping_rf_1_tb0_cab_dwconv",
+      "state_mapping_rf_1_tb0_cab_ema",
+      "state_mapping_rf_1_tb0_gpkffn_attn_dw_11",
+      "state_mapping_rf_1_tb0_gpkffn_attn_dw_3",
+      "state_mapping_rf_1_tb0_gpkffn_attn_dw_5",
+      "state_mapping_rf_1_tb0_gpkffn_attn_dw_7",
+      "state_mapping_rf_1_tb0_gpkffn_conv_11",
+      "state_mapping_rf_1_tb0_gpkffn_conv_3",
+      "state_mapping_rf_1_tb0_gpkffn_conv_5",
+      "state_mapping_rf_1_tb0_gpkffn_conv_7",
+      "state_mapping_rf_1_tb1_cab_dwconv",
+      "state_mapping_rf_1_tb1_cab_ema",
+      "state_mapping_rf_1_tb1_gpkffn_attn_dw_11",
+      "state_mapping_rf_1_tb1_gpkffn_attn_dw_3",
+      "state_mapping_rf_1_tb1_gpkffn_attn_dw_5",
+      "state_mapping_rf_1_tb1_gpkffn_attn_dw_7",
+      "state_mapping_rf_1_tb1_gpkffn_conv_11",
+      "state_mapping_rf_1_tb1_gpkffn_conv_3",
+      "state_mapping_rf_1_tb1_gpkffn_conv_5",
+      "state_mapping_rf_1_tb1_gpkffn_conv_7",
+      "state_mapping_rf_2_tb0_cab_dwconv",
+      "state_mapping_rf_2_tb0_cab_ema",
+      "state_mapping_rf_2_tb0_gpkffn_attn_dw_11",
+      "state_mapping_rf_2_tb0_gpkffn_attn_dw_3",
+      "state_mapping_rf_2_tb0_gpkffn_attn_dw_5",
+      "state_mapping_rf_2_tb0_gpkffn_attn_dw_7",
+      "state_mapping_rf_2_tb0_gpkffn_conv_11",
+      "state_mapping_rf_2_tb0_gpkffn_conv_3",
+      "state_mapping_rf_2_tb0_gpkffn_conv_5",
+      "state_mapping_rf_2_tb0_gpkffn_conv_7",
+      "state_mapping_rf_2_tb1_cab_dwconv",
+      "state_mapping_rf_2_tb1_cab_ema",
+      "state_mapping_rf_2_tb1_gpkffn_attn_dw_11",
+      "state_mapping_rf_2_tb1_gpkffn_attn_dw_3",
+      "state_mapping_rf_2_tb1_gpkffn_attn_dw_5",
+      "state_mapping_rf_2_tb1_gpkffn_attn_dw_7",
+      "state_mapping_rf_2_tb1_gpkffn_conv_11",
+      "state_mapping_rf_2_tb1_gpkffn_conv_3",
+      "state_mapping_rf_2_tb1_gpkffn_conv_5",
+      "state_mapping_rf_2_tb1_gpkffn_conv_7",
+      "state_mapping_rf_3_tb0_cab_dwconv",
+      "state_mapping_rf_3_tb0_cab_ema",
+      "state_mapping_rf_3_tb0_gpkffn_attn_dw_11",
+      "state_mapping_rf_3_tb0_gpkffn_attn_dw_3",
+      "state_mapping_rf_3_tb0_gpkffn_attn_dw_5",
+      "state_mapping_rf_3_tb0_gpkffn_attn_dw_7",
+      "state_mapping_rf_3_tb0_gpkffn_conv_11",
+      "state_mapping_rf_3_tb0_gpkffn_conv_3",
+      "state_mapping_rf_3_tb0_gpkffn_conv_5",
+      "state_mapping_rf_3_tb0_gpkffn_conv_7",
+      "state_mapping_rf_3_tb1_cab_dwconv",
+      "state_mapping_rf_3_tb1_cab_ema",
+      "state_mapping_rf_3_tb1_gpkffn_attn_dw_11",
+      "state_mapping_rf_3_tb1_gpkffn_attn_dw_3",
+      "state_mapping_rf_3_tb1_gpkffn_attn_dw_5",
+      "state_mapping_rf_3_tb1_gpkffn_attn_dw_7",
+      "state_mapping_rf_3_tb1_gpkffn_conv_11",
+      "state_mapping_rf_3_tb1_gpkffn_conv_3",
+      "state_mapping_rf_3_tb1_gpkffn_conv_5",
+      "state_mapping_rf_3_tb1_gpkffn_conv_7",
+      "state_masking_rf_0_tb0_cab_dwconv",
+      "state_masking_rf_0_tb0_cab_ema",
+      "state_masking_rf_0_tb0_gpkffn_attn_dw_11",
+      "state_masking_rf_0_tb0_gpkffn_attn_dw_3",
+      "state_masking_rf_0_tb0_gpkffn_attn_dw_5",
+      "state_masking_rf_0_tb0_gpkffn_attn_dw_7",
+      "state_masking_rf_0_tb0_gpkffn_conv_11",
+      "state_masking_rf_0_tb0_gpkffn_conv_3",
+      "state_masking_rf_0_tb0_gpkffn_conv_5",
+      "state_masking_rf_0_tb0_gpkffn_conv_7",
+      "state_masking_rf_0_tb1_cab_dwconv",
+      "state_masking_rf_0_tb1_cab_ema",
+      "state_masking_rf_0_tb1_gpkffn_attn_dw_11",
+      "state_masking_rf_0_tb1_gpkffn_attn_dw_3",
+      "state_masking_rf_0_tb1_gpkffn_attn_dw_5",
+      "state_masking_rf_0_tb1_gpkffn_attn_dw_7",
+      "state_masking_rf_0_tb1_gpkffn_conv_11",
+      "state_masking_rf_0_tb1_gpkffn_conv_3",
+      "state_masking_rf_0_tb1_gpkffn_conv_5",
+      "state_masking_rf_0_tb1_gpkffn_conv_7",
+      "state_masking_rf_1_tb0_cab_dwconv",
+      "state_masking_rf_1_tb0_cab_ema",
+      "state_masking_rf_1_tb0_gpkffn_attn_dw_11",
+      "state_masking_rf_1_tb0_gpkffn_attn_dw_3",
+      "state_masking_rf_1_tb0_gpkffn_attn_dw_5",
+      "state_masking_rf_1_tb0_gpkffn_attn_dw_7",
+      "state_masking_rf_1_tb0_gpkffn_conv_11",
+      "state_masking_rf_1_tb0_gpkffn_conv_3",
+      "state_masking_rf_1_tb0_gpkffn_conv_5",
+      "state_masking_rf_1_tb0_gpkffn_conv_7",
+      "state_masking_rf_1_tb1_cab_dwconv",
+      "state_masking_rf_1_tb1_cab_ema",
+      "state_masking_rf_1_tb1_gpkffn_attn_dw_11",
+      "state_masking_rf_1_tb1_gpkffn_attn_dw_3",
+      "state_masking_rf_1_tb1_gpkffn_attn_dw_5",
+      "state_masking_rf_1_tb1_gpkffn_attn_dw_7",
+      "state_masking_rf_1_tb1_gpkffn_conv_11",
+      "state_masking_rf_1_tb1_gpkffn_conv_3",
+      "state_masking_rf_1_tb1_gpkffn_conv_5",
+      "state_masking_rf_1_tb1_gpkffn_conv_7",
+      "state_masking_rf_2_tb0_cab_dwconv",
+      "state_masking_rf_2_tb0_cab_ema",
+      "state_masking_rf_2_tb0_gpkffn_attn_dw_11",
+      "state_masking_rf_2_tb0_gpkffn_attn_dw_3",
+      "state_masking_rf_2_tb0_gpkffn_attn_dw_5",
+      "state_masking_rf_2_tb0_gpkffn_attn_dw_7",
+      "state_masking_rf_2_tb0_gpkffn_conv_11",
+      "state_masking_rf_2_tb0_gpkffn_conv_3",
+      "state_masking_rf_2_tb0_gpkffn_conv_5",
+      "state_masking_rf_2_tb0_gpkffn_conv_7",
+      "state_masking_rf_2_tb1_cab_dwconv",
+      "state_masking_rf_2_tb1_cab_ema",
+      "state_masking_rf_2_tb1_gpkffn_attn_dw_11",
+      "state_masking_rf_2_tb1_gpkffn_attn_dw_3",
+      "state_masking_rf_2_tb1_gpkffn_attn_dw_5",
+      "state_masking_rf_2_tb1_gpkffn_attn_dw_7",
+      "state_masking_rf_2_tb1_gpkffn_conv_11",
+      "state_masking_rf_2_tb1_gpkffn_conv_3",
+      "state_masking_rf_2_tb1_gpkffn_conv_5",
+      "state_masking_rf_2_tb1_gpkffn_conv_7",
+      "state_masking_rf_3_tb0_cab_dwconv",
+      "state_masking_rf_3_tb0_cab_ema",
+      "state_masking_rf_3_tb0_gpkffn_attn_dw_11",
+      "state_masking_rf_3_tb0_gpkffn_attn_dw_3",
+      "state_masking_rf_3_tb0_gpkffn_attn_dw_5",
+      "state_masking_rf_3_tb0_gpkffn_attn_dw_7",
+      "state_masking_rf_3_tb0_gpkffn_conv_11",
+      "state_masking_rf_3_tb0_gpkffn_conv_3",
+      "state_masking_rf_3_tb0_gpkffn_conv_5",
+      "state_masking_rf_3_tb0_gpkffn_conv_7",
+      "state_masking_rf_3_tb1_cab_dwconv",
+      "state_masking_rf_3_tb1_cab_ema",
+      "state_masking_rf_3_tb1_gpkffn_attn_dw_11",
+      "state_masking_rf_3_tb1_gpkffn_attn_dw_3",
+      "state_masking_rf_3_tb1_gpkffn_attn_dw_5",
+      "state_masking_rf_3_tb1_gpkffn_attn_dw_7",
+      "state_masking_rf_3_tb1_gpkffn_conv_11",
+      "state_masking_rf_3_tb1_gpkffn_conv_3",
+      "state_masking_rf_3_tb1_gpkffn_conv_5",
+      "state_masking_rf_3_tb1_gpkffn_conv_7"
+    ],
+    "output_names": [
+      "est_mag",
+      "est_com_real",
+      "est_com_imag",
+      "next_state_alpha_conv_0",
+      "next_state_alpha_conv_1",
+      "next_state_alpha_conv_2",
+      "next_state_alpha_conv_3",
+      "next_state_calibration_conv_0",
+      "next_state_calibration_conv_1",
+      "next_state_mapping_rf_0_tb0_cab_dwconv",
+      "next_state_mapping_rf_0_tb0_cab_ema",
+      "next_state_mapping_rf_0_tb0_gpkffn_attn_dw_11",
+      "next_state_mapping_rf_0_tb0_gpkffn_attn_dw_3",
+      "next_state_mapping_rf_0_tb0_gpkffn_attn_dw_5",
+      "next_state_mapping_rf_0_tb0_gpkffn_attn_dw_7",
+      "next_state_mapping_rf_0_tb0_gpkffn_conv_11",
+      "next_state_mapping_rf_0_tb0_gpkffn_conv_3",
+      "next_state_mapping_rf_0_tb0_gpkffn_conv_5",
+      "next_state_mapping_rf_0_tb0_gpkffn_conv_7",
+      "next_state_mapping_rf_0_tb1_cab_dwconv",
+      "next_state_mapping_rf_0_tb1_cab_ema",
+      "next_state_mapping_rf_0_tb1_gpkffn_attn_dw_11",
+      "next_state_mapping_rf_0_tb1_gpkffn_attn_dw_3",
+      "next_state_mapping_rf_0_tb1_gpkffn_attn_dw_5",
+      "next_state_mapping_rf_0_tb1_gpkffn_attn_dw_7",
+      "next_state_mapping_rf_0_tb1_gpkffn_conv_11",
+      "next_state_mapping_rf_0_tb1_gpkffn_conv_3",
+      "next_state_mapping_rf_0_tb1_gpkffn_conv_5",
+      "next_state_mapping_rf_0_tb1_gpkffn_conv_7",
+      "next_state_mapping_rf_1_tb0_cab_dwconv",
+      "next_state_mapping_rf_1_tb0_cab_ema",
+      "next_state_mapping_rf_1_tb0_gpkffn_attn_dw_11",
+      "next_state_mapping_rf_1_tb0_gpkffn_attn_dw_3",
+      "next_state_mapping_rf_1_tb0_gpkffn_attn_dw_5",
+      "next_state_mapping_rf_1_tb0_gpkffn_attn_dw_7",
+      "next_state_mapping_rf_1_tb0_gpkffn_conv_11",
+      "next_state_mapping_rf_1_tb0_gpkffn_conv_3",
+      "next_state_mapping_rf_1_tb0_gpkffn_conv_5",
+      "next_state_mapping_rf_1_tb0_gpkffn_conv_7",
+      "next_state_mapping_rf_1_tb1_cab_dwconv",
+      "next_state_mapping_rf_1_tb1_cab_ema",
+      "next_state_mapping_rf_1_tb1_gpkffn_attn_dw_11",
+      "next_state_mapping_rf_1_tb1_gpkffn_attn_dw_3",
+      "next_state_mapping_rf_1_tb1_gpkffn_attn_dw_5",
+      "next_state_mapping_rf_1_tb1_gpkffn_attn_dw_7",
+      "next_state_mapping_rf_1_tb1_gpkffn_conv_11",
+      "next_state_mapping_rf_1_tb1_gpkffn_conv_3",
+      "next_state_mapping_rf_1_tb1_gpkffn_conv_5",
+      "next_state_mapping_rf_1_tb1_gpkffn_conv_7",
+      "next_state_mapping_rf_2_tb0_cab_dwconv",
+      "next_state_mapping_rf_2_tb0_cab_ema",
+      "next_state_mapping_rf_2_tb0_gpkffn_attn_dw_11",
+      "next_state_mapping_rf_2_tb0_gpkffn_attn_dw_3",
+      "next_state_mapping_rf_2_tb0_gpkffn_attn_dw_5",
+      "next_state_mapping_rf_2_tb0_gpkffn_attn_dw_7",
+      "next_state_mapping_rf_2_tb0_gpkffn_conv_11",
+      "next_state_mapping_rf_2_tb0_gpkffn_conv_3",
+      "next_state_mapping_rf_2_tb0_gpkffn_conv_5",
+      "next_state_mapping_rf_2_tb0_gpkffn_conv_7",
+      "next_state_mapping_rf_2_tb1_cab_dwconv",
+      "next_state_mapping_rf_2_tb1_cab_ema",
+      "next_state_mapping_rf_2_tb1_gpkffn_attn_dw_11",
+      "next_state_mapping_rf_2_tb1_gpkffn_attn_dw_3",
+      "next_state_mapping_rf_2_tb1_gpkffn_attn_dw_5",
+      "next_state_mapping_rf_2_tb1_gpkffn_attn_dw_7",
+      "next_state_mapping_rf_2_tb1_gpkffn_conv_11",
+      "next_state_mapping_rf_2_tb1_gpkffn_conv_3",
+      "next_state_mapping_rf_2_tb1_gpkffn_conv_5",
+      "next_state_mapping_rf_2_tb1_gpkffn_conv_7",
+      "next_state_mapping_rf_3_tb0_cab_dwconv",
+      "next_state_mapping_rf_3_tb0_cab_ema",
+      "next_state_mapping_rf_3_tb0_gpkffn_attn_dw_11",
+      "next_state_mapping_rf_3_tb0_gpkffn_attn_dw_3",
+      "next_state_mapping_rf_3_tb0_gpkffn_attn_dw_5",
+      "next_state_mapping_rf_3_tb0_gpkffn_attn_dw_7",
+      "next_state_mapping_rf_3_tb0_gpkffn_conv_11",
+      "next_state_mapping_rf_3_tb0_gpkffn_conv_3",
+      "next_state_mapping_rf_3_tb0_gpkffn_conv_5",
+      "next_state_mapping_rf_3_tb0_gpkffn_conv_7",
+      "next_state_mapping_rf_3_tb1_cab_dwconv",
+      "next_state_mapping_rf_3_tb1_cab_ema",
+      "next_state_mapping_rf_3_tb1_gpkffn_attn_dw_11",
+      "next_state_mapping_rf_3_tb1_gpkffn_attn_dw_3",
+      "next_state_mapping_rf_3_tb1_gpkffn_attn_dw_5",
+      "next_state_mapping_rf_3_tb1_gpkffn_attn_dw_7",
+      "next_state_mapping_rf_3_tb1_gpkffn_conv_11",
+      "next_state_mapping_rf_3_tb1_gpkffn_conv_3",
+      "next_state_mapping_rf_3_tb1_gpkffn_conv_5",
+      "next_state_mapping_rf_3_tb1_gpkffn_conv_7",
+      "next_state_masking_rf_0_tb0_cab_dwconv",
+      "next_state_masking_rf_0_tb0_cab_ema",
+      "next_state_masking_rf_0_tb0_gpkffn_attn_dw_11",
+      "next_state_masking_rf_0_tb0_gpkffn_attn_dw_3",
+      "next_state_masking_rf_0_tb0_gpkffn_attn_dw_5",
+      "next_state_masking_rf_0_tb0_gpkffn_attn_dw_7",
+      "next_state_masking_rf_0_tb0_gpkffn_conv_11",
+      "next_state_masking_rf_0_tb0_gpkffn_conv_3",
+      "next_state_masking_rf_0_tb0_gpkffn_conv_5",
+      "next_state_masking_rf_0_tb0_gpkffn_conv_7",
+      "next_state_masking_rf_0_tb1_cab_dwconv",
+      "next_state_masking_rf_0_tb1_cab_ema",
+      "next_state_masking_rf_0_tb1_gpkffn_attn_dw_11",
+      "next_state_masking_rf_0_tb1_gpkffn_attn_dw_3",
+      "next_state_masking_rf_0_tb1_gpkffn_attn_dw_5",
+      "next_state_masking_rf_0_tb1_gpkffn_attn_dw_7",
+      "next_state_masking_rf_0_tb1_gpkffn_conv_11",
+      "next_state_masking_rf_0_tb1_gpkffn_conv_3",
+      "next_state_masking_rf_0_tb1_gpkffn_conv_5",
+      "next_state_masking_rf_0_tb1_gpkffn_conv_7",
+      "next_state_masking_rf_1_tb0_cab_dwconv",
+      "next_state_masking_rf_1_tb0_cab_ema",
+      "next_state_masking_rf_1_tb0_gpkffn_attn_dw_11",
+      "next_state_masking_rf_1_tb0_gpkffn_attn_dw_3",
+      "next_state_masking_rf_1_tb0_gpkffn_attn_dw_5",
+      "next_state_masking_rf_1_tb0_gpkffn_attn_dw_7",
+      "next_state_masking_rf_1_tb0_gpkffn_conv_11",
+      "next_state_masking_rf_1_tb0_gpkffn_conv_3",
+      "next_state_masking_rf_1_tb0_gpkffn_conv_5",
+      "next_state_masking_rf_1_tb0_gpkffn_conv_7",
+      "next_state_masking_rf_1_tb1_cab_dwconv",
+      "next_state_masking_rf_1_tb1_cab_ema",
+      "next_state_masking_rf_1_tb1_gpkffn_attn_dw_11",
+      "next_state_masking_rf_1_tb1_gpkffn_attn_dw_3",
+      "next_state_masking_rf_1_tb1_gpkffn_attn_dw_5",
+      "next_state_masking_rf_1_tb1_gpkffn_attn_dw_7",
+      "next_state_masking_rf_1_tb1_gpkffn_conv_11",
+      "next_state_masking_rf_1_tb1_gpkffn_conv_3",
+      "next_state_masking_rf_1_tb1_gpkffn_conv_5",
+      "next_state_masking_rf_1_tb1_gpkffn_conv_7",
+      "next_state_masking_rf_2_tb0_cab_dwconv",
+      "next_state_masking_rf_2_tb0_cab_ema",
+      "next_state_masking_rf_2_tb0_gpkffn_attn_dw_11",
+      "next_state_masking_rf_2_tb0_gpkffn_attn_dw_3",
+      "next_state_masking_rf_2_tb0_gpkffn_attn_dw_5",
+      "next_state_masking_rf_2_tb0_gpkffn_attn_dw_7",
+      "next_state_masking_rf_2_tb0_gpkffn_conv_11",
+      "next_state_masking_rf_2_tb0_gpkffn_conv_3",
+      "next_state_masking_rf_2_tb0_gpkffn_conv_5",
+      "next_state_masking_rf_2_tb0_gpkffn_conv_7",
+      "next_state_masking_rf_2_tb1_cab_dwconv",
+      "next_state_masking_rf_2_tb1_cab_ema",
+      "next_state_masking_rf_2_tb1_gpkffn_attn_dw_11",
+      "next_state_masking_rf_2_tb1_gpkffn_attn_dw_3",
+      "next_state_masking_rf_2_tb1_gpkffn_attn_dw_5",
+      "next_state_masking_rf_2_tb1_gpkffn_attn_dw_7",
+      "next_state_masking_rf_2_tb1_gpkffn_conv_11",
+      "next_state_masking_rf_2_tb1_gpkffn_conv_3",
+      "next_state_masking_rf_2_tb1_gpkffn_conv_5",
+      "next_state_masking_rf_2_tb1_gpkffn_conv_7",
+      "next_state_masking_rf_3_tb0_cab_dwconv",
+      "next_state_masking_rf_3_tb0_cab_ema",
+      "next_state_masking_rf_3_tb0_gpkffn_attn_dw_11",
+      "next_state_masking_rf_3_tb0_gpkffn_attn_dw_3",
+      "next_state_masking_rf_3_tb0_gpkffn_attn_dw_5",
+      "next_state_masking_rf_3_tb0_gpkffn_attn_dw_7",
+      "next_state_masking_rf_3_tb0_gpkffn_conv_11",
+      "next_state_masking_rf_3_tb0_gpkffn_conv_3",
+      "next_state_masking_rf_3_tb0_gpkffn_conv_5",
+      "next_state_masking_rf_3_tb0_gpkffn_conv_7",
+      "next_state_masking_rf_3_tb1_cab_dwconv",
+      "next_state_masking_rf_3_tb1_cab_ema",
+      "next_state_masking_rf_3_tb1_gpkffn_attn_dw_11",
+      "next_state_masking_rf_3_tb1_gpkffn_attn_dw_3",
+      "next_state_masking_rf_3_tb1_gpkffn_attn_dw_5",
+      "next_state_masking_rf_3_tb1_gpkffn_attn_dw_7",
+      "next_state_masking_rf_3_tb1_gpkffn_conv_11",
+      "next_state_masking_rf_3_tb1_gpkffn_conv_3",
+      "next_state_masking_rf_3_tb1_gpkffn_conv_5",
+      "next_state_masking_rf_3_tb1_gpkffn_conv_7"
+    ]
+  },
+  "state_info": {
+    "num_states": 166,
+    "state_names": [
+      "state_alpha_conv_0",
+      "state_alpha_conv_1",
+      "state_alpha_conv_2",
+      "state_alpha_conv_3",
+      "state_calibration_conv_0",
+      "state_calibration_conv_1",
+      "state_mapping_rf_0_tb0_cab_dwconv",
+      "state_mapping_rf_0_tb0_cab_ema",
+      "state_mapping_rf_0_tb0_gpkffn_attn_dw_11",
+      "state_mapping_rf_0_tb0_gpkffn_attn_dw_3",
+      "state_mapping_rf_0_tb0_gpkffn_attn_dw_5",
+      "state_mapping_rf_0_tb0_gpkffn_attn_dw_7",
+      "state_mapping_rf_0_tb0_gpkffn_conv_11",
+      "state_mapping_rf_0_tb0_gpkffn_conv_3",
+      "state_mapping_rf_0_tb0_gpkffn_conv_5",
+      "state_mapping_rf_0_tb0_gpkffn_conv_7",
+      "state_mapping_rf_0_tb1_cab_dwconv",
+      "state_mapping_rf_0_tb1_cab_ema",
+      "state_mapping_rf_0_tb1_gpkffn_attn_dw_11",
+      "state_mapping_rf_0_tb1_gpkffn_attn_dw_3",
+      "state_mapping_rf_0_tb1_gpkffn_attn_dw_5",
+      "state_mapping_rf_0_tb1_gpkffn_attn_dw_7",
+      "state_mapping_rf_0_tb1_gpkffn_conv_11",
+      "state_mapping_rf_0_tb1_gpkffn_conv_3",
+      "state_mapping_rf_0_tb1_gpkffn_conv_5",
+      "state_mapping_rf_0_tb1_gpkffn_conv_7",
+      "state_mapping_rf_1_tb0_cab_dwconv",
+      "state_mapping_rf_1_tb0_cab_ema",
+      "state_mapping_rf_1_tb0_gpkffn_attn_dw_11",
+      "state_mapping_rf_1_tb0_gpkffn_attn_dw_3",
+      "state_mapping_rf_1_tb0_gpkffn_attn_dw_5",
+      "state_mapping_rf_1_tb0_gpkffn_attn_dw_7",
+      "state_mapping_rf_1_tb0_gpkffn_conv_11",
+      "state_mapping_rf_1_tb0_gpkffn_conv_3",
+      "state_mapping_rf_1_tb0_gpkffn_conv_5",
+      "state_mapping_rf_1_tb0_gpkffn_conv_7",
+      "state_mapping_rf_1_tb1_cab_dwconv",
+      "state_mapping_rf_1_tb1_cab_ema",
+      "state_mapping_rf_1_tb1_gpkffn_attn_dw_11",
+      "state_mapping_rf_1_tb1_gpkffn_attn_dw_3",
+      "state_mapping_rf_1_tb1_gpkffn_attn_dw_5",
+      "state_mapping_rf_1_tb1_gpkffn_attn_dw_7",
+      "state_mapping_rf_1_tb1_gpkffn_conv_11",
+      "state_mapping_rf_1_tb1_gpkffn_conv_3",
+      "state_mapping_rf_1_tb1_gpkffn_conv_5",
+      "state_mapping_rf_1_tb1_gpkffn_conv_7",
+      "state_mapping_rf_2_tb0_cab_dwconv",
+      "state_mapping_rf_2_tb0_cab_ema",
+      "state_mapping_rf_2_tb0_gpkffn_attn_dw_11",
+      "state_mapping_rf_2_tb0_gpkffn_attn_dw_3",
+      "state_mapping_rf_2_tb0_gpkffn_attn_dw_5",
+      "state_mapping_rf_2_tb0_gpkffn_attn_dw_7",
+      "state_mapping_rf_2_tb0_gpkffn_conv_11",
+      "state_mapping_rf_2_tb0_gpkffn_conv_3",
+      "state_mapping_rf_2_tb0_gpkffn_conv_5",
+      "state_mapping_rf_2_tb0_gpkffn_conv_7",
+      "state_mapping_rf_2_tb1_cab_dwconv",
+      "state_mapping_rf_2_tb1_cab_ema",
+      "state_mapping_rf_2_tb1_gpkffn_attn_dw_11",
+      "state_mapping_rf_2_tb1_gpkffn_attn_dw_3",
+      "state_mapping_rf_2_tb1_gpkffn_attn_dw_5",
+      "state_mapping_rf_2_tb1_gpkffn_attn_dw_7",
+      "state_mapping_rf_2_tb1_gpkffn_conv_11",
+      "state_mapping_rf_2_tb1_gpkffn_conv_3",
+      "state_mapping_rf_2_tb1_gpkffn_conv_5",
+      "state_mapping_rf_2_tb1_gpkffn_conv_7",
+      "state_mapping_rf_3_tb0_cab_dwconv",
+      "state_mapping_rf_3_tb0_cab_ema",
+      "state_mapping_rf_3_tb0_gpkffn_attn_dw_11",
+      "state_mapping_rf_3_tb0_gpkffn_attn_dw_3",
+      "state_mapping_rf_3_tb0_gpkffn_attn_dw_5",
+      "state_mapping_rf_3_tb0_gpkffn_attn_dw_7",
+      "state_mapping_rf_3_tb0_gpkffn_conv_11",
+      "state_mapping_rf_3_tb0_gpkffn_conv_3",
+      "state_mapping_rf_3_tb0_gpkffn_conv_5",
+      "state_mapping_rf_3_tb0_gpkffn_conv_7",
+      "state_mapping_rf_3_tb1_cab_dwconv",
+      "state_mapping_rf_3_tb1_cab_ema",
+      "state_mapping_rf_3_tb1_gpkffn_attn_dw_11",
+      "state_mapping_rf_3_tb1_gpkffn_attn_dw_3",
+      "state_mapping_rf_3_tb1_gpkffn_attn_dw_5",
+      "state_mapping_rf_3_tb1_gpkffn_attn_dw_7",
+      "state_mapping_rf_3_tb1_gpkffn_conv_11",
+      "state_mapping_rf_3_tb1_gpkffn_conv_3",
+      "state_mapping_rf_3_tb1_gpkffn_conv_5",
+      "state_mapping_rf_3_tb1_gpkffn_conv_7",
+      "state_masking_rf_0_tb0_cab_dwconv",
+      "state_masking_rf_0_tb0_cab_ema",
+      "state_masking_rf_0_tb0_gpkffn_attn_dw_11",
+      "state_masking_rf_0_tb0_gpkffn_attn_dw_3",
+      "state_masking_rf_0_tb0_gpkffn_attn_dw_5",
+      "state_masking_rf_0_tb0_gpkffn_attn_dw_7",
+      "state_masking_rf_0_tb0_gpkffn_conv_11",
+      "state_masking_rf_0_tb0_gpkffn_conv_3",
+      "state_masking_rf_0_tb0_gpkffn_conv_5",
+      "state_masking_rf_0_tb0_gpkffn_conv_7",
+      "state_masking_rf_0_tb1_cab_dwconv",
+      "state_masking_rf_0_tb1_cab_ema",
+      "state_masking_rf_0_tb1_gpkffn_attn_dw_11",
+      "state_masking_rf_0_tb1_gpkffn_attn_dw_3",
+      "state_masking_rf_0_tb1_gpkffn_attn_dw_5",
+      "state_masking_rf_0_tb1_gpkffn_attn_dw_7",
+      "state_masking_rf_0_tb1_gpkffn_conv_11",
+      "state_masking_rf_0_tb1_gpkffn_conv_3",
+      "state_masking_rf_0_tb1_gpkffn_conv_5",
+      "state_masking_rf_0_tb1_gpkffn_conv_7",
+      "state_masking_rf_1_tb0_cab_dwconv",
+      "state_masking_rf_1_tb0_cab_ema",
+      "state_masking_rf_1_tb0_gpkffn_attn_dw_11",
+      "state_masking_rf_1_tb0_gpkffn_attn_dw_3",
+      "state_masking_rf_1_tb0_gpkffn_attn_dw_5",
+      "state_masking_rf_1_tb0_gpkffn_attn_dw_7",
+      "state_masking_rf_1_tb0_gpkffn_conv_11",
+      "state_masking_rf_1_tb0_gpkffn_conv_3",
+      "state_masking_rf_1_tb0_gpkffn_conv_5",
+      "state_masking_rf_1_tb0_gpkffn_conv_7",
+      "state_masking_rf_1_tb1_cab_dwconv",
+      "state_masking_rf_1_tb1_cab_ema",
+      "state_masking_rf_1_tb1_gpkffn_attn_dw_11",
+      "state_masking_rf_1_tb1_gpkffn_attn_dw_3",
+      "state_masking_rf_1_tb1_gpkffn_attn_dw_5",
+      "state_masking_rf_1_tb1_gpkffn_attn_dw_7",
+      "state_masking_rf_1_tb1_gpkffn_conv_11",
+      "state_masking_rf_1_tb1_gpkffn_conv_3",
+      "state_masking_rf_1_tb1_gpkffn_conv_5",
+      "state_masking_rf_1_tb1_gpkffn_conv_7",
+      "state_masking_rf_2_tb0_cab_dwconv",
+      "state_masking_rf_2_tb0_cab_ema",
+      "state_masking_rf_2_tb0_gpkffn_attn_dw_11",
+      "state_masking_rf_2_tb0_gpkffn_attn_dw_3",
+      "state_masking_rf_2_tb0_gpkffn_attn_dw_5",
+      "state_masking_rf_2_tb0_gpkffn_attn_dw_7",
+      "state_masking_rf_2_tb0_gpkffn_conv_11",
+      "state_masking_rf_2_tb0_gpkffn_conv_3",
+      "state_masking_rf_2_tb0_gpkffn_conv_5",
+      "state_masking_rf_2_tb0_gpkffn_conv_7",
+      "state_masking_rf_2_tb1_cab_dwconv",
+      "state_masking_rf_2_tb1_cab_ema",
+      "state_masking_rf_2_tb1_gpkffn_attn_dw_11",
+      "state_masking_rf_2_tb1_gpkffn_attn_dw_3",
+      "state_masking_rf_2_tb1_gpkffn_attn_dw_5",
+      "state_masking_rf_2_tb1_gpkffn_attn_dw_7",
+      "state_masking_rf_2_tb1_gpkffn_conv_11",
+      "state_masking_rf_2_tb1_gpkffn_conv_3",
+      "state_masking_rf_2_tb1_gpkffn_conv_5",
+      "state_masking_rf_2_tb1_gpkffn_conv_7",
+      "state_masking_rf_3_tb0_cab_dwconv",
+      "state_masking_rf_3_tb0_cab_ema",
+      "state_masking_rf_3_tb0_gpkffn_attn_dw_11",
+      "state_masking_rf_3_tb0_gpkffn_attn_dw_3",
+      "state_masking_rf_3_tb0_gpkffn_attn_dw_5",
+      "state_masking_rf_3_tb0_gpkffn_attn_dw_7",
+      "state_masking_rf_3_tb0_gpkffn_conv_11",
+      "state_masking_rf_3_tb0_gpkffn_conv_3",
+      "state_masking_rf_3_tb0_gpkffn_conv_5",
+      "state_masking_rf_3_tb0_gpkffn_conv_7",
+      "state_masking_rf_3_tb1_cab_dwconv",
+      "state_masking_rf_3_tb1_cab_ema",
+      "state_masking_rf_3_tb1_gpkffn_attn_dw_11",
+      "state_masking_rf_3_tb1_gpkffn_attn_dw_3",
+      "state_masking_rf_3_tb1_gpkffn_attn_dw_5",
+      "state_masking_rf_3_tb1_gpkffn_attn_dw_7",
+      "state_masking_rf_3_tb1_gpkffn_conv_11",
+      "state_masking_rf_3_tb1_gpkffn_conv_3",
+      "state_masking_rf_3_tb1_gpkffn_conv_5",
+      "state_masking_rf_3_tb1_gpkffn_conv_7"
+    ],
+    "total_state_bytes": 24010504,
+    "state_layout": [
+      {
+        "name": "state_alpha_conv_0",
+        "shape": [
+          1,
+          3,
+          6,
+          207
+        ],
+        "dtype": "float32",
+        "bytes": 14904
+      },
+      {
+        "name": "state_alpha_conv_1",
+        "shape": [
+          1,
+          16,
+          6,
+          207
+        ],
+        "dtype": "float32",
+        "bytes": 79488
+      },
+      {
+        "name": "state_alpha_conv_2",
+        "shape": [
+          1,
+          16,
+          6,
+          207
+        ],
+        "dtype": "float32",
+        "bytes": 79488
+      },
+      {
+        "name": "state_alpha_conv_3",
+        "shape": [
+          1,
+          16,
+          6,
+          207
+        ],
+        "dtype": "float32",
+        "bytes": 79488
+      },
+      {
+        "name": "state_calibration_conv_0",
+        "shape": [
+          1,
+          5,
+          4
+        ],
+        "dtype": "float32",
+        "bytes": 80
+      },
+      {
+        "name": "state_calibration_conv_1",
+        "shape": [
+          1,
+          16,
+          4
+        ],
+        "dtype": "float32",
+        "bytes": 256
+      },
+      {
+        "name": "state_mapping_rf_0_tb0_cab_dwconv",
+        "shape": [
+          1,
+          128,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_mapping_rf_0_tb0_cab_ema",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_mapping_rf_0_tb0_gpkffn_attn_dw_11",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_mapping_rf_0_tb0_gpkffn_attn_dw_3",
+        "shape": [
+          1,
+          64,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 51200
+      },
+      {
+        "name": "state_mapping_rf_0_tb0_gpkffn_attn_dw_5",
+        "shape": [
+          1,
+          64,
+          4,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_mapping_rf_0_tb0_gpkffn_attn_dw_7",
+        "shape": [
+          1,
+          64,
+          6,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 153600
+      },
+      {
+        "name": "state_mapping_rf_0_tb0_gpkffn_conv_11",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_mapping_rf_0_tb0_gpkffn_conv_3",
+        "shape": [
+          1,
+          64,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 51200
+      },
+      {
+        "name": "state_mapping_rf_0_tb0_gpkffn_conv_5",
+        "shape": [
+          1,
+          64,
+          4,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_mapping_rf_0_tb0_gpkffn_conv_7",
+        "shape": [
+          1,
+          64,
+          6,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 153600
+      },
+      {
+        "name": "state_mapping_rf_0_tb1_cab_dwconv",
+        "shape": [
+          1,
+          128,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_mapping_rf_0_tb1_cab_ema",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_mapping_rf_0_tb1_gpkffn_attn_dw_11",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_mapping_rf_0_tb1_gpkffn_attn_dw_3",
+        "shape": [
+          1,
+          64,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 51200
+      },
+      {
+        "name": "state_mapping_rf_0_tb1_gpkffn_attn_dw_5",
+        "shape": [
+          1,
+          64,
+          4,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_mapping_rf_0_tb1_gpkffn_attn_dw_7",
+        "shape": [
+          1,
+          64,
+          6,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 153600
+      },
+      {
+        "name": "state_mapping_rf_0_tb1_gpkffn_conv_11",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_mapping_rf_0_tb1_gpkffn_conv_3",
+        "shape": [
+          1,
+          64,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 51200
+      },
+      {
+        "name": "state_mapping_rf_0_tb1_gpkffn_conv_5",
+        "shape": [
+          1,
+          64,
+          4,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_mapping_rf_0_tb1_gpkffn_conv_7",
+        "shape": [
+          1,
+          64,
+          6,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 153600
+      },
+      {
+        "name": "state_mapping_rf_1_tb0_cab_dwconv",
+        "shape": [
+          1,
+          128,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_mapping_rf_1_tb0_cab_ema",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_mapping_rf_1_tb0_gpkffn_attn_dw_11",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_mapping_rf_1_tb0_gpkffn_attn_dw_3",
+        "shape": [
+          1,
+          64,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 51200
+      },
+      {
+        "name": "state_mapping_rf_1_tb0_gpkffn_attn_dw_5",
+        "shape": [
+          1,
+          64,
+          4,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_mapping_rf_1_tb0_gpkffn_attn_dw_7",
+        "shape": [
+          1,
+          64,
+          6,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 153600
+      },
+      {
+        "name": "state_mapping_rf_1_tb0_gpkffn_conv_11",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_mapping_rf_1_tb0_gpkffn_conv_3",
+        "shape": [
+          1,
+          64,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 51200
+      },
+      {
+        "name": "state_mapping_rf_1_tb0_gpkffn_conv_5",
+        "shape": [
+          1,
+          64,
+          4,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_mapping_rf_1_tb0_gpkffn_conv_7",
+        "shape": [
+          1,
+          64,
+          6,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 153600
+      },
+      {
+        "name": "state_mapping_rf_1_tb1_cab_dwconv",
+        "shape": [
+          1,
+          128,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_mapping_rf_1_tb1_cab_ema",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_mapping_rf_1_tb1_gpkffn_attn_dw_11",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_mapping_rf_1_tb1_gpkffn_attn_dw_3",
+        "shape": [
+          1,
+          64,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 51200
+      },
+      {
+        "name": "state_mapping_rf_1_tb1_gpkffn_attn_dw_5",
+        "shape": [
+          1,
+          64,
+          4,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_mapping_rf_1_tb1_gpkffn_attn_dw_7",
+        "shape": [
+          1,
+          64,
+          6,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 153600
+      },
+      {
+        "name": "state_mapping_rf_1_tb1_gpkffn_conv_11",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_mapping_rf_1_tb1_gpkffn_conv_3",
+        "shape": [
+          1,
+          64,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 51200
+      },
+      {
+        "name": "state_mapping_rf_1_tb1_gpkffn_conv_5",
+        "shape": [
+          1,
+          64,
+          4,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_mapping_rf_1_tb1_gpkffn_conv_7",
+        "shape": [
+          1,
+          64,
+          6,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 153600
+      },
+      {
+        "name": "state_mapping_rf_2_tb0_cab_dwconv",
+        "shape": [
+          1,
+          128,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_mapping_rf_2_tb0_cab_ema",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_mapping_rf_2_tb0_gpkffn_attn_dw_11",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_mapping_rf_2_tb0_gpkffn_attn_dw_3",
+        "shape": [
+          1,
+          64,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 51200
+      },
+      {
+        "name": "state_mapping_rf_2_tb0_gpkffn_attn_dw_5",
+        "shape": [
+          1,
+          64,
+          4,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_mapping_rf_2_tb0_gpkffn_attn_dw_7",
+        "shape": [
+          1,
+          64,
+          6,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 153600
+      },
+      {
+        "name": "state_mapping_rf_2_tb0_gpkffn_conv_11",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_mapping_rf_2_tb0_gpkffn_conv_3",
+        "shape": [
+          1,
+          64,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 51200
+      },
+      {
+        "name": "state_mapping_rf_2_tb0_gpkffn_conv_5",
+        "shape": [
+          1,
+          64,
+          4,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_mapping_rf_2_tb0_gpkffn_conv_7",
+        "shape": [
+          1,
+          64,
+          6,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 153600
+      },
+      {
+        "name": "state_mapping_rf_2_tb1_cab_dwconv",
+        "shape": [
+          1,
+          128,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_mapping_rf_2_tb1_cab_ema",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_mapping_rf_2_tb1_gpkffn_attn_dw_11",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_mapping_rf_2_tb1_gpkffn_attn_dw_3",
+        "shape": [
+          1,
+          64,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 51200
+      },
+      {
+        "name": "state_mapping_rf_2_tb1_gpkffn_attn_dw_5",
+        "shape": [
+          1,
+          64,
+          4,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_mapping_rf_2_tb1_gpkffn_attn_dw_7",
+        "shape": [
+          1,
+          64,
+          6,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 153600
+      },
+      {
+        "name": "state_mapping_rf_2_tb1_gpkffn_conv_11",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_mapping_rf_2_tb1_gpkffn_conv_3",
+        "shape": [
+          1,
+          64,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 51200
+      },
+      {
+        "name": "state_mapping_rf_2_tb1_gpkffn_conv_5",
+        "shape": [
+          1,
+          64,
+          4,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_mapping_rf_2_tb1_gpkffn_conv_7",
+        "shape": [
+          1,
+          64,
+          6,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 153600
+      },
+      {
+        "name": "state_mapping_rf_3_tb0_cab_dwconv",
+        "shape": [
+          1,
+          128,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_mapping_rf_3_tb0_cab_ema",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_mapping_rf_3_tb0_gpkffn_attn_dw_11",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_mapping_rf_3_tb0_gpkffn_attn_dw_3",
+        "shape": [
+          1,
+          64,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 51200
+      },
+      {
+        "name": "state_mapping_rf_3_tb0_gpkffn_attn_dw_5",
+        "shape": [
+          1,
+          64,
+          4,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_mapping_rf_3_tb0_gpkffn_attn_dw_7",
+        "shape": [
+          1,
+          64,
+          6,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 153600
+      },
+      {
+        "name": "state_mapping_rf_3_tb0_gpkffn_conv_11",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_mapping_rf_3_tb0_gpkffn_conv_3",
+        "shape": [
+          1,
+          64,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 51200
+      },
+      {
+        "name": "state_mapping_rf_3_tb0_gpkffn_conv_5",
+        "shape": [
+          1,
+          64,
+          4,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_mapping_rf_3_tb0_gpkffn_conv_7",
+        "shape": [
+          1,
+          64,
+          6,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 153600
+      },
+      {
+        "name": "state_mapping_rf_3_tb1_cab_dwconv",
+        "shape": [
+          1,
+          128,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_mapping_rf_3_tb1_cab_ema",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_mapping_rf_3_tb1_gpkffn_attn_dw_11",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_mapping_rf_3_tb1_gpkffn_attn_dw_3",
+        "shape": [
+          1,
+          64,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 51200
+      },
+      {
+        "name": "state_mapping_rf_3_tb1_gpkffn_attn_dw_5",
+        "shape": [
+          1,
+          64,
+          4,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_mapping_rf_3_tb1_gpkffn_attn_dw_7",
+        "shape": [
+          1,
+          64,
+          6,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 153600
+      },
+      {
+        "name": "state_mapping_rf_3_tb1_gpkffn_conv_11",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_mapping_rf_3_tb1_gpkffn_conv_3",
+        "shape": [
+          1,
+          64,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 51200
+      },
+      {
+        "name": "state_mapping_rf_3_tb1_gpkffn_conv_5",
+        "shape": [
+          1,
+          64,
+          4,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_mapping_rf_3_tb1_gpkffn_conv_7",
+        "shape": [
+          1,
+          64,
+          6,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 153600
+      },
+      {
+        "name": "state_masking_rf_0_tb0_cab_dwconv",
+        "shape": [
+          1,
+          128,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_masking_rf_0_tb0_cab_ema",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_masking_rf_0_tb0_gpkffn_attn_dw_11",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_masking_rf_0_tb0_gpkffn_attn_dw_3",
+        "shape": [
+          1,
+          64,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 51200
+      },
+      {
+        "name": "state_masking_rf_0_tb0_gpkffn_attn_dw_5",
+        "shape": [
+          1,
+          64,
+          4,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_masking_rf_0_tb0_gpkffn_attn_dw_7",
+        "shape": [
+          1,
+          64,
+          6,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 153600
+      },
+      {
+        "name": "state_masking_rf_0_tb0_gpkffn_conv_11",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_masking_rf_0_tb0_gpkffn_conv_3",
+        "shape": [
+          1,
+          64,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 51200
+      },
+      {
+        "name": "state_masking_rf_0_tb0_gpkffn_conv_5",
+        "shape": [
+          1,
+          64,
+          4,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_masking_rf_0_tb0_gpkffn_conv_7",
+        "shape": [
+          1,
+          64,
+          6,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 153600
+      },
+      {
+        "name": "state_masking_rf_0_tb1_cab_dwconv",
+        "shape": [
+          1,
+          128,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_masking_rf_0_tb1_cab_ema",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_masking_rf_0_tb1_gpkffn_attn_dw_11",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_masking_rf_0_tb1_gpkffn_attn_dw_3",
+        "shape": [
+          1,
+          64,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 51200
+      },
+      {
+        "name": "state_masking_rf_0_tb1_gpkffn_attn_dw_5",
+        "shape": [
+          1,
+          64,
+          4,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_masking_rf_0_tb1_gpkffn_attn_dw_7",
+        "shape": [
+          1,
+          64,
+          6,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 153600
+      },
+      {
+        "name": "state_masking_rf_0_tb1_gpkffn_conv_11",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_masking_rf_0_tb1_gpkffn_conv_3",
+        "shape": [
+          1,
+          64,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 51200
+      },
+      {
+        "name": "state_masking_rf_0_tb1_gpkffn_conv_5",
+        "shape": [
+          1,
+          64,
+          4,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_masking_rf_0_tb1_gpkffn_conv_7",
+        "shape": [
+          1,
+          64,
+          6,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 153600
+      },
+      {
+        "name": "state_masking_rf_1_tb0_cab_dwconv",
+        "shape": [
+          1,
+          128,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_masking_rf_1_tb0_cab_ema",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_masking_rf_1_tb0_gpkffn_attn_dw_11",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_masking_rf_1_tb0_gpkffn_attn_dw_3",
+        "shape": [
+          1,
+          64,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 51200
+      },
+      {
+        "name": "state_masking_rf_1_tb0_gpkffn_attn_dw_5",
+        "shape": [
+          1,
+          64,
+          4,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_masking_rf_1_tb0_gpkffn_attn_dw_7",
+        "shape": [
+          1,
+          64,
+          6,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 153600
+      },
+      {
+        "name": "state_masking_rf_1_tb0_gpkffn_conv_11",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_masking_rf_1_tb0_gpkffn_conv_3",
+        "shape": [
+          1,
+          64,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 51200
+      },
+      {
+        "name": "state_masking_rf_1_tb0_gpkffn_conv_5",
+        "shape": [
+          1,
+          64,
+          4,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_masking_rf_1_tb0_gpkffn_conv_7",
+        "shape": [
+          1,
+          64,
+          6,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 153600
+      },
+      {
+        "name": "state_masking_rf_1_tb1_cab_dwconv",
+        "shape": [
+          1,
+          128,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_masking_rf_1_tb1_cab_ema",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_masking_rf_1_tb1_gpkffn_attn_dw_11",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_masking_rf_1_tb1_gpkffn_attn_dw_3",
+        "shape": [
+          1,
+          64,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 51200
+      },
+      {
+        "name": "state_masking_rf_1_tb1_gpkffn_attn_dw_5",
+        "shape": [
+          1,
+          64,
+          4,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_masking_rf_1_tb1_gpkffn_attn_dw_7",
+        "shape": [
+          1,
+          64,
+          6,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 153600
+      },
+      {
+        "name": "state_masking_rf_1_tb1_gpkffn_conv_11",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_masking_rf_1_tb1_gpkffn_conv_3",
+        "shape": [
+          1,
+          64,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 51200
+      },
+      {
+        "name": "state_masking_rf_1_tb1_gpkffn_conv_5",
+        "shape": [
+          1,
+          64,
+          4,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_masking_rf_1_tb1_gpkffn_conv_7",
+        "shape": [
+          1,
+          64,
+          6,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 153600
+      },
+      {
+        "name": "state_masking_rf_2_tb0_cab_dwconv",
+        "shape": [
+          1,
+          128,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_masking_rf_2_tb0_cab_ema",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_masking_rf_2_tb0_gpkffn_attn_dw_11",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_masking_rf_2_tb0_gpkffn_attn_dw_3",
+        "shape": [
+          1,
+          64,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 51200
+      },
+      {
+        "name": "state_masking_rf_2_tb0_gpkffn_attn_dw_5",
+        "shape": [
+          1,
+          64,
+          4,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_masking_rf_2_tb0_gpkffn_attn_dw_7",
+        "shape": [
+          1,
+          64,
+          6,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 153600
+      },
+      {
+        "name": "state_masking_rf_2_tb0_gpkffn_conv_11",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_masking_rf_2_tb0_gpkffn_conv_3",
+        "shape": [
+          1,
+          64,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 51200
+      },
+      {
+        "name": "state_masking_rf_2_tb0_gpkffn_conv_5",
+        "shape": [
+          1,
+          64,
+          4,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_masking_rf_2_tb0_gpkffn_conv_7",
+        "shape": [
+          1,
+          64,
+          6,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 153600
+      },
+      {
+        "name": "state_masking_rf_2_tb1_cab_dwconv",
+        "shape": [
+          1,
+          128,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_masking_rf_2_tb1_cab_ema",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_masking_rf_2_tb1_gpkffn_attn_dw_11",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_masking_rf_2_tb1_gpkffn_attn_dw_3",
+        "shape": [
+          1,
+          64,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 51200
+      },
+      {
+        "name": "state_masking_rf_2_tb1_gpkffn_attn_dw_5",
+        "shape": [
+          1,
+          64,
+          4,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_masking_rf_2_tb1_gpkffn_attn_dw_7",
+        "shape": [
+          1,
+          64,
+          6,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 153600
+      },
+      {
+        "name": "state_masking_rf_2_tb1_gpkffn_conv_11",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_masking_rf_2_tb1_gpkffn_conv_3",
+        "shape": [
+          1,
+          64,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 51200
+      },
+      {
+        "name": "state_masking_rf_2_tb1_gpkffn_conv_5",
+        "shape": [
+          1,
+          64,
+          4,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_masking_rf_2_tb1_gpkffn_conv_7",
+        "shape": [
+          1,
+          64,
+          6,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 153600
+      },
+      {
+        "name": "state_masking_rf_3_tb0_cab_dwconv",
+        "shape": [
+          1,
+          128,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_masking_rf_3_tb0_cab_ema",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_masking_rf_3_tb0_gpkffn_attn_dw_11",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_masking_rf_3_tb0_gpkffn_attn_dw_3",
+        "shape": [
+          1,
+          64,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 51200
+      },
+      {
+        "name": "state_masking_rf_3_tb0_gpkffn_attn_dw_5",
+        "shape": [
+          1,
+          64,
+          4,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_masking_rf_3_tb0_gpkffn_attn_dw_7",
+        "shape": [
+          1,
+          64,
+          6,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 153600
+      },
+      {
+        "name": "state_masking_rf_3_tb0_gpkffn_conv_11",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_masking_rf_3_tb0_gpkffn_conv_3",
+        "shape": [
+          1,
+          64,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 51200
+      },
+      {
+        "name": "state_masking_rf_3_tb0_gpkffn_conv_5",
+        "shape": [
+          1,
+          64,
+          4,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_masking_rf_3_tb0_gpkffn_conv_7",
+        "shape": [
+          1,
+          64,
+          6,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 153600
+      },
+      {
+        "name": "state_masking_rf_3_tb1_cab_dwconv",
+        "shape": [
+          1,
+          128,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_masking_rf_3_tb1_cab_ema",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_masking_rf_3_tb1_gpkffn_attn_dw_11",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_masking_rf_3_tb1_gpkffn_attn_dw_3",
+        "shape": [
+          1,
+          64,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 51200
+      },
+      {
+        "name": "state_masking_rf_3_tb1_gpkffn_attn_dw_5",
+        "shape": [
+          1,
+          64,
+          4,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_masking_rf_3_tb1_gpkffn_attn_dw_7",
+        "shape": [
+          1,
+          64,
+          6,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 153600
+      },
+      {
+        "name": "state_masking_rf_3_tb1_gpkffn_conv_11",
+        "shape": [
+          1,
+          64,
+          10,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 256000
+      },
+      {
+        "name": "state_masking_rf_3_tb1_gpkffn_conv_3",
+        "shape": [
+          1,
+          64,
+          2,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 51200
+      },
+      {
+        "name": "state_masking_rf_3_tb1_gpkffn_conv_5",
+        "shape": [
+          1,
+          64,
+          4,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 102400
+      },
+      {
+        "name": "state_masking_rf_3_tb1_gpkffn_conv_7",
+        "shape": [
+          1,
+          64,
+          6,
+          100
+        ],
+        "dtype": "float32",
+        "bytes": 153600
+      }
+    ]
+  },
+  "export_info": {
+    "timestamp": "2026-04-20T22:17:12.042226+00:00",
+    "checkpoint_md5_mapping": "4086206a1cad24dfe0c8cf8c9743d394",
+    "checkpoint_md5_masking": "ca401bb8d3299f3b96f119be2575def0",
+    "onnx_fp32_md5": "4b7663d776e8174e023f78025df70a0c",
+    "onnx_qdq_md5": "9a1b533de08e03ba9bf08fc69cb03d3a",
+    "git_commit": "62b11c2a378e98197dbf528e32d2fc5066d2822a"
+  }
+}
