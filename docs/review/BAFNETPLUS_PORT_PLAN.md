@@ -1005,7 +1005,7 @@ CLI diagnostic (`python scripts/compare_bafnetplus_batch_vs_stream.py --audio_le
 
 ### Stage 2 실행 결과 (2026-04-19 완료)
 
-**상태**: ✅ 완료 — 6/7 acceptance PASS. 기기 smoke (S2-η) 는 SSH 터널 드롭으로 보류. Stage 3 착수 가능.
+**상태**: ✅ 완료 — 7/7 acceptance PASS. Stage 3 착수 가능.
 
 **산출물 실측 LoC + 크기**:
 
@@ -1028,7 +1028,7 @@ CLI diagnostic (`python scripts/compare_bafnetplus_batch_vs_stream.py --audio_le
 - ✅ 이름 충돌 방지: 기존 `fixtures/` 와 별도 `bafnetplus_fixtures/`
 - ✅ Calibration 경로 exercise (R2-2 대응): relative_log_gain std=0.056, alpha_softmax std=0.032 → `exercised=True` 기록. ⚠️ `common_log_gain` 자체는 synthetic 입력에 대해 -0.5 근처 saturation — trained tanh head 가 acs_mask_mean>0.1 에 민감해 포화됨 (R2-3 참조). Stage 4 parity 는 byte-wise 비교이므로 포화여도 무관
 - ✅ Fusion 중간 텐서 포함: calibration_feat/hidden, common/relative_log_gain, bcs/acs_com_cal, alpha_softmax, est_com 등 31 키 dump
-- ⏸️ 1차 기기 smoke: `:benchmark-app:assembleDebug*` 및 `BafnetPlusFixtureSmokeTest.kt` 작성 완료, APK 빌드 성공, 설치 중 **SSH 터널이 드롭되어 보류**. 다음 세션 / 기기 복구 시 재시도
+- ✅ 1차 기기 smoke: `BafnetPlusFixtureSmokeTest` 4/4 PASS (0.093s on SM_S938N). 통합 parity 패키지 `com.lacosenet.benchmark.parity` **11/11 PASS** (1.642s) — LaCoSENet 7 + BafnetPlus 4
 
 **실측 per-chunk 텐서 구성 (31 items, ~178 KB/chunk raw float32)**:
 
@@ -1044,9 +1044,9 @@ CLI diagnostic (`python scripts/compare_bafnetplus_batch_vs_stream.py --audio_le
 - **common_log_gain 의 -0.5 saturation 은 의도된 모델 응답**. Stage 3 에서 ONNX export 후 fixture 와 비교할 때 "-0.5 근처 상수" 는 정상, 값이 0 또는 +0.5 에 가까우면 export 버그
 - **fixture 가 31 tensors × 41 chunks = 1,271 .bin 파일**. Android 빌드 시 asset 패키징이 느려질 수 있음 (Kotlin 빌드는 15 초 측정됨)
 - **U1+U2 fix 는 별도 commit 이지만 Stage 2 의 일부로 간주** (선행 조건이었음). Stage 2 commit 메시지에서 커밋 hash 참조
-- **기기 smoke S2-η 은 Stage 3 이전 재시도 필수**. Android 빌드 자체는 성공했으므로 parity 구조는 정상. 단, 실제 asset 로드 / manifest 파싱은 기기에서만 검증 가능
+- **기기 smoke S2-η 통과 확인됨** (SM_S938N, 2026-04-21 재실행). `loadsBafnetPlusManifest`, `loadsInputAudioStreams`, `chunk000HasExpectedKeys`, `calibrationDiagnosticsExercised` 4/4 PASS. Android asset 패키징 + JSON 파싱 + float32 LE 역직렬화 경로 모두 정상
 
-**신규 P0 / R2-X 없음**. LaCoSENet Stage 2 의 B9 (NPE) 같은 Android-side 구조 결함은 빌드 단계에서 감지됐을 것이지만 컴파일 통과. 실제 smoke 실행은 차후 확인
+**신규 P0 / R2-X 없음**. LaCoSENet Stage 2 의 B9 (NPE) 같은 Android-side 구조 결함은 기기 smoke 4/4 PASS 로 배제됨. LaCoSENet 기존 parity 7/7 도 **회귀 없음** (통합 run 11/11 확인)
 
 ---
 
