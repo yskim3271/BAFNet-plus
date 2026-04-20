@@ -1,13 +1,20 @@
 /**
  * StatefulInference.kt
  *
- * Stateful inference runner for LaCoSENet.
+ * Stateful inference runner for LaCoSENet / BAFNetPlus ONNX streaming models.
  * Manages explicit state I/O matching StatefulExportableNNCore from Python.
  *
  * Optimizations:
  * - Tensor pooling: Pre-allocated Direct ByteBuffers for zero-copy JNI transfer
  * - Double buffering: Swap state buffers without copying
  * - Reusable tensors: Minimize allocation overhead per inference
+ *
+ * Two run() overloads:
+ * - `run(mag, pha)` — LaCoSENet-specific convenience, returns [InferenceResult]
+ *   with atan2-derived phase (when `phase_output_mode == "complex"`).
+ * - `run(audioInputs: Map<String, FloatArray>)` — generic multi-input API used by
+ *   BAFNetPlus (bcs_mag, bcs_pha, acs_mag, acs_pha). Returns a Map of primary
+ *   outputs keyed by graph output name.
  */
 package com.lacosenet.streaming.session
 
@@ -21,26 +28,15 @@ import com.lacosenet.streaming.core.InferenceResult
 import com.lacosenet.streaming.core.StreamingConfig
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import java.nio.FloatBuffer
 import kotlin.math.atan2
 
 /**
  * Stateful inference runner for streaming enhancement.
  *
- * This class handles:
- * - State tensor initialization and management
- * - Running inference with proper I/O formatting
- * - Phase reconstruction from complex outputs (atan2 on host)
- * - Mask application for enhanced magnitude
- *
- * The ONNX model has explicit state I/O:
- * - Inputs: mag, pha, state_enc_conv0, state_enc_conv1, ..., state_ts_time_0, ...
- * - Outputs: est_mask, phase_real, phase_imag, next_state_enc_conv0, ...
- *
- * Performance optimizations:
- * - Tensor pooling with Direct ByteBuffers for zero-copy JNI data transfer
- * - Double buffering for state tensors (swap without copying)
- * - Pre-allocated input tensors (mag, pha) reused across inferences
+ * Audio inputs (non-`state_*`) and primary outputs (non-`next_state_*`) are
+ * discovered from the session metadata — both LaCoSENet ("mag"/"pha") and
+ * BAFNetPlus ("bcs_mag"/"bcs_pha"/"acs_mag"/"acs_pha") are supported by the
+ * same class.
  *
  * @param env ONNX Runtime environment
  * @param backend Execution backend (QNN, NNAPI, or CPU)
@@ -73,27 +69,39 @@ class StatefulInference(
     // Set when ORT throws during run(); forces resetStates() before the next run (H2).
     private var isStateInvalid = false
 
-    // Pre-allocated input tensors (mag, pha)
-    private var magBuffer: ByteBuffer? = null
-    private var phaBuffer: ByteBuffer? = null
-    private var magTensor: OnnxTensor? = null
-    private var phaTensor: OnnxTensor? = null
+    // Generic audio input registry — keyed by input name (e.g. "mag"/"pha" for
+    // LaCoSENet, "bcs_mag"/"bcs_pha"/"acs_mag"/"acs_pha" for BAFNetPlus).
+    private val audioBuffers = mutableMapOf<String, ByteBuffer>()
+    private val audioTensors = mutableMapOf<String, OnnxTensor>()
+    private val audioShapes = mutableMapOf<String, LongArray>()
+    private val audioSizes = mutableMapOf<String, Int>()
 
-    // Input/output shapes
-    private var magShape: LongArray = longArrayOf(1, config.stftConfig.freqBins.toLong(), config.streamingConfig.exportTimeFrames.toLong())
-    private var phaShape: LongArray = magShape.clone()
-    private var magSize: Int = 0
-    private var phaSize: Int = 0
+    // Generic primary-output registry — keyed by output name, excludes `next_state_*`.
+    // Each entry is a preallocated FloatArray reused across inference calls.
+    private val primaryOutputArrays = mutableMapOf<String, FloatArray>()
+
+    // LaCoSENet `phase_output_mode = "complex"` post-processing cache — atan2 from
+    // phase_real / phase_imag into estPhaCache, returned via [InferenceResult.estPhase].
+    private var estPhaCache: FloatArray? = null
 
     // Inference type
     private val inferType = config.modelInfo.inferType
     private val phaseOutputMode = config.modelInfo.phaseOutputMode
 
-    // Pre-allocated output arrays (avoid per-inference allocation)
-    private var estMaskArray: FloatArray? = null
-    private var estPhaArray: FloatArray? = null
-    private var phaseRealArray: FloatArray? = null
-    private var phaseImagArray: FloatArray? = null
+    // Last run() wall-clock inference time in ms (populated by the generic path).
+    private var lastInferenceTimeMs: Float = 0f
+
+    /** Input names discovered at initialize() time (audio, non-state). */
+    val audioInputNames: List<String>
+        get() = audioBuffers.keys.toList()
+
+    /** Primary output names discovered at initialize() time (non-next_state). */
+    val primaryOutputNames: List<String>
+        get() = primaryOutputArrays.keys.toList()
+
+    /** Number of state tensors managed by this instance. */
+    val numStates: Int
+        get() = stateNames.size
 
     /**
      * Initialize state tensors from session metadata.
@@ -103,20 +111,18 @@ class StatefulInference(
         val session = backend.session
             ?: throw IllegalStateException("Backend not initialized")
 
-        // Extract state names from inputs
+        // Discover state + audio inputs from session metadata.
         for (inputInfo in session.inputInfo) {
             val name = inputInfo.key
+            val tensorInfo = inputInfo.value.info as TensorInfo
             if (name.startsWith("state_")) {
                 stateNames.add(name)
                 nextStateNames.add("next_$name")
-
-                val tensorInfo = inputInfo.value.info as TensorInfo
                 stateShapes[name] = tensorInfo.shape
                 stateSizes[name] = tensorInfo.shape.fold(1L) { acc, dim -> acc * dim }.toInt()
-            } else if (name == "mag") {
-                val tensorInfo = inputInfo.value.info as TensorInfo
-                magShape = tensorInfo.shape
-                phaShape = tensorInfo.shape.clone()
+            } else {
+                audioShapes[name] = tensorInfo.shape
+                audioSizes[name] = tensorInfo.shape.fold(1L) { acc, dim -> acc * dim }.toInt()
             }
         }
 
@@ -141,49 +147,42 @@ class StatefulInference(
             Log.w(TAG, "streaming_config.json has no state_info.state_names; skipping registry assertion")
         }
 
-        Log.d(TAG, "Found ${stateNames.size} state tensors")
-        Log.d(TAG, "Mag shape: ${magShape.contentToString()}")
+        Log.d(TAG, "Found ${stateNames.size} state tensors, ${audioShapes.size} audio inputs")
+        for ((name, shape) in audioShapes) {
+            Log.d(TAG, "  audio input '$name': shape=${shape.contentToString()}")
+        }
 
-        // Calculate input sizes
-        magSize = magShape.fold(1L) { acc, dim -> acc * dim }.toInt()
-        phaSize = phaShape.fold(1L) { acc, dim -> acc * dim }.toInt()
-
-        // Pre-allocate input buffers (Direct ByteBuffer for zero-copy)
-        magBuffer = allocateDirectBuffer(magSize)
-        phaBuffer = allocateDirectBuffer(phaSize)
-
-        // Create reusable input tensors
-        magTensor = OnnxTensor.createTensor(env, magBuffer!!.asFloatBuffer(), magShape)
-        phaTensor = OnnxTensor.createTensor(env, phaBuffer!!.asFloatBuffer(), phaShape)
+        // Pre-allocate audio input buffers + tensors (one per non-state input).
+        for ((name, shape) in audioShapes) {
+            val size = audioSizes.getValue(name)
+            val buffer = allocateDirectBuffer(size)
+            audioBuffers[name] = buffer
+            audioTensors[name] = OnnxTensor.createTensor(env, buffer.asFloatBuffer(), shape)
+        }
 
         // Pre-allocate double buffers for states
         allocateStateBuffers()
 
-        // Pre-allocate output arrays from session output info
+        // Pre-allocate output arrays for primary outputs (non-next_state).
         for (outputInfo in session.outputInfo) {
             val name = outputInfo.key
+            if (name.startsWith("next_state_")) continue
             val tensorInfo = outputInfo.value.info as TensorInfo
             val size = tensorInfo.shape.fold(1L) { acc, dim -> acc * dim }.toInt()
-            when (name) {
-                "est_mask" -> estMaskArray = FloatArray(size)
-                "est_pha" -> estPhaArray = FloatArray(size)
-                "phase_real" -> phaseRealArray = FloatArray(size)
-                "phase_imag" -> phaseImagArray = FloatArray(size)
-            }
-        }
-        if (phaseOutputMode == "complex" && estPhaArray == null) {
-            estPhaArray = FloatArray(magSize)
+            primaryOutputArrays[name] = FloatArray(size)
         }
 
         // Initialize states to zeros
         resetStates()
         isInitialized = true
 
-        Log.i(TAG, "Tensor pooling initialized:")
-        Log.i(TAG, "  - Mag/Pha buffers: ${magSize * FLOAT_BYTES} bytes each")
-        Log.i(TAG, "  - State buffers: ${stateNames.size} x 2 (double buffering)")
+        val totalAudioBytes = audioSizes.values.sum() * FLOAT_BYTES
         val totalStateBytes = stateSizes.values.sum() * FLOAT_BYTES * 2
+        Log.i(TAG, "Tensor pooling initialized:")
+        Log.i(TAG, "  - Audio buffers: ${audioBuffers.size} inputs, ${totalAudioBytes} bytes")
+        Log.i(TAG, "  - State buffers: ${stateNames.size} x 2 (double buffering)")
         Log.i(TAG, "  - Total state memory: ${totalStateBytes / 1024} KB")
+        Log.i(TAG, "  - Primary outputs: ${primaryOutputArrays.size} names")
     }
 
     /**
@@ -240,80 +239,116 @@ class StatefulInference(
     }
 
     /**
-     * Run inference on a single frame.
-     * Uses pre-allocated tensors and double buffering for minimal allocation overhead.
+     * Run inference with arbitrary named audio inputs (generic path).
+     *
+     * Caller supplies a [FloatArray] per non-state input; the method copies each
+     * array into the preallocated Direct ByteBuffer of the matching tensor, then
+     * runs the backend using the active state tensor set and swaps the state
+     * double-buffer from the `next_state_*` outputs.
+     *
+     * Returns the preallocated primary-output arrays keyed by output name. The
+     * returned arrays are reused on the next call — **do not retain references**
+     * across invocations.
+     *
+     * @throws IllegalArgumentException if `audioInputs` keys don't match the
+     *         session's non-state inputs, or if any array size mismatches.
+     */
+    fun run(audioInputs: Map<String, FloatArray>): Map<String, FloatArray> {
+        check(isInitialized) { "StatefulInference not initialized" }
+        check(!isStateInvalid) {
+            "StatefulInference state invalidated by previous error; call resetStates() to recover"
+        }
+        require(audioInputs.keys == audioBuffers.keys) {
+            "audioInputs keys mismatch: got ${audioInputs.keys}, expected ${audioBuffers.keys}"
+        }
+        for ((name, data) in audioInputs) {
+            val expected = audioSizes.getValue(name)
+            require(data.size == expected) {
+                "audio input '$name' size mismatch: got ${data.size}, expected $expected " +
+                    "(shape=${audioShapes.getValue(name).contentToString()})"
+            }
+        }
+
+        val startTime = System.nanoTime()
+
+        // Copy input data to preallocated buffers (zero-copy to JNI).
+        for ((name, data) in audioInputs) {
+            fillInputBuffer(audioBuffers.getValue(name), data)
+        }
+
+        // Active state tensor set (swapped each call).
+        val activeStateTensors = if (useBufferA) stateTensorsA else stateTensorsB
+
+        // Build input map: audio + state tensors.
+        val inputs = HashMap<String, OnnxTensor>(audioTensors.size + stateNames.size)
+        inputs.putAll(audioTensors)
+        for (name in stateNames) {
+            inputs[name] = activeStateTensors.getValue(name)
+        }
+
+        // Run inference. H2: on ORT exception, state buffers / preallocated outputs
+        // may be partially written; mark state invalid so caller must resetStates().
+        try {
+            backend.run(inputs).use { result ->
+                val outputs = result.associate { it.key to (it.value as OnnxTensor) }
+
+                // Extract primary outputs into preallocated arrays.
+                for ((name, array) in primaryOutputArrays) {
+                    val tensor = outputs[name]
+                        ?: throw IllegalStateException("Missing primary output: $name")
+                    extractIntoArray(tensor, array)
+                }
+
+                // Swap state double-buffer from next_state_* outputs.
+                updateStatesDoubleBuffer(outputs)
+
+                lastInferenceTimeMs = (System.nanoTime() - startTime) / 1_000_000f
+
+                // Return a snapshot map — values still reference preallocated arrays.
+                return HashMap(primaryOutputArrays)
+            }
+        } catch (e: Exception) {
+            isStateInvalid = true
+            throw e
+        }
+    }
+
+    /**
+     * Run inference on a single frame (LaCoSENet backward-compat path).
+     * Delegates to the generic `run(audioInputs)` path and post-processes the
+     * primary outputs into the LaCoSENet-specific [InferenceResult] shape
+     * (applying atan2 when `phase_output_mode == "complex"`).
      *
      * @param mag Magnitude spectrogram [1, F, T]
      * @param pha Phase spectrogram [1, F, T]
      * @return Inference result with enhanced mask and phase
      */
     fun run(mag: FloatArray, pha: FloatArray): InferenceResult {
-        if (!isInitialized) {
-            throw IllegalStateException("StatefulInference not initialized")
-        }
-        check(!isStateInvalid) {
-            "StatefulInference state invalidated by previous error; call resetStates() to recover"
-        }
-        // B4: enforce strict shape match — fillInputBuffer() previously silently
-        // zero-padded/trimmed, hiding upstream geometry bugs.
-        require(mag.size == magSize) {
-            "mag size mismatch: got ${mag.size}, expected $magSize (shape=${magShape.contentToString()})"
-        }
-        require(pha.size == phaSize) {
-            "pha size mismatch: got ${pha.size}, expected $phaSize (shape=${phaShape.contentToString()})"
-        }
+        val outputs = run(mapOf("mag" to mag, "pha" to pha))
 
-        val startTime = System.nanoTime()
+        val estMask = outputs["est_mask"]
+            ?: throw IllegalStateException(
+                "LaCoSENet run(mag, pha) requires 'est_mask' output; available: ${outputs.keys}"
+            )
 
-        // Copy input data to pre-allocated buffers (zero-copy to JNI)
-        fillInputBuffer(magBuffer!!, mag)
-        fillInputBuffer(phaBuffer!!, pha)
-
-        // Get active state tensors
-        val activeStateTensors = if (useBufferA) stateTensorsA else stateTensorsB
-
-        // Build input map using pre-allocated tensors
-        val inputs = mutableMapOf<String, OnnxTensor>()
-        inputs["mag"] = magTensor!!
-        inputs["pha"] = phaTensor!!
-        for (name in stateNames) {
-            inputs[name] = activeStateTensors[name]!!
+        val estPha: FloatArray = if (phaseOutputMode == "complex") {
+            val phaseReal = outputs["phase_real"]
+                ?: throw IllegalStateException("complex mode requires 'phase_real' output")
+            val phaseImag = outputs["phase_imag"]
+                ?: throw IllegalStateException("complex mode requires 'phase_imag' output")
+            val target = estPhaCache
+                ?: FloatArray(phaseReal.size).also { estPhaCache = it }
+            computeAtan2InPlace(phaseImag, phaseReal, target)
+        } else {
+            outputs["est_pha"]
+                ?: throw IllegalStateException("non-complex mode requires 'est_pha' output")
         }
 
-        // Run inference — OrtSession.Result must be closed to release native tensor memory.
-        // H2: on ORT exception, state buffers / pre-allocated outputs may be partially
-        // written; mark state invalid so caller must resetStates() before next run.
-        try {
-            backend.run(inputs).use { result ->
-                val outputs = result.associate { it.key to (it.value as OnnxTensor) }
-
-                // Parse outputs based on phase_output_mode using pre-allocated arrays
-                val estMask = extractIntoArray(outputs["est_mask"]!!, estMaskArray!!)
-
-                val estPha: FloatArray
-                if (phaseOutputMode == "complex") {
-                    val phaseReal = extractIntoArray(outputs["phase_real"]!!, phaseRealArray!!)
-                    val phaseImag = extractIntoArray(outputs["phase_imag"]!!, phaseImagArray!!)
-                    estPha = computeAtan2InPlace(phaseImag, phaseReal, estPhaArray!!)
-                } else {
-                    estPha = extractIntoArray(outputs["est_pha"]!!, estPhaArray!!)
-                }
-
-                // Update states using double buffering (swap without copying)
-                updateStatesDoubleBuffer(outputs)
-
-                val inferenceTimeMs = (System.nanoTime() - startTime) / 1_000_000f
-
-                return InferenceResult(
-                    estMask = estMask,
-                    estPhase = estPha,
-                    inferenceTimeMs = inferenceTimeMs
-                )
-            }
-        } catch (e: Exception) {
-            isStateInvalid = true
-            throw e
-        }
+        return InferenceResult(
+            estMask = estMask,
+            estPhase = estPha,
+            inferenceTimeMs = lastInferenceTimeMs
+        )
     }
 
     /**
@@ -410,15 +445,12 @@ class StatefulInference(
      * Closes all pre-allocated tensors.
      */
     fun release() {
-        // Close pre-allocated input tensors
-        magTensor?.close()
-        phaTensor?.close()
-        magTensor = null
-        phaTensor = null
-
-        // Clear input buffers (Direct ByteBuffers are GC'd)
-        magBuffer = null
-        phaBuffer = null
+        // Close audio tensors + clear maps
+        audioTensors.values.forEach { it.close() }
+        audioTensors.clear()
+        audioBuffers.clear()
+        audioShapes.clear()
+        audioSizes.clear()
 
         // Close state tensors (both buffer sets)
         stateTensorsA.values.forEach { it.close() }
@@ -430,11 +462,9 @@ class StatefulInference(
         stateBuffersA.clear()
         stateBuffersB.clear()
 
-        // Clear pre-allocated output arrays
-        estMaskArray = null
-        estPhaArray = null
-        phaseRealArray = null
-        phaseImagArray = null
+        // Clear preallocated output arrays
+        primaryOutputArrays.clear()
+        estPhaCache = null
 
         // Clear metadata
         stateNames.clear()

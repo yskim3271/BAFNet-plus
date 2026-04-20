@@ -16,4 +16,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "LaCoSENet-Streaming"
 include(":lacosenet-streaming")
+include(":bafnetplus-streaming")
 include(":benchmark-app")

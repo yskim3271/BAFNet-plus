@@ -53,6 +53,7 @@ android {
 dependencies {
     // Parity tests need the streaming library's STFT/StatefulInference.
     androidTestImplementation(project(":lacosenet-streaming"))
+    androidTestImplementation(project(":bafnetplus-streaming"))
 
     // AndroidTest dependencies
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
