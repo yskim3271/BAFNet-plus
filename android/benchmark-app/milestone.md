@@ -246,6 +246,24 @@ Budget: 50.0ms
 
 ---
 
+## Conclusion (BAFNetPlus, Stage 5)
+
+**✅ 배포 가능** — BAFNetPlus 는 50 ms budget 내에서 안정 동작 (Mean **13.4 ms** / 마진 **72 %**). Unified graph 설계가 dual-session orchestration 대비 fusion overhead 만 +3.2 ms 추가하는 수준이며 parallel efficiency 0.925 로 예상 상회.
+
+후속 개선 여지 (모두 선택적): (a) session init 8.3 s cold start 은 context cache 적용으로 < 500 ms 단축 가능 (LaCoSENet `benchmarkQnnHtpQdqCached` 패턴 재활용), (b) 장시간 thermal drift 와 cross-model leak 은 QA 단계 운영 모니터링으로 이관.
+
+LaCoSENet 과 BAFNetPlus 는 동일 기기에서 모두 budget 여유 확보:
+
+| 모델 | Mean | P95 | Budget % (Mean) | 배포 판정 |
+|---|---|---|---|---|
+| LaCoSENet single QDQ Small [11] | 6.2 ms | 6.6 ms | 12 % | ✅ |
+| LaCoSENet dual concurrent QDQ Large [3,5,7,11] | 15.2 ms | 17.1 ms | 30 % | ✅ |
+| BAFNetPlus unified QDQ | **13.4 ms** | **14.0 ms** | **27 %** | ✅ |
+
+상세 closure + 남은 이슈는 `docs/review/BAFNETPLUS_PORT_CLOSURE.md`.
+
+---
+
 ## 4. BAFNetPlus (Unified Graph, Stage 5)
 
 BAFNetPlus 는 BAFNet 을 확장한 통합 아키텍처 — mapping + masking + calibration + fusion (alpha/gamma) 을 **단일 ONNX 그래프** 로 export. dual backbone 병렬 전략 대신 HTP 가 통합 그래프 내부의 parallelism 을 직접 최적화.

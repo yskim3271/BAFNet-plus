@@ -52,7 +52,7 @@ android/
 
 ## Local parity gate (pre-push hook)
 
-`android/` 또는 `scripts/make_streaming_golden.py` 변경이 포함된 `git push` 직전에 Kotlin↔Python parity 7/7 을 자동 실행한다. 실패 시 push 가 차단된다.
+`android/` 또는 `scripts/make_streaming_golden.py` 변경이 포함된 `git push` 직전에 Kotlin↔Python parity 16/16 (LaCoSENet 7 + BAFNetPlus 9) 을 자동 실행한다. 실패 시 push 가 차단된다.
 
 **설치** (clone 후 1회):
 ```bash
@@ -70,8 +70,8 @@ bash scripts/hooks/install-hooks.sh
 1. push 범위에 `android/` 또는 `scripts/make_streaming_golden.py` 변경 존재 여부 감지
 2. 감지되면 adb device 접속 확인 → gradle 빌드 (`assembleDebug` + `assembleDebugAndroidTest`)
 3. APK push + install
-4. `am instrument com.lacosenet.benchmark.parity` 실행
-5. `OK (7 tests)` 확인 → push 허용. 그 외는 push 차단
+4. `am instrument com.lacosenet.benchmark.parity` 실행 (LaCoSENet 7 + BAFNetPlus 9 = 16 tests)
+5. `OK (16 tests)` 확인 → push 허용. 그 외는 push 차단
 
 **우회 (비상용)**:
 ```bash
@@ -340,6 +340,84 @@ PCM Input (float, 16kHz)
 - Chunk position 분석: chunk[0]~chunk[3] 위치별 평균 latency
 - Real-time budget 판정
 
+## BAFNetPlus Streaming (Dual-channel, Unified Graph)
+
+LaCoSENet 는 단일 PCM 입력에 mapping + masking 2 세션을 병렬 실행하지만, BAFNetPlus 는 **통합 ONNX 그래프** 하나로 dual-input (BCS 골전도 + ACS 기전도) 을 받아 fusion + calibration + alpha/gamma 를 그래프 내부에서 처리한다. 런타임 모듈은 `android/bafnetplus-streaming/` 에 독립 Kotlin 라이브러리로 패키징되어 있으며, `lacosenet-streaming` 의 `StatefulInference` / `AudioBuffer` / `StftProcessor` / `BackendSelector` 를 재사용한다.
+
+### Quick Start
+
+```kotlin
+import com.bafnetplus.streaming.BAFNetPlusStreamingEnhancer
+import com.lacosenet.streaming.backend.BackendType
+
+class DualChannelProcessor(context: Context) {
+    private val enhancer = BAFNetPlusStreamingEnhancer(context)
+
+    fun initialize(): Boolean {
+        // Assets: bafnetplus_qdq.onnx + bafnetplus_streaming_config.json
+        val result = enhancer.initialize(
+            modelPath = "bafnetplus_qdq.onnx",
+            configPath = "bafnetplus_streaming_config.json",
+            forceBackend = BackendType.QNN_HTP,   // or null for auto-select
+        )
+        if (result.success) {
+            Log.i(TAG, "Backend: ${result.backend}, numStates: ${result.numStates}")
+        }
+        return result.success
+    }
+
+    /**
+     * @param bcs Body-conducted (throat/bone) mic PCM, 16 kHz, 800 samples/chunk.
+     * @param acs Air-conducted (regular) mic PCM, 16 kHz, 800 samples/chunk.
+     * @return Enhanced 800-sample PCM, or null while still buffering (first ~3 chunks).
+     */
+    fun processChunk(bcs: FloatArray, acs: FloatArray): FloatArray? {
+        return enhancer.processChunk(bcs, acs)
+    }
+
+    fun onNewUtterance() = enhancer.reset()
+    fun release() = enhancer.release()
+}
+```
+
+### 입출력 규격
+
+- **Input**: `bcs` + `acs` FloatArray, 16 kHz mono, 800 samples/chunk (50 ms).
+- **Output**: FloatArray 800 samples (enhanced speech).
+- **Buffering**: encoder/decoder lookahead 3+3 frames → 첫 ~3 chunks 는 null 반환.
+
+### Asset 요구 사항
+
+`benchmark-app/src/main/assets/` 에 아래 파일 배치:
+
+| 파일 | 용도 |
+|---|---|
+| `bafnetplus_qdq.onnx` | QDQ INT8 (HTP 최적 배포용, 6.98 MB) |
+| `bafnetplus.onnx` | FP32 fallback (11.63 MB) |
+| `bafnetplus_streaming_config.json` | 166 states + dual-input signature |
+| `bafnetplus_fixtures/` (선택) | Parity smoke/fixture tests 용 |
+
+### ONNX export
+
+```bash
+python -m src.models.streaming.onnx.export_bafnetplus_onnx \
+    --chunk_size 8 --encoder_lookahead 3 --decoder_lookahead 3 \
+    --output_dir android/benchmark-app/src/main/assets \
+    --output_name bafnetplus.onnx --quantize_qdq --simplify
+```
+
+`--quantize_qdq` 는 QUInt8 activation + QUInt8 weight (HTP V79 호환). `--simplify` 는 onnxsim 으로 그래프 단순화.
+
+### Reproduction (실기기 벤치마크)
+
+```bash
+# Cold-state (200 chunks, QDQ + QNN HTP)
+cd android && ./gradlew :benchmark-app:connectedAndroidTest \
+    -Pandroid.testInstrumentationRunnerArguments.class=com.lacosenet.benchmark.StreamingBenchmarkTest#benchmarkBafnetplusFullQdq
+```
+
+Stage 5 실측 수치 (SM-S938N, Snapdragon 8 Elite, Hexagon V79): Mean **13.4 ms** / P95 14.0 ms / P99 14.9 ms (50 ms budget, 마진 72 %). 상세는 `benchmark-app/milestone.md § 4`.
+
 ## 문서
 
 | 문서 | 내용 |
@@ -347,6 +425,7 @@ PCM Input (float, 16kHz)
 | [Architecture Guide](docs/ARCHITECTURE.md) | 코드베이스 구조 및 데이터 흐름 상세 |
 | [Mobile Reference](docs/MOBILE_REFERENCE.md) | 모바일 추론 참고 자료 |
 | [QNN Troubleshooting](docs/QNN_TROUBLESHOOTING.md) | QNN EP 문제 해결 가이드 |
+| [BAFNetPlus Port Closure](../docs/review/BAFNETPLUS_PORT_CLOSURE.md) | BAFNetPlus 포팅 Stage 1–6 요약 + 배포 판정 |
 
 ## 참고 자료
 

@@ -74,18 +74,19 @@ echo "[pre-push] pushing APKs to device ($DEVICE)"
 "$ADB" -s "$DEVICE" shell pm install -r -t /data/local/tmp/androidTest.apk >/dev/null
 
 echo "[pre-push] running am instrument com.lacosenet.benchmark.parity"
+# Parity package covers LaCoSENet 7 tests + BAFNetPlus 9 tests = 16 total.
 LOG=/tmp/prepush-parity.log
 "$ADB" -s "$DEVICE" shell am instrument -w -r \
     -e package com.lacosenet.benchmark.parity \
     com.lacosenet.benchmark.test/androidx.test.runner.AndroidJUnitRunner \
     > "$LOG" 2>&1
 
-if grep -qE '^OK \(7 tests\)' "$LOG"; then
+if grep -qE '^OK \(16 tests\)' "$LOG"; then
     TIME_LINE=$(grep -E '^Time:' "$LOG" | tail -1 || echo "Time: ?")
-    echo "[pre-push] parity OK (7 tests) — $TIME_LINE"
+    echo "[pre-push] parity OK (16 tests: LaCoSENet 7 + BAFNetPlus 9) — $TIME_LINE"
     exit 0
 else
-    echo "[pre-push] ERROR: parity did not report OK (7 tests). Full log: $LOG" >&2
+    echo "[pre-push] ERROR: parity did not report OK (16 tests). Full log: $LOG" >&2
     tail -40 "$LOG" >&2
     exit 1
 fi
