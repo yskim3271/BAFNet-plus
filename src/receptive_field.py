@@ -13,7 +13,7 @@ Usage:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Sequence, Union
+from typing import Any, Dict, List, Sequence, Union
 
 
 @dataclass
@@ -238,6 +238,52 @@ def rf_to_segment(
     # Align up to hop_size multiple
     aligned = ((samples + hop - 1) // hop) * hop
     return aligned
+
+
+def resolve_rf_param(args, logger) -> Any:
+    """Resolve the param dict used for receptive field computation.
+
+    For BAFNet-style models wrapping a mapping and a masking backbone, load
+    backbone params from each checkpoint, verify both produce the same RF, and
+    return the shared param. For other models, return ``args.model.param``
+    unchanged.
+    """
+    from src.checkpoint import load_model_config_from_checkpoint
+
+    param = args.model.param
+    checkpoint_mapping = getattr(param, "checkpoint_mapping", None)
+    checkpoint_masking = getattr(param, "checkpoint_masking", None)
+
+    if checkpoint_mapping is None and checkpoint_masking is None:
+        return param
+
+    configs = {}
+    for name, ckpt_path in [("mapping", checkpoint_mapping), ("masking", checkpoint_masking)]:
+        if ckpt_path is None:
+            continue
+        config = load_model_config_from_checkpoint(ckpt_path)
+        configs[name] = config["param"]
+        logger.info(f"[RF] Loaded {name} backbone param from: {ckpt_path}")
+
+    if len(configs) < 2:
+        return next(iter(configs.values()))
+
+    names = list(configs.keys())
+    rf_a = compute_receptive_field(configs[names[0]], sampling_rate=args.sampling_rate)
+    rf_b = compute_receptive_field(configs[names[1]], sampling_rate=args.sampling_rate)
+
+    if rf_a.total_rf_frames != rf_b.total_rf_frames:
+        raise ValueError(
+            f"Receptive field mismatch between backbone models: "
+            f"{names[0]}={rf_a.total_rf_frames} frames ({rf_a.total_rf_ms:.1f}ms) vs "
+            f"{names[1]}={rf_b.total_rf_frames} frames ({rf_b.total_rf_ms:.1f}ms). "
+            f"Both backbones must have the same receptive field for BAFNet training."
+        )
+
+    logger.info(
+        f"[RF] Both backbones have matching RF: {rf_a.total_rf_frames} frames ({rf_a.total_rf_ms:.1f}ms)"
+    )
+    return configs[names[0]]
 
 
 if __name__ == "__main__":

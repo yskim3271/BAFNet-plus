@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Dict
+from typing import Any, Dict, Tuple, Union
 
 import torch
 from datasets import concatenate_datasets, load_dataset
@@ -15,12 +16,9 @@ from omegaconf import OmegaConf
 from torch.utils.data import DataLoader
 
 from src.data import Noise_Augmented_Dataset
-from src.utils import (
-    get_stft_args_from_config,
-    load_checkpoint,
-    load_model,
-    parse_file_list,
-)
+from src.checkpoint import load_checkpoint, load_model
+from src.stft import mag_pha_stft
+from src.utils import get_stft_args_from_config, parse_file_list
 
 
 DATASET_LANGUAGE_MAP = {
@@ -235,3 +233,90 @@ def write_json(data: Any, output_path: str | Path, logger: logging.Logger | None
     if logger:
         logger.info(f"Results saved to {path}")
     return path
+
+
+ModelInput = Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]
+
+
+def get_model_input(
+    bcs: torch.Tensor,
+    noisy_acs: torch.Tensor,
+    input_type: str,
+    device: torch.device,
+    stft_args: Dict[str, Any],
+) -> ModelInput:
+    """Build the model input tensor(s) for a given input modality.
+
+    Centralizes the ``acs`` / ``bcs`` / ``acs+bcs`` dispatch so train / evaluate
+    / enhance paths share one source of truth.
+
+    Returns:
+        Single complex spectrogram for ``acs`` / ``bcs``; a ``(bcs, acs)`` tuple
+        for ``acs+bcs``.
+
+    Raises:
+        ValueError: If ``input_type`` is not recognized.
+    """
+    if input_type == "acs":
+        return mag_pha_stft(noisy_acs, **stft_args)[2].to(device)
+    if input_type == "bcs":
+        return mag_pha_stft(bcs, **stft_args)[2].to(device)
+    if input_type == "acs+bcs":
+        return (
+            mag_pha_stft(bcs, **stft_args)[2].to(device),
+            mag_pha_stft(noisy_acs, **stft_args)[2].to(device),
+        )
+    raise ValueError(f"Invalid model input type: {input_type}")
+
+
+def add_runtime_common_args(
+    parser: argparse.ArgumentParser,
+    *,
+    require_model_config: bool = True,
+) -> None:
+    """Add checkpoint / dataset / device flags shared by evaluation-style CLIs.
+
+    Used by ``src.evaluate``, ``src.analysis.forward_traces`` and any CLI that
+    loads a trained checkpoint against a public test split.
+    """
+    if require_model_config:
+        parser.add_argument("--model_config", type=str, required=True,
+                            help="Path to the model config file.")
+    parser.add_argument("--chkpt_dir", type=str, required=True,
+                        help="Path to the checkpoint directory.")
+    parser.add_argument("--chkpt_file", type=str, default="best.th",
+                        help="Checkpoint file name. default is best.th")
+    parser.add_argument("--dataset", type=str, default="taps",
+                        choices=["taps", "vibravox"],
+                        help="Dataset to use: taps or vibravox.")
+    parser.add_argument(
+        "--device", type=str,
+        default="cuda" if torch.cuda.is_available() else "cpu",
+        help="Device (cuda or cpu).",
+    )
+    parser.add_argument("--num_workers", type=int, default=5,
+                        help="DataLoader workers. default is 5")
+
+
+def add_eval_augmentation_args(parser: argparse.ArgumentParser) -> None:
+    """Add noise/RIR/SNR augmentation flags shared by multi-SNR eval CLIs."""
+    parser.add_argument("--noise_dir", type=str, required=True,
+                        help="Path to the noise directory.")
+    parser.add_argument("--noise_test", type=str, required=True,
+                        help="List of noise files for testing.")
+    parser.add_argument("--rir_dir", type=str, required=True,
+                        help="Path to the RIR directory.")
+    parser.add_argument("--rir_test", type=str, required=True,
+                        help="List of RIR files for testing.")
+    parser.add_argument("--snr_step", nargs="+", type=int, required=True,
+                        help="One or more SNR values in dB to evaluate.")
+    parser.add_argument("--test_augment_numb", type=int, default=2,
+                        help="Number of test augmentations. default is 2")
+    parser.add_argument("--reverb_proportion", type=float, default=0.0,
+                        help="Reverberation proportion. default is 0.0")
+    parser.add_argument("--target_dB_FS", type=float, default=-25,
+                        help="Target dB FS. default is -25")
+    parser.add_argument("--target_dB_FS_floating_value", type=float, default=0,
+                        help="Target dB FS floating value. default is 0")
+    parser.add_argument("--silence_length", type=float, default=0.2,
+                        help="Silence length. default is 0.2")

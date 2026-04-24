@@ -257,7 +257,7 @@ def load_model_from_checkpoint(
     """
     from omegaconf import OmegaConf
 
-    from src.utils import load_checkpoint, load_model
+    from src.checkpoint import load_checkpoint, load_model
 
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"

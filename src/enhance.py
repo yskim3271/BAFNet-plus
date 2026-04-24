@@ -12,9 +12,9 @@ import logging
 from typing import Dict, Optional, Any, Tuple
 from torch.utils.data import DataLoader
 
-from src.runtime_common import prepare_enhancement_runtime
+from src.runtime_common import get_model_input, prepare_enhancement_runtime
 from src.utils import LogProgress
-from src.stft import mag_pha_stft, mag_pha_istft
+from src.stft import mag_pha_istft
 
 # Constants
 DEFAULT_SAMPLE_RATE = 16_000
@@ -33,49 +33,6 @@ def save_wavs(wavs_dict: Dict[str, torch.Tensor], filepath: str, sr: int = DEFAU
             torchaudio.save(filepath + f"_{key}.wav", wav, sr)
         except Exception as e:
             logging.getLogger(__name__).error(f"Failed to save {filepath}_{key}.wav: {e}")
-
-
-def _get_model_input(
-    bcs: torch.Tensor,
-    noisy_acs: torch.Tensor,
-    input_type: str,
-    device: torch.device,
-    stft_args: Optional[Dict[str, Any]] = None
-) -> Tuple[torch.Tensor, ...]:
-    """Prepare model input based on input type.
-
-    Args:
-        bcs: Body-conducted speech input [B, C, T]
-        noisy_acs: Noisy air-conducted speech input [B, C, T]
-        input_type: One of ["acs", "bcs", "acs+bcs"]
-        device: Target device
-        stft_args: STFT parameters for frequency-domain models
-
-    Returns:
-        Model input tensor(s)
-
-    Raises:
-        ValueError: If input_type is invalid or stft_args is missing for freq-domain models
-    """
-    # Frequency-domain handlers
-    freq_handlers = {
-        "acs": lambda: mag_pha_stft(noisy_acs, **stft_args)[2].to(device),
-        "bcs": lambda: mag_pha_stft(bcs, **stft_args)[2].to(device),
-        "acs+bcs": lambda: (
-            mag_pha_stft(bcs, **stft_args)[2].to(device),
-            mag_pha_stft(noisy_acs, **stft_args)[2].to(device)
-        ),
-    }
-
-    # Check if frequency-domain model has stft_args
-    if input_type in freq_handlers and stft_args is None:
-        raise ValueError("stft_args must be provided for frequency-domain models")
-
-    # Dispatch to appropriate handler
-    if input_type not in freq_handlers:
-        raise ValueError(f"Invalid model input type: {input_type}")
-
-    return freq_handlers[input_type]()
 
 
 def enhance(
@@ -105,8 +62,7 @@ def enhance(
     """
     model.eval()
 
-    # Validate stft_args before processing (moved from inside loop)
-    if args.model.input_type in ["acs", "bcs", "acs+bcs"] and stft_args is None:
+    if stft_args is None:
         raise ValueError("stft_args must be provided for frequency-domain models")
 
     suffix = f"_epoch{epoch+1}" if epoch is not None else ""
@@ -122,8 +78,8 @@ def enhance(
                 # Get batch data (batch, channel, time)
                 bcs, noisy_acs, clean_acs, id, _ = data
 
-                # Prepare model input using dispatcher
-                input_data = _get_model_input(
+                # Prepare model input using shared dispatcher
+                input_data = get_model_input(
                     bcs, noisy_acs, args.model.input_type, args.device, stft_args
                 )
 

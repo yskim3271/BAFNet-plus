@@ -105,7 +105,8 @@ Reusable analysis utilities are available under `src.analysis`:
 python -m src.analysis.complexity --experiment bafnetplus_50ms
 
 # Per-utterance metrics for statistical analysis
-python -m src.analysis.per_utterance \
+# (nested under each SNR block as a 'per_utterance' key in the output JSON)
+python -m src.evaluate \
   --model_config results/experiments/model_dir/.hydra/config.yaml \
   --chkpt_dir results/experiments/model_dir \
   --noise_dir /path/to/noise \
@@ -113,6 +114,7 @@ python -m src.analysis.per_utterance \
   --rir_dir /path/to/rir \
   --rir_test dataset/taps/rir_test.txt \
   --snr_step -20 -10 0 10 15 \
+  --save_per_utterance_json \
   --output_json results/analysis/per_utterance.json
 
 # BAFNetPlus calibration/fusion traces

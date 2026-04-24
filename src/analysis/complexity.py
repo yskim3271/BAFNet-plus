@@ -34,7 +34,8 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.stft import mag_pha_stft  # noqa: E402
-from src.utils import load_model, load_checkpoint, get_stft_args_from_config  # noqa: E402
+from src.checkpoint import load_model, load_checkpoint  # noqa: E402
+from src.utils import get_stft_args_from_config  # noqa: E402
 
 
 POD_PREFIX = "/workspace"

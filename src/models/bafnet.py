@@ -2,7 +2,7 @@ import importlib
 import torch
 import torch.nn as nn
 from src.stft import complex_to_mag_pha
-from src.utils import load_model_config_from_checkpoint, ConfigDict
+from src.checkpoint import load_model_config_from_checkpoint, ConfigDict
 
 class LearnableSigmoid2d(nn.Module):
     def __init__(self, in_features, beta=1):

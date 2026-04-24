@@ -35,12 +35,8 @@ from datasets import load_dataset, concatenate_datasets
 
 from src.data import Noise_Augmented_Dataset
 from src.stft import mag_pha_stft
-from src.utils import (
-    load_model,
-    load_checkpoint,
-    parse_file_list,
-    get_stft_args_from_config,
-)
+from src.checkpoint import load_model, load_checkpoint
+from src.utils import parse_file_list, get_stft_args_from_config
 
 
 logger = logging.getLogger(__name__)

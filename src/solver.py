@@ -6,9 +6,11 @@ import torch.nn.functional as F
 
 from torch.utils.tensorboard import SummaryWriter
 from .evaluate import evaluate
+from .runtime_common import get_model_input
 from .stft import mag_pha_istft, mag_pha_stft
-from .utils import copy_state, swap_state,  \
-                  batch_pesq, phase_losses, LogProgress, pull_metric
+from .checkpoint import copy_state, swap_state
+from .losses import batch_pesq, phase_losses
+from .utils import LogProgress, pull_metric
             
 
 class Solver(object):
@@ -244,13 +246,9 @@ class Solver(object):
         for i, data in enumerate(logprog):
 
             bcs, noisy_acs, clean_acs = data
-            if self.input_type == "acs":
-                input = mag_pha_stft(noisy_acs, **self.stft_args)[2].to(self.device)
-            elif self.input_type == "bcs":
-                input = mag_pha_stft(bcs, **self.stft_args)[2].to(self.device)
-            elif self.input_type == "acs+bcs":
-                input = mag_pha_stft(bcs, **self.stft_args)[2].to(self.device), \
-                        mag_pha_stft(noisy_acs, **self.stft_args)[2].to(self.device)
+            model_input = get_model_input(
+                bcs, noisy_acs, self.input_type, self.device, self.stft_args
+            )
 
             clean_mag, clean_pha, clean_com = mag_pha_stft(clean_acs, **self.stft_args)
             clean_mag = clean_mag.to(self.device)
@@ -258,7 +256,7 @@ class Solver(object):
             clean_com = clean_com.to(self.device)
             one_labels = torch.ones(clean_mag.shape[0]).to(self.device)
 
-            clean_mag_hat, clean_pha_hat, clean_com_hat = self.model(input)
+            clean_mag_hat, clean_pha_hat, clean_com_hat = self.model(model_input)
 
             clean_acs_hat = mag_pha_istft(clean_mag_hat, clean_pha_hat, **self.stft_args)
             clean_mag_hat_recon, clean_pha_hat_recon, clean_com_hat_recon = mag_pha_stft(clean_acs_hat, **self.stft_args)
@@ -346,15 +344,11 @@ class Solver(object):
         for i, data in enumerate(logprog):
 
             bcs, noisy_acs, clean_acs = data
-            if self.input_type == "acs":
-                input = mag_pha_stft(noisy_acs, **self.stft_args)[2].to(self.device)
-            elif self.input_type == "bcs":
-                input = mag_pha_stft(bcs, **self.stft_args)[2].to(self.device)
-            elif self.input_type == "acs+bcs":
-                input = mag_pha_stft(bcs, **self.stft_args)[2].to(self.device), \
-                        mag_pha_stft(noisy_acs, **self.stft_args)[2].to(self.device)
+            model_input = get_model_input(
+                bcs, noisy_acs, self.input_type, self.device, self.stft_args
+            )
 
-            clean_mag_hat, clean_pha_hat, _ = self.model(input)
+            clean_mag_hat, clean_pha_hat, _ = self.model(model_input)
             clean_acs_hat = mag_pha_istft(clean_mag_hat, clean_pha_hat, **self.stft_args)
 
             clean_acs_list = list(clean_acs.cpu().numpy())

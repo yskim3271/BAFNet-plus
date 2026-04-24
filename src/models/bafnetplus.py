@@ -2,7 +2,7 @@ import importlib
 import torch
 import torch.nn as nn
 from src.stft import complex_to_mag_pha
-from src.utils import ConfigDict
+from src.checkpoint import ConfigDict
 from src.models.backbone import CausalConv1d, CausalConv2d, get_padding, get_padding_2d
 
 
