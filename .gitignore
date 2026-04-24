@@ -1,0 +1,102 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# PyTorch checkpoints
+*.pth
+*.pt
+*.ckpt
+*.th
+
+# Hydra outputs
+outputs/
+multirun/
+.hydra/
+
+# Tensorboard
+tensorbd/
+runs/
+lightning_logs/
+
+# Logs
+*.log
+*.out
+*.err
+
+
+# Don't Change Below This Line (Private)
+# Temporary inference/evaluation outputs
+samples/
+checkpoints/
+
+# Private backup
+_backup/
+
+# Config files for dataset paths
+conf/dset/
+
+# Private run scripts
+run.sh
+
+# Private Docs — selective tracking: docs/**/*.md ok to check in,
+# docs/review/logs/ (23 MB of runtime logs) stays local.
+docs/**/logs/
+Todo.md
+
+# Private tests
+tests/
+
+# Private results
+results/
+
+# Private workflows
+tools/
+
+# Private visualizations
+vis/
+
+# Private inference data
+vinference/
+
+# Private manuscript workspace (BAFNet+ paper draft, review pipeline,
+# LaTeX build artifacts). Keep local only.
+paper_work/
+
+# Private samples
+generate_test_samples.py
+test_samples/
+
+# onnx
+android_export_ONNX/
+android_export_ExecuTorch/
+*.onnx
+
+# android/ — selective tracking for CI parity workflow.
+# Track: *.kt, *.kts, *.xml, *.properties, *.pro, *.md, *.json, *.gitignore,
+#        gradle/wrapper/*, gradlew, fixtures/ (3.8 MB, parity test data).
+# Ignore: build artifacts, local SDK paths, .apk/.so/.aar/.onnx binaries.
+android/**/build/
+android/**/.gradle/
+android/.gradle/
+android/.idea/
+android/**/*.iml
+android/local.properties
+android/**/local.properties
+android/**/*.apk
+android/**/*.aar
+android/**/*.so
+
+# scripts (private run scripts tracked for pod automation)
+# scripts/
+
+# ablation experiments
+ablation/
+
+# External baseline source trees and large archives (do not version)
+# - external/ contains BAF-Net repo extracted from bafnet.tar.gz (2.96 GB,
+#   includes pre-trained ckpts for DCCRN/AFDCCRN/FCN/SE-Conformer/BAFNet conf).
+#   These are reused for c02 cycle Phase B per S0-C2 revised policy (option 나).
+external/
+*.tar.gz
