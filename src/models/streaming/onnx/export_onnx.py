@@ -1100,6 +1100,9 @@ Examples:
             activation_type=args.qdq_activation_type,
             weight_type=args.qdq_weight_type,
         )
+        # streaming_config.json reflects the QDQ asset shipped to the device,
+        # so BackendSelector recognises it as INT8 (was silently "float32" before).
+        quantization_label = f"int8_qdq_{args.qdq_activation_type.lower()}_{args.qdq_weight_type.lower()}"
         # Verify QDQ model with relaxed tolerance
         if not args.skip_verify:
             verify_onnx(
