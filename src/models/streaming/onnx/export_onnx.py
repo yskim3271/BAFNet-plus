@@ -315,16 +315,23 @@ def prepare_from_checkpoint(
     # Disable streaming mode for encoder/decoder (non-streaming, zero-padded)
     set_streaming_mode(model, False)
 
+    # Backbone hyperparameters live under model_args.param (Hydra `model.param.*`).
+    # Older revisions of this script read them off model_args directly, so every
+    # field silently fell back to defaults — silent only because the defaults
+    # happened to match most checkpoints; e.g. infer_type drifted from
+    # checkpoint `mapping` to default `masking`.
+    params = getattr(model_args, "param", model_args)
+
     model_info = {
-        "n_fft": getattr(model_args, "n_fft", 400),
-        "hop_size": getattr(model_args, "hop_size", 100),
-        "win_size": getattr(model_args, "win_size", 400),
-        "compress_factor": getattr(model_args, "compress_factor", 0.3),
-        "dense_channel": getattr(model_args, "dense_channel", 64),
-        "num_tsblock": getattr(model_args, "num_tsblock", 4),
-        "infer_type": getattr(model_args, "infer_type", "masking"),
-        "encoder_padding_ratio": tuple(getattr(model_args, "encoder_padding_ratio", [1.0, 0.0])),
-        "decoder_padding_ratio": tuple(getattr(model_args, "decoder_padding_ratio", [1.0, 0.0])),
+        "n_fft": getattr(params, "n_fft", 400),
+        "hop_size": getattr(params, "hop_size", 100),
+        "win_size": getattr(params, "win_size", 400),
+        "compress_factor": getattr(params, "compress_factor", 0.3),
+        "dense_channel": getattr(params, "dense_channel", 64),
+        "num_tsblock": getattr(params, "num_tsblock", 4),
+        "infer_type": getattr(params, "infer_type", "masking"),
+        "encoder_padding_ratio": tuple(getattr(params, "encoder_padding_ratio", [1.0, 0.0])),
+        "decoder_padding_ratio": tuple(getattr(params, "decoder_padding_ratio", [1.0, 0.0])),
         "chkpt_dir": chkpt_dir,
         "chkpt_file": chkpt_file,
     }
