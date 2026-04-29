@@ -766,7 +766,7 @@ def quantize_onnx_qdq_for_htp(
         input_shapes[inp.name] = shape
 
     class QnnCalibrationDataReader(CalibrationDataReader):
-        def __init__(self, calibration_dir, input_shapes, num_samples=100):
+        def __init__(self, calibration_dir, input_shapes, num_samples=500):
             self.input_shapes = input_shapes
             self.num_samples = num_samples
             self.current = 0

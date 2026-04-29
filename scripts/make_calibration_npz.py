@@ -15,14 +15,25 @@ StreamingEnhancer.processChunk on device — 200-sample left context +
 distribution matches what the device actually feeds into the model at
 inference time.
 
+Two distributions are emitted:
+
+  * **voiced** — TAPS test BCS (throat_microphone) recordings, the same
+    modality the device feeds at inference time.
+  * **silence** — strictly zero audio chunks. Without these, the QDQ
+    activation zero-points lock to the voiced mean and silence input
+    propagates through the model as a deterministic non-zero "bias
+    signal" (Defect D — see
+    docs/wiki/concepts/android-streaming-deployment.md).
+
 Usage (from repo root):
 
     python BAFNetPlus/scripts/make_calibration_npz.py \\
-        --output_dir /tmp/bafnet_calib_taps \\
-        --num_utts 5 --chunks_per_utt 20
+        --output_dir /tmp/bafnet_calib_taps_v2 \\
+        --num_utts 20 --chunks_per_utt 20 --num_silence_chunks 50
 
-Outputs ``num_utts × chunks_per_utt`` files named
-``calib_<utt>_<chunk>.npz`` under output_dir.
+Outputs ``num_utts × chunks_per_utt`` voiced files named
+``calib_voiced_<utt>_<chunk>.npz`` plus ``num_silence_chunks`` silence
+files named ``calib_silence_<idx>.npz`` under output_dir.
 """
 from __future__ import annotations
 
@@ -55,13 +66,17 @@ OUTPUT_SAMPLES = CHUNK_FRAMES * HOP  # 800
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--output_dir", required=True, type=str,
-                   help="Directory to write calib_<utt>_<chunk>.npz files into.")
-    p.add_argument("--num_utts", type=int, default=5,
-                   help="Number of TAPS test utterances to draw from (default 5).")
+                   help="Directory to write calib_*.npz files into.")
+    p.add_argument("--num_utts", type=int, default=20,
+                   help="Number of TAPS test utterances to draw from (default 20).")
     p.add_argument("--chunks_per_utt", type=int, default=20,
                    help="Number of streaming chunks to extract per utterance (default 20).")
     p.add_argument("--start_utt", type=int, default=0,
                    help="First TAPS test utt_idx (default 0).")
+    p.add_argument("--num_silence_chunks", type=int, default=50,
+                   help="Number of pure-silence chunks to emit (default 50). "
+                        "Required to keep INT8 zero-points anchored at audio=0; "
+                        "see Defect D in docs/wiki/concepts/android-streaming-deployment.md.")
     return p.parse_args()
 
 
@@ -121,30 +136,72 @@ def stream_chunks(audio: np.ndarray, max_chunks: int):
             return
 
 
+def silence_mag_pha() -> tuple[np.ndarray, np.ndarray]:
+    """Return (mag, pha) for one strictly-zero audio chunk.
+
+    Both context and chunk samples are zero. ``mag_pha_stft`` adds 1e-9
+    inside ``sqrt`` and 1e-8 inside ``atan2`` for numerical stability, so
+    the resulting tensors are not strictly zero — they sit at the
+    deterministic floor ``mag ≈ (1e-9)^(compress/2) ≈ 0.04467`` and
+    ``pha = atan2(1e-8, 1e-8) = π/4`` across every frame/bin. This is the
+    exact same floor a device-side silent input would produce (raw int16
+    BT noise floor ≈ 3 → float² ≈ 8e-9 ≲ 1e-9 epsilon), so feeding these
+    values to the QDQ calibrator anchors activation zero-points at the
+    real silence regime — that is what Defect D requires.
+    """
+    chunk_with_context = torch.zeros(WIN // 2 + SAMPLES_PER_CHUNK, dtype=torch.float32)
+    mag, pha = stft_chunk(chunk_with_context)
+    return mag.numpy().astype(np.float32), pha.numpy().astype(np.float32)
+
+
 def main() -> None:
     args = parse_args()
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"make_calibration_npz.py")
-    print(f"  output_dir     : {out_dir}")
-    print(f"  num_utts       : {args.num_utts}")
-    print(f"  chunks_per_utt : {args.chunks_per_utt}")
-    print(f"  start_utt      : {args.start_utt}")
+    print(f"  output_dir          : {out_dir}")
+    print(f"  num_utts            : {args.num_utts}")
+    print(f"  chunks_per_utt      : {args.chunks_per_utt}")
+    print(f"  start_utt           : {args.start_utt}")
+    print(f"  num_silence_chunks  : {args.num_silence_chunks}")
 
-    total_written = 0
+    voiced_written = 0
     for k in range(args.num_utts):
         utt_idx = args.start_utt + k
         bcs = load_bcs(utt_idx)
-        print(f"  utt_idx={utt_idx} bcs={len(bcs)} samples ({len(bcs) / SR:.2f} s)")
+        print(f"  voiced utt_idx={utt_idx} bcs={len(bcs)} samples ({len(bcs) / SR:.2f} s)")
         for chunk_idx, mag, pha in stream_chunks(bcs, max_chunks=args.chunks_per_utt):
             assert mag.shape == (1, N_FFT // 2 + 1, EXPORT_FRAMES), \
                 f"unexpected mag shape: {mag.shape}"
-            out_path = out_dir / f"calib_{utt_idx:03d}_{chunk_idx:03d}.npz"
+            out_path = out_dir / f"calib_voiced_{utt_idx:03d}_{chunk_idx:03d}.npz"
             np.savez(out_path, mag=mag, pha=pha)
-            total_written += 1
+            voiced_written += 1
 
-    print(f"\nWrote {total_written} calibration npz files to {out_dir}")
+    silence_written = 0
+    if args.num_silence_chunks > 0:
+        sil_mag, sil_pha = silence_mag_pha()
+        sil_mag_2, sil_pha_2 = silence_mag_pha()
+        assert np.array_equal(sil_mag, sil_mag_2) and np.array_equal(sil_pha, sil_pha_2), \
+            "silence mag/pha is not deterministic across two calls"
+        sil_mag_floor = float(sil_mag.max())
+        sil_pha_floor = float(sil_pha.max())
+        assert np.allclose(sil_mag, sil_mag_floor), \
+            f"silence mag has non-uniform values: min={sil_mag.min()} max={sil_mag.max()}"
+        assert np.allclose(sil_pha, sil_pha_floor), \
+            f"silence pha has non-uniform values: min={sil_pha.min()} max={sil_pha.max()}"
+        for idx in range(args.num_silence_chunks):
+            out_path = out_dir / f"calib_silence_{idx:03d}.npz"
+            np.savez(out_path, mag=sil_mag, pha=sil_pha)
+            silence_written += 1
+        print(f"  silence chunks written: {silence_written} "
+              f"(mag floor={sil_mag_floor:.6f}, pha floor={sil_pha_floor:.6f}; "
+              f"deterministic — duplicates anchor activation zero-points "
+              f"to the device-side silence regime)")
+
+    print(f"\nWrote {voiced_written + silence_written} calibration npz files to {out_dir}")
+    print(f"  voiced  : {voiced_written}")
+    print(f"  silence : {silence_written}")
 
 
 if __name__ == "__main__":
