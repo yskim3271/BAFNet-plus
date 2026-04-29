@@ -698,6 +698,7 @@ def quantize_onnx_qdq_for_htp(
     calibration_dir: Optional[str] = None,
     activation_type: str = "QUInt16",
     weight_type: str = "QUInt8",
+    calibrate_method: str = "MinMax",
     verbose: bool = True,
 ) -> str:
     """Apply QDQ static quantization optimized for QNN HTP execution.
@@ -715,6 +716,19 @@ def quantize_onnx_qdq_for_htp(
             If None, uses random calibration data.
         activation_type: Activation quantization type ("QUInt8" or "QUInt16").
         weight_type: Weight quantization type ("QUInt8").
+        calibrate_method: ORT CalibrationMethod name — "MinMax" (default,
+            anchors quantization to absolute extremes), "Percentile",
+            "Entropy", or "Distribution".
+
+            **NOTE**: Histogram-based methods (Percentile, Entropy,
+            Distribution) fail in the current ORT version (1.24.x) with
+            ``ValueError: scale must a float32 or float16 numpy element
+            but is float64`` raised inside
+            ``QDQQuantizer.calc_graph_quant_params``. The histogram
+            calibrators emit numpy float64 ranges that the QDQ quantizer
+            then refuses to wrap in ``QuantizationParams``. Use MinMax
+            until ORT fixes this dtype mismatch (or the calibrator's
+            ``compute_data`` output is patched at the call site).
         verbose: Print information.
 
     Returns:
@@ -724,7 +738,7 @@ def quantize_onnx_qdq_for_htp(
 
     import numpy as np
     import onnx
-    from onnxruntime.quantization import CalibrationDataReader, QuantType, quantize
+    from onnxruntime.quantization import CalibrationDataReader, CalibrationMethod, QuantType, quantize
     from onnxruntime.quantization.execution_providers.qnn import (
         get_qnn_qdq_config,
         qnn_preprocess_model,
@@ -732,6 +746,7 @@ def quantize_onnx_qdq_for_htp(
 
     act_qtype = getattr(QuantType, activation_type)
     wt_qtype = getattr(QuantType, weight_type)
+    calib_method_enum = getattr(CalibrationMethod, calibrate_method)
 
     if verbose:
         print(f"\nQDQ static quantization for HTP:")
@@ -739,6 +754,8 @@ def quantize_onnx_qdq_for_htp(
         print(f"  Output: {output_path}")
         print(f"  Activation type: {activation_type}")
         print(f"  Weight type: {weight_type}")
+        print(f"  Calibration method: {calibrate_method}"
+              + (" (percentile=99.999, ORT default)" if calibrate_method == "Percentile" else ""))
 
     # Step 1: Preprocess model for QNN
     preprocessed_path = input_path.replace(".onnx", "_preproc.onnx")
@@ -766,7 +783,7 @@ def quantize_onnx_qdq_for_htp(
         input_shapes[inp.name] = shape
 
     class QnnCalibrationDataReader(CalibrationDataReader):
-        def __init__(self, calibration_dir, input_shapes, num_samples=500):
+        def __init__(self, calibration_dir, input_shapes, num_samples=5000):
             self.input_shapes = input_shapes
             self.num_samples = num_samples
             self.current = 0
@@ -827,7 +844,18 @@ def quantize_onnx_qdq_for_htp(
         calibration_data_reader=calib_reader,
         activation_type=act_qtype,
         weight_type=wt_qtype,
+        calibrate_method=calib_method_enum,
     )
+    if calibrate_method == "Percentile":
+        # ORT's PercentileCalibrater defaults to symmetric=True, which
+        # wastes half the bit budget for our non-negative `mag` input.
+        # `CalibTensorRangeSymmetric` is the public extra_options key
+        # that gets translated to PercentileCalibrater's `symmetric`
+        # constructor arg by `quantize_static` (see
+        # onnxruntime.quantization.quantize_static:170-178). Note that
+        # the percentile value itself (99.999) is hardcoded in
+        # `create_calibrator` and not exposed through this surface.
+        qnn_config.extra_options["CalibTensorRangeSymmetric"] = False
 
     # Step 4: Quantize
     quantize(
@@ -995,6 +1023,12 @@ Examples:
     parser.add_argument("--qdq_weight_type", type=str, default="QUInt8",
                         choices=["QUInt8"],
                         help="QDQ weight quantization type (default: QUInt8)")
+    parser.add_argument("--qdq_calibrate_method", type=str, default="MinMax",
+                        choices=["MinMax", "Percentile", "Entropy", "Distribution"],
+                        help="QDQ calibration method (default: MinMax). "
+                             "Histogram-based methods (Percentile, Entropy, Distribution) "
+                             "currently fail with float64→float32 dtype mismatch in ORT "
+                             "1.24.x — see quantize_onnx_qdq_for_htp docstring.")
 
     # Simplification
     parser.add_argument("--simplify", action="store_true", help="Apply onnx-simplifier (BN folding, redundant op removal)")
@@ -1099,6 +1133,7 @@ Examples:
             calibration_dir=args.calibration_dir,
             activation_type=args.qdq_activation_type,
             weight_type=args.qdq_weight_type,
+            calibrate_method=args.qdq_calibrate_method,
         )
         # streaming_config.json reflects the QDQ asset shipped to the device,
         # so BackendSelector recognises it as INT8 (was silently "float32" before).
