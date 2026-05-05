@@ -856,14 +856,42 @@ def _read_bin(path: str, shape: Tuple[int, ...]) -> "np.ndarray":
 def _fixture_inputs_for_chunk(
     fixture_dir: str,
     chunk_idx: int,
+    time_frames: Optional[int] = None,
 ) -> Tuple["np.ndarray", "np.ndarray", "np.ndarray", "np.ndarray"]:
-    """Load (bcs_mag, bcs_pha, acs_mag, acs_pha) for one chunk from Stage 2 fixture."""
-    shape = (1, 201, 11)
+    """Load (bcs_mag, bcs_pha, acs_mag, acs_pha) for one chunk from a fixture.
+
+    The fixture's source ``T`` is inferred from the .bin file size
+    (``bytes / 4 / 201``); legacy fixtures use T=11 (chunk=8 + lookahead=3),
+    the D5d isolated fixture uses T=16 (chunk=16 + lookahead=0).
+
+    If ``time_frames`` is supplied and smaller than the source T, the last
+    dim is sliced — required for D5d's per-tier exports where
+    ``export_time_frames`` ∈ {2, 4, 8, 12, 16}.
+    """
     base = os.path.join(fixture_dir, f"chunk_{chunk_idx:03d}")
-    bcs_mag = _read_bin(os.path.join(base, "bcs_mag.bin"), shape)
+    bcs_mag_path = os.path.join(base, "bcs_mag.bin")
+    src_t = os.path.getsize(bcs_mag_path) // 4 // 201
+    if src_t * 201 * 4 != os.path.getsize(bcs_mag_path):
+        raise ValueError(
+            f"fixture chunk {bcs_mag_path}: size {os.path.getsize(bcs_mag_path)} "
+            f"not divisible by 4*201; expected float32 [1,201,T] layout"
+        )
+    shape = (1, 201, src_t)
+    bcs_mag = _read_bin(bcs_mag_path, shape)
     bcs_pha = _read_bin(os.path.join(base, "bcs_pha.bin"), shape)
     acs_mag = _read_bin(os.path.join(base, "acs_mag.bin"), shape)
     acs_pha = _read_bin(os.path.join(base, "acs_pha.bin"), shape)
+    if time_frames is not None and time_frames != src_t:
+        if time_frames > src_t:
+            raise ValueError(
+                f"time_frames={time_frames} exceeds fixture chunk length {src_t}; "
+                f"regenerate fixture with --chunk_frames {time_frames} --lookahead 0 "
+                "or pick chunk_size+lookahead within source T."
+            )
+        bcs_mag = bcs_mag[:, :, :time_frames]
+        bcs_pha = bcs_pha[:, :, :time_frames]
+        acs_mag = acs_mag[:, :, :time_frames]
+        acs_pha = acs_pha[:, :, :time_frames]
     return bcs_mag, bcs_pha, acs_mag, acs_pha
 
 
@@ -1090,11 +1118,15 @@ def quantize_bafnetplus_qdq_for_htp(
                 with open(manifest_path, "r") as f:
                     manifest = json.load(f)
                 n_chunks = min(num_samples, len(manifest.get("chunks", [])))
+                graph_time_frames = int(input_shapes["bcs_mag"][2])
                 if verbose:
-                    print(f"  Calibration: loading {n_chunks} chunks from {fixture_dir}")
+                    print(
+                        f"  Calibration: loading {n_chunks} chunks from {fixture_dir} "
+                        f"(slicing to T={graph_time_frames})"
+                    )
                 for chunk_idx in range(n_chunks):
                     bcs_mag, bcs_pha, acs_mag, acs_pha = _fixture_inputs_for_chunk(
-                        fixture_dir, chunk_idx,
+                        fixture_dir, chunk_idx, time_frames=graph_time_frames,
                     )
                     sample: Dict[str, "np.ndarray"] = {
                         "bcs_mag": bcs_mag.astype(np.float32),
