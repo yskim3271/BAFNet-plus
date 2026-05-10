@@ -35,7 +35,9 @@ checkpoints/
 _backup/
 
 # Config files for dataset paths
-conf/dset/
+conf/dset/*
+!conf/dset/vibravox.yaml
+!conf/dset/taps.yaml
 
 # Private run scripts
 run.sh

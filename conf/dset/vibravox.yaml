@@ -1,0 +1,46 @@
+dataset: Vibravox
+
+# ----------------------------------------------------------------------------
+# Vibravox-native noise mixing (5 unified noise items vs TAPS recipe)
+# 1. Noise source : Cnam-LMSSC `speechless_noisy` (BCS-recorded ambient)
+# 2. Mixing fn   : simple_add_mix (no SNR rescaling)
+# 3. SNR sample  : not applicable (naturalistic from BCS attenuation)
+# 4. dB FS norm  : disabled (raw float32)
+# 5. RIR conv    : reverb_proportion=0.0 (already 0 in TAPS recipe)
+# ----------------------------------------------------------------------------
+mix_strategy: vibravox_native
+noise_hf_dataset: yskim3271/vibravox_16k
+noise_subset_train: speechless_noisy
+noise_subset_valid: speechless_noisy
+noise_sensor: throat_microphone
+skip_db_fs_normalize: true
+
+# Speech subset selector — null uses yskim3271/vibravox_16k default config
+# (already published as speech_clean-equivalent: throat + acoustic + text + speaker_id + sentence_id).
+# Multi-config (speechless_noisy / speech_noisy) is used by train noise loader and Phase 2 test only.
+speech_subset: null
+
+# Vibravox-native single-cell test (Phase 2, option (a))
+test_bypass_mixing: true
+test_subset: speech_noisy
+
+test_augment_numb: 1
+
+# ----------------------------------------------------------------------------
+# Phase 0 audio-time matching (Option β) — apply at command line:
+#   epochs=60 warmup_epochs=12 valid_start_epoch=40
+# Ratio Vibravox/TAPS = 2.436x at backbone default RF (segment=32k, stride=16k).
+# 60 ep × 46.79 h/ep = 2,807 h ≈ TAPS 150 ep × 19.20 h = 2,881 h (97.5% match).
+# Phase 0 raw output (epochs=62 / warmup=12 / valid_start=41) rounded to 60/12/40 for clarity.
+# Source: scripts/analyze_dataset_length.py (run 2026-05-02 with --time-block-kernel 3 5 7 11)
+# ----------------------------------------------------------------------------
+
+# Legacy snr_random fallback (unused under vibravox_native, retained for parity)
+noise_dir: /home/yskim/workspace/dataset/datasets_fullband/noise_fullband_16k
+noise_train: dataset/vibravox/noise_train.txt
+noise_valid: dataset/vibravox/noise_dev.txt
+noise_test: dataset/vibravox/noise_test.txt
+rir_dir: /home/yskim/workspace/dataset/datasets_fullband/impulse_responses_16k
+rir_train: dataset/vibravox/rir_train.txt
+rir_valid: dataset/vibravox/rir_dev.txt
+rir_test: dataset/vibravox/rir_test.txt

@@ -30,7 +30,7 @@ import logging
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from omegaconf import OmegaConf
 
@@ -48,14 +48,21 @@ SNR_KEY_PATTERN = re.compile(r"^(-?\d+)dB$")
 logger = logging.getLogger(__name__)
 
 
-def parse_snr_keys(metrics: Dict[str, Any]) -> List[int]:
-    """Extract integer SNRs from keys like ``"-20dB"``."""
-    snrs: List[int] = []
+def parse_snr_keys(metrics: Dict[str, Any]) -> List[Union[int, str]]:
+    """Extract SNR cell keys from metric dict.
+
+    Returns integer SNRs from keys like ``"-20dB"`` (multi-SNR) and the
+    sentinel string ``"native"`` for Vibravox-native single-cell eval (Phase 2).
+    Native cells sort after integer cells.
+    """
+    snrs: List[Union[int, str]] = []
     for key in metrics.keys():
         m = SNR_KEY_PATTERN.match(key)
         if m:
             snrs.append(int(m.group(1)))
-    return sorted(snrs)
+        elif key == "native":
+            snrs.append("native")
+    return sorted(snrs, key=lambda x: (isinstance(x, str), x))
 
 
 def detect_eval_stt(metrics: Dict[str, Any]) -> bool:

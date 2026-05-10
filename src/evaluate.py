@@ -27,6 +27,7 @@ from src.runtime_common import (
     build_evaluation_output,
     get_model_input,
     prepare_evaluation_runtime,
+    validate_eval_augmentation_args,
     write_json,
 )
 from src.stft import mag_pha_istft
@@ -254,7 +255,8 @@ def evaluate(
                     utt_ids.append(utt_id[0])
 
         pesq, csig, cbak, covl, segSNR, stoi = np.mean(results, axis=0)
-        snr_key = f'{snr}dB'
+        # Vibravox-native single-cell test (Phase 2): key is "native"; multi-SNR otherwise.
+        snr_key = "native" if str(snr) == "native" else f'{snr}dB'
         metrics[snr_key] = {
             "pesq": pesq,
             "stoi": stoi,
@@ -360,6 +362,7 @@ if __name__=="__main__":
                              "SNR block of --output_json.")
 
     args = parser.parse_args()
+    validate_eval_augmentation_args(args)
 
     log_file = args.log_file
     
