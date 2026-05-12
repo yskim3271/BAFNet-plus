@@ -198,35 +198,29 @@ class BafnetPlusStateRegistry:
 
 def build_bafnetplus_state_registry(
     bafnetplus: nn.Module,
-    streaming_tsblocks_mapping: nn.ModuleList,
-    streaming_tsblocks_masking: nn.ModuleList,
-    freq_size: int,
-    freq_bins: int,
-) -> BafnetPlusStateRegistry:
-    """Build the unified state registry for BAFNetPlus export."""
-    entries: List[Tuple[str, Tuple[int, ...], tuple]] = []
+    freq_size: int = 100,
+    freq_bins: int = 201,
+    export_time_frames: int = 11,
+):
+    """Forward-ordered state registry built by walking the converted bafnetplus.
 
-    # Mapping TSBlock states
-    for name, shape, locator in _collect_tsblock_states(
-        streaming_tsblocks_mapping, freq_size, PREFIX_MAPPING_TSBLOCK,
-    ):
-        entries.append((name, shape, ("tsblock", "mapping") + locator[1:]))
-
-    # Masking TSBlock states
-    for name, shape, locator in _collect_tsblock_states(
-        streaming_tsblocks_masking, freq_size, PREFIX_MASKING_TSBLOCK,
-    ):
-        entries.append((name, shape, ("tsblock", "masking") + locator[1:]))
-
-    # Calibration states (optional — only for use_calibration=True)
-    calibration_encoder = getattr(bafnetplus, "calibration_encoder", None)
-    if calibration_encoder is not None:
-        entries.extend(_collect_calibration_states(calibration_encoder, freq_bins))
-
-    # Alpha states (always present)
-    entries.extend(_collect_alpha_states(bafnetplus.alpha_convblocks, freq_bins))
-
-    return BafnetPlusStateRegistry(entries)
+    ``bafnetplus`` must have its StatefulCausalConv* already replaced by
+    FunctionalStateful* (via :func:`convert_module_inplace`). Walks the four
+    sub-modules of each backbone (dense_encoder, sequence_block, mask_decoder,
+    phase_decoder) plus fusion (calibration_encoder, alpha_convblocks), in the
+    same order that :func:`forward_backbone` invokes them.
+    """
+    from src.models.streaming.onnx.functional_core import (
+        FunctionalStateRegistry,
+        build_functional_state_entries,
+    )
+    entries = build_functional_state_entries(
+        bafnetplus,
+        freq_bins=freq_bins,
+        freq_size_encoded=freq_size,
+        export_time_frames=export_time_frames,
+    )
+    return FunctionalStateRegistry(entries)
 
 
 # ---------------------------------------------------------------------------
@@ -235,345 +229,102 @@ def build_bafnetplus_state_registry(
 
 
 class BAFNetPlusStatefulExportableNNCore(nn.Module):
-    """ONNX-exportable BAFNetPlus wrapper with 166 externalized state tensors.
+    """BAFNet+ ONNX-exportable wrapper using FunctionalStateful + explicit state I/O.
+
+    Routes state through every FunctionalStateful conv in forward order, mirroring
+    the PyTorch streaming forward exactly (corr 1.0000 vs nonstream at FP32).
 
     Forward signature:
         (bcs_mag, bcs_pha, acs_mag, acs_pha, *flat_states)
             → (est_mag, est_com_real, est_com_imag, *next_flat_states)
 
-    Inputs:
-        bcs_mag/bcs_pha/acs_mag/acs_pha: [1, F, T_ext]  where T_ext = chunk + lookahead.
-        flat_states: 166 tensors, alphabetically sorted by name.
-
-    Outputs:
-        est_mag: [1, F, chunk_size]  — enhanced magnitude (post fusion).
-        est_com_real/est_com_imag: [1, F, chunk_size]  — enhanced complex parts.
-          Host derives est_pha via ``atan2(imag+eps, real+eps)`` if needed.
-        next_flat_states: 166 updated state tensors (same order as inputs).
+    Pre-conditions:
+        - ``bafnetplus`` has every StatefulCausalConv1d / StatefulCausalConv2d /
+          StatefulAsymmetricConv2d replaced by FunctionalStateful* counterparts
+          (see :func:`convert_module_inplace`).
+        - ``state_registry`` (FunctionalStateRegistry) lists the states in the
+          exact forward order used by :func:`forward_backbone` + fusion below.
     """
 
     def __init__(
         self,
         bafnetplus: nn.Module,
-        streaming_tsblocks_mapping: nn.ModuleList,
-        streaming_tsblocks_masking: nn.ModuleList,
-        freq_size: int,
-        chunk_size: int,
-        state_registry: BafnetPlusStateRegistry,
+        freq_size: int = 100,
+        chunk_size: int = 8,
+        state_registry=None,
     ):
         super().__init__()
-
-        # Mapping branch sub-modules
-        self.mapping_dense_encoder = bafnetplus.mapping.dense_encoder
-        self.mapping_mask_decoder = bafnetplus.mapping.mask_decoder
-        self.mapping_phase_dense_block = bafnetplus.mapping.phase_decoder.dense_block
-        self.mapping_phase_conv = bafnetplus.mapping.phase_decoder.phase_conv
-        self.mapping_phase_conv_r = bafnetplus.mapping.phase_decoder.phase_conv_r
-        self.mapping_phase_conv_i = bafnetplus.mapping.phase_decoder.phase_conv_i
-        self.mapping_tsblocks = streaming_tsblocks_mapping
-
-        # Masking branch sub-modules
-        self.masking_dense_encoder = bafnetplus.masking.dense_encoder
-        self.masking_mask_decoder = bafnetplus.masking.mask_decoder
-        self.masking_phase_dense_block = bafnetplus.masking.phase_decoder.dense_block
-        self.masking_phase_conv = bafnetplus.masking.phase_decoder.phase_conv
-        self.masking_phase_conv_r = bafnetplus.masking.phase_decoder.phase_conv_r
-        self.masking_phase_conv_i = bafnetplus.masking.phase_decoder.phase_conv_i
-        self.masking_tsblocks = streaming_tsblocks_masking
-
-        # Fusion sub-modules
-        self.use_calibration = bool(getattr(bafnetplus, "use_calibration", True))
-        self.use_relative_gain = bool(getattr(bafnetplus, "use_relative_gain", True))
-        self.calibration_max_common_log_gain = float(
-            getattr(bafnetplus, "calibration_max_common_log_gain", 0.5),
-        )
-        self.calibration_max_relative_log_gain = float(
-            getattr(bafnetplus, "calibration_max_relative_log_gain", 1.0),
-        )
-        if self.use_calibration:
-            self.calibration_encoder = bafnetplus.calibration_encoder
-            self.common_gain_head = bafnetplus.common_gain_head
-            if self.use_relative_gain:
-                self.relative_gain_head = bafnetplus.relative_gain_head
-        self.alpha_convblocks = bafnetplus.alpha_convblocks
-        self.alpha_out = bafnetplus.alpha_out
-
+        self.bafnetplus = bafnetplus
         self.freq_size = freq_size
         self.chunk_size = chunk_size
         self.state_registry = state_registry
-        self._state_names = state_registry.names
-        self._state_locators = [e[2] for e in state_registry.entries]
+        self._state_names = list(state_registry.names) if state_registry is not None else []
+
+    @property
+    def state_names(self) -> List[str]:
+        return list(self._state_names)
 
     # ------------------------------------------------------------------
-    # State flatten/unflatten helpers
+    # Fusion helpers (calibration + alpha) with explicit state routing
     # ------------------------------------------------------------------
-    def _unflatten_states(self, flat_states: Tuple[Tensor, ...]) -> Dict[str, Any]:
-        """Group flat states by category."""
-        num_mapping = len(self.mapping_tsblocks)
-        num_masking = len(self.masking_tsblocks)
-        time_block_num = self.mapping_tsblocks[0].time_block_num
-        mapping_ts: List[List[Dict[str, Dict[str, Tensor]]]] = [
-            [{"cab": {}, "gpkffn": {}} for _ in range(time_block_num)] for _ in range(num_mapping)
-        ]
-        masking_ts: List[List[Dict[str, Dict[str, Tensor]]]] = [
-            [{"cab": {}, "gpkffn": {}} for _ in range(time_block_num)] for _ in range(num_masking)
-        ]
-        num_cal = len(self.calibration_encoder) if self.use_calibration else 0
-        num_alpha = len(self.alpha_convblocks)
-        calibration_states: List[Optional[Tensor]] = [None] * num_cal
-        alpha_states: List[Optional[Tensor]] = [None] * num_alpha
-
-        for i, locator in enumerate(self._state_locators):
-            cat = locator[0]
-            if cat == "tsblock":
-                _, branch, blk_idx, tb_idx, section, raw_key = locator
-                target = mapping_ts if branch == "mapping" else masking_ts
-                target[blk_idx][tb_idx][section][raw_key] = flat_states[i]
-            elif cat == "calibration":
-                _, conv_idx = locator
-                calibration_states[conv_idx] = flat_states[i]
-            elif cat == "alpha":
-                _, conv_idx = locator
-                alpha_states[conv_idx] = flat_states[i]
-            else:
-                raise ValueError(f"Unknown state category: {cat}")
-
-        return {
-            "mapping_ts": mapping_ts,
-            "masking_ts": masking_ts,
-            "calibration": calibration_states,
-            "alpha": alpha_states,
-        }
-
-    def _flatten_states(self, grouped: Dict[str, Any]) -> Tuple[Tensor, ...]:
-        """Flatten grouped state dicts to flat tuple in registry order."""
-        flat: List[Tensor] = []
-        for locator in self._state_locators:
-            cat = locator[0]
-            if cat == "tsblock":
-                _, branch, blk_idx, tb_idx, section, raw_key = locator
-                target = grouped["mapping_ts"] if branch == "mapping" else grouped["masking_ts"]
-                flat.append(target[blk_idx][tb_idx][section][raw_key])
-            elif cat == "calibration":
-                flat.append(grouped["calibration"][locator[1]])
-            elif cat == "alpha":
-                flat.append(grouped["alpha"][locator[1]])
-            else:
-                raise ValueError(f"Unknown state category: {cat}")
-        return tuple(flat)
-
-    # ------------------------------------------------------------------
-    # Branch helpers
-    # ------------------------------------------------------------------
-    def _run_backbone(
-        self,
-        mag: Tensor,
-        pha: Tensor,
-        dense_encoder: nn.Module,
-        tsblocks: nn.ModuleList,
-        tsblock_states: List[List[Dict[str, Tensor]]],
-        mask_decoder: nn.Module,
-        phase_dense_block: nn.Module,
-        phase_conv: nn.Module,
-        phase_conv_r: nn.Module,
-        phase_conv_i: nn.Module,
-        infer_type: str,
-    ) -> Tuple[Tensor, Tensor, Tensor, List[List[Dict[str, Tensor]]]]:
-        """Run one backbone (mapping or masking) through encoder + TSBlocks + decoders.
-
-        The branch-level phase is NOT computed via atan2 in the graph
-        (QNN/ORT precision concern). Instead we derive com_real/com_imag
-        directly from (phase_real, phase_imag, est_mag) using the identity
-        ``cos(atan2(y, x)) = x / ||(x, y)||`` — equivalent to
-        ``mag * exp(i * atan2(imag + eps, real + eps))`` element-wise.
-
-        Returns:
-            est_mag: [1, F, chunk_size] — cropped to chunk_size.
-            mask_cropped: [1, F, chunk_size] — raw mask_decoder output.
-            com_out: [1, F, chunk_size, 2] — complex spectrum (real, imag).
-            new_tsblock_states: updated TSBlock states.
-        """
-        # 1. Stack and permute: [1, 2, T_ext, F]
-        x = torch.stack((mag, pha), dim=1).permute(0, 1, 3, 2)
-
-        # 2. Encoder (non-streaming, zero-padded)
-        x = dense_encoder(x)  # [1, C, T_ext, F_enc]
-
-        # 3. Streaming TSBlocks with explicit state I/O
-        for i, block in enumerate(tsblocks):
-            x, new_block_states = block(x, tsblock_states[i], state_frames=self.chunk_size)
-            tsblock_states[i] = new_block_states
-
-        # 4. Mask decoder (non-streaming)
-        mask_full = mask_decoder(x).squeeze(1).transpose(1, 2)  # [1, F, T_ext]
-
-        # 5. Phase decoder bypass — skip atan2 per QNN convention
-        p = phase_dense_block(x)
-        p = phase_conv(p)
-        phase_real_full = phase_conv_r(p).squeeze(1).transpose(1, 2)  # [1, F, T_ext]
-        phase_imag_full = phase_conv_i(p).squeeze(1).transpose(1, 2)
-
-        # 6. Crop to chunk_size
-        mask_cropped = mask_full[:, :, : self.chunk_size]
-        phase_real = phase_real_full[:, :, : self.chunk_size]
-        phase_imag = phase_imag_full[:, :, : self.chunk_size]
-
-        if infer_type == "masking":
-            est_mag = mag[:, :, : self.chunk_size] * mask_cropped
-        else:  # mapping
-            est_mag = mask_cropped
-
-        # com_out = mag * exp(i * atan2(imag+eps, real+eps)) without atan2:
-        eps = 1e-8
-        pr = phase_real + eps
-        pi = phase_imag + eps
-        norm = torch.sqrt(pr * pr + pi * pi)
-        com_real = est_mag * pr / norm
-        com_imag = est_mag * pi / norm
-        com_out = torch.stack([com_real, com_imag], dim=-1)  # [1, F, chunk_size, 2]
-
-        return est_mag, mask_cropped, com_out, tsblock_states
-
-    # ------------------------------------------------------------------
-    # Fusion helpers — inline stateful conv implementations for ONNX
-    # ------------------------------------------------------------------
-    @staticmethod
-    def _stateful_conv1d_inline(
-        stateful_conv,  # StatefulCausalConv1d
-        x: Tensor,
-        state_in: Tensor,
-    ) -> Tuple[Tensor, Tensor]:
-        """Inline stateful 1D conv matching StatefulCausalConv1d.forward (streaming).
-
-        x: [B, C_in, T]
-        state_in: [B, C_in, padding_size]
-
-        For state update we use effective_T = min(state_frames=chunk_size, T) = T
-        since fusion inputs are already cropped to chunk_size (T = chunk_size).
-        """
-        # Pad with previous state
-        x_padded = torch.cat([state_in, x], dim=2)  # [B, C_in, padding_size + T]
-        y = stateful_conv.conv(x_padded)  # [B, C_out, T]
-        # Update state: last padding_size frames of current x. If T >= padding_size,
-        # take last padding_size of x directly. Otherwise fall back to old state tail.
-        pad = stateful_conv.padding_size
-        T = x.shape[2]
-        if T >= pad:
-            state_out = x[:, :, -pad:]
-        else:
-            state_out = torch.cat([state_in[:, :, -(pad - T):], x], dim=2)
-        return y, state_out
-
-    @staticmethod
-    def _stateful_conv2d_inline(
-        stateful_conv,  # StatefulCausalConv2d
-        x: Tensor,
-        state_in: Tensor,
-    ) -> Tuple[Tensor, Tensor]:
-        """Inline stateful 2D causal conv matching StatefulCausalConv2d.forward (streaming).
-
-        x: [B, C_in, T, F]
-        state_in: [B, C_in, time_padding, F_padded]
-        """
-        # 1. Frequency padding (symmetric)
-        fp = stateful_conv.freq_padding
-        x_freq = fn.pad(x, (fp, fp, 0, 0))  # [B, C_in, T, F+2*fp]
-        # 2. Time padding with state
-        x_padded = torch.cat([state_in, x_freq], dim=2)  # [B, C_in, time_pad + T, F_padded]
-        y = stateful_conv.conv(x_padded)  # [B, C_out, T, F]
-        # 3. State update: last time_padding frames of x_freq
-        tp = stateful_conv.time_padding
-        T = x_freq.shape[2]
-        if T >= tp:
-            state_out = x_freq[:, :, -tp:, :]
-        else:
-            state_out = torch.cat([state_in[:, :, -(tp - T):, :], x_freq], dim=2)
-        return y, state_out
-
-    def _calibration_streaming(
-        self,
-        bcs_est_mag: Tensor,
-        acs_est_mag: Tensor,
-        bcs_com_out: Tensor,
-        acs_com_out: Tensor,
-        acs_mask: Tensor,
-        calibration_states_in: List[Tensor],
-    ) -> Tuple[Tensor, Tensor, List[Tensor]]:
-        """Inline streaming calibration; returns (bcs_com_cal, acs_com_cal, next_calibration_states)."""
+    def _calibration(self, bcs_est_mag, acs_est_mag, bcs_com_out, acs_com_out, acs_mask, state_iter):
+        bf = self.bafnetplus
         eps = 1e-8
         bcs_log_E = torch.log(bcs_est_mag.pow(2).mean(dim=1, keepdim=True) + eps)
         acs_log_E = torch.log(acs_est_mag.pow(2).mean(dim=1, keepdim=True) + eps)
         log_E_diff = bcs_log_E - acs_log_E
         mask_mean = acs_mask.mean(dim=1, keepdim=True)
         mask_var = acs_mask.var(dim=1, keepdim=True, unbiased=False)
-        calibration_feat = torch.cat(
-            [bcs_log_E, acs_log_E, log_E_diff, mask_mean, mask_var], dim=1,
-        )  # [1, 5, chunk_size]
+        cal_feat = torch.cat([bcs_log_E, acs_log_E, log_E_diff, mask_mean, mask_var], dim=1)
 
-        x = calibration_feat
-        next_states: List[Tensor] = []
-        for i, seq in enumerate(self.calibration_encoder):
-            stateful_conv = seq[0]
+        x = cal_feat
+        for seq in bf.calibration_encoder:
+            conv = seq[0]
             prelu = seq[1]
-            y, new_state = self._stateful_conv1d_inline(stateful_conv, x, calibration_states_in[i])
-            x = prelu(y)
-            next_states.append(new_state)
+            x, ns = conv(x, state_iter.take(), state_frames=self.chunk_size)
+            state_iter.push(ns)
+            x = prelu(x)
         calibration_hidden = x
 
-        common_log_gain = torch.tanh(self.common_gain_head(calibration_hidden))
-        common_log_gain = common_log_gain * self.calibration_max_common_log_gain
-        if self.use_relative_gain:
-            relative_log_gain = torch.tanh(self.relative_gain_head(calibration_hidden))
-            relative_log_gain = relative_log_gain * self.calibration_max_relative_log_gain
+        common_log_gain = torch.tanh(bf.common_gain_head(calibration_hidden))
+        common_log_gain = common_log_gain * bf.calibration_max_common_log_gain
+        if getattr(bf, "use_relative_gain", True):
+            relative_log_gain = torch.tanh(bf.relative_gain_head(calibration_hidden))
+            relative_log_gain = relative_log_gain * bf.calibration_max_relative_log_gain
             bcs_gain = torch.exp(common_log_gain - 0.5 * relative_log_gain)
             acs_gain = torch.exp(common_log_gain + 0.5 * relative_log_gain)
         else:
             bcs_gain = acs_gain = torch.exp(common_log_gain)
-
-        bcs_gain_b = bcs_gain.transpose(1, 2).unsqueeze(1)  # [1, 1, chunk_size, 1]
+        bcs_gain_b = bcs_gain.transpose(1, 2).unsqueeze(1)
         acs_gain_b = acs_gain.transpose(1, 2).unsqueeze(1)
         bcs_com_cal = bcs_com_out * bcs_gain_b
         acs_com_cal = acs_com_out * acs_gain_b
-        return bcs_com_cal, acs_com_cal, next_states
+        return bcs_com_cal, acs_com_cal
 
-    def _alpha_fusion(
-        self,
-        bcs_com_cal: Tensor,
-        acs_com_cal: Tensor,
-        acs_mask: Tensor,
-        alpha_states_in: List[Tensor],
-    ) -> Tuple[Tensor, Tensor, Tensor, List[Tensor]]:
-        """Inline streaming alpha fusion; returns
-        ``(est_mag, est_com_real, est_com_imag, next_alpha_states)``.
-
-        Skips atan2 for est_pha — host can derive ``atan2(imag+eps, real+eps)``
-        if needed, but iSTFT can consume (mag, real, imag) directly.
-        """
+    def _alpha_fusion(self, bcs_com_cal, acs_com_cal, acs_mask, state_iter):
+        bf = self.bafnetplus
         eps = 1e-8
         bcs_mag_cal = torch.sqrt(bcs_com_cal[..., 0] ** 2 + bcs_com_cal[..., 1] ** 2 + eps)
         acs_mag_cal = torch.sqrt(acs_com_cal[..., 0] ** 2 + acs_com_cal[..., 1] ** 2 + eps)
         alpha_feat = torch.stack([bcs_mag_cal, acs_mag_cal, acs_mask], dim=1).transpose(2, 3)
-        # [1, 3, chunk_size, F]
 
         x = alpha_feat
-        next_states: List[Tensor] = []
-        for i, seq in enumerate(self.alpha_convblocks):
-            stateful_conv = seq[0]
+        for seq in bf.alpha_convblocks:
+            conv = seq[0]
             bn = seq[1]
             prelu = seq[2]
-            y, new_state = self._stateful_conv2d_inline(stateful_conv, x, alpha_states_in[i])
-            x = prelu(bn(y))
-            next_states.append(new_state)
-        alpha_feat = x
-        alpha = self.alpha_out(alpha_feat).transpose(2, 3)  # [1, 2, F, chunk_size]
+            x, ns = conv(x, state_iter.take(), state_frames=self.chunk_size)
+            state_iter.push(ns)
+            x = prelu(bn(x))
+
+        alpha = bf.alpha_out(x).transpose(2, 3)
         alpha = torch.softmax(alpha, dim=1)
         alpha_bcs = alpha[:, 0].unsqueeze(-1)
         alpha_acs = alpha[:, 1].unsqueeze(-1)
-        est_com = bcs_com_cal * alpha_bcs + acs_com_cal * alpha_acs  # [1, F, chunk_size, 2]
-
+        est_com = bcs_com_cal * alpha_bcs + acs_com_cal * alpha_acs
         com_real, com_imag = est_com[..., 0], est_com[..., 1]
         est_mag = torch.sqrt(com_real ** 2 + com_imag ** 2 + eps)
-        return est_mag, com_real, com_imag, next_states
+        return est_mag, com_real, com_imag
 
     # ------------------------------------------------------------------
     # Forward
@@ -586,75 +337,42 @@ class BAFNetPlusStatefulExportableNNCore(nn.Module):
         acs_pha: Tensor,
         *flat_states: Tensor,
     ):
-        grouped = self._unflatten_states(flat_states)
-        mapping_ts = grouped["mapping_ts"]
-        masking_ts = grouped["masking_ts"]
-        calibration_states_in = grouped["calibration"] if self.use_calibration else []
-        alpha_states_in = grouped["alpha"]
+        from src.models.streaming.onnx.functional_core import StateIterator, forward_backbone
 
-        # Mapping branch (infer_type='mapping', no mask output needed)
-        bcs_est_mag, _bcs_mask_unused, bcs_com_out, mapping_ts = self._run_backbone(
-            bcs_mag,
-            bcs_pha,
-            self.mapping_dense_encoder,
-            self.mapping_tsblocks,
-            mapping_ts,
-            self.mapping_mask_decoder,
-            self.mapping_phase_dense_block,
-            self.mapping_phase_conv,
-            self.mapping_phase_conv_r,
-            self.mapping_phase_conv_i,
-            infer_type="mapping",
+        state_iter = StateIterator(list(flat_states))
+
+        # Mapping branch — full layer-by-layer state routing (encoder + tsblocks + decoders)
+        bcs_est_mag, _bcs_mask_unused, bcs_com_out = forward_backbone(
+            self.bafnetplus.mapping, bcs_mag, bcs_pha, state_iter,
+            chunk_size=self.chunk_size, infer_type="mapping",
+        )
+        # Masking branch — same routing pattern, distinct weights
+        acs_est_mag, acs_mask, acs_com_out = forward_backbone(
+            self.bafnetplus.masking, acs_mag, acs_pha, state_iter,
+            chunk_size=self.chunk_size, infer_type="masking",
         )
 
-        # Masking branch
-        acs_est_mag, acs_mask, acs_com_out, masking_ts = self._run_backbone(
-            acs_mag,
-            acs_pha,
-            self.masking_dense_encoder,
-            self.masking_tsblocks,
-            masking_ts,
-            self.masking_mask_decoder,
-            self.masking_phase_dense_block,
-            self.masking_phase_conv,
-            self.masking_phase_conv_r,
-            self.masking_phase_conv_i,
-            infer_type="masking",
-        )
-
-        # Calibration (inline streaming)
-        if self.use_calibration:
-            bcs_com_cal, acs_com_cal, calibration_states_out = self._calibration_streaming(
-                bcs_est_mag,
-                acs_est_mag,
-                bcs_com_out,
-                acs_com_out,
-                acs_mask,
-                calibration_states_in,
+        # Calibration (state-routed FunctionalStatefulConv1d)
+        if getattr(self.bafnetplus, "use_calibration", True):
+            bcs_com_cal, acs_com_cal = self._calibration(
+                bcs_est_mag, acs_est_mag, bcs_com_out, acs_com_out, acs_mask, state_iter,
             )
         else:
             bcs_com_cal, acs_com_cal = bcs_com_out, acs_com_out
-            calibration_states_out = []
 
-        # Alpha fusion (inline streaming) — final est_mag + complex (no atan2)
-        est_mag, est_com_real, est_com_imag, alpha_states_out = self._alpha_fusion(
-            bcs_com_cal, acs_com_cal, acs_mask, alpha_states_in,
+        # Alpha fusion (state-routed FunctionalStatefulCausalConv2d)
+        est_mag, est_com_real, est_com_imag = self._alpha_fusion(
+            bcs_com_cal, acs_com_cal, acs_mask, state_iter,
         )
 
-        # Flatten next states in registry order
-        next_grouped = {
-            "mapping_ts": mapping_ts,
-            "masking_ts": masking_ts,
-            "calibration": calibration_states_out,
-            "alpha": alpha_states_out,
-        }
-        next_flat = self._flatten_states(next_grouped)
+        # Sanity: every registry slot must have been consumed exactly once.
+        if state_iter.consumed != len(self._state_names):
+            raise RuntimeError(
+                f"State count mismatch: consumed {state_iter.consumed} but registry has "
+                f"{len(self._state_names)} entries — check registry / forward order alignment."
+            )
 
-        return (est_mag, est_com_real, est_com_imag, *next_flat)
-
-    @property
-    def state_names(self) -> List[str]:
-        return list(self._state_names)
+        return (est_mag, est_com_real, est_com_imag, *state_iter.next_states)
 
 
 # ---------------------------------------------------------------------------
@@ -682,12 +400,11 @@ def prepare_bafnetplus_from_checkpoints(
     (alpha_convblocks, calibration_encoder, alpha_out, *_gain_head). It must
     match Stage 2 fixture generator (default 42) for Stage 2 fixture parity.
 
-    Returns (bafnetplus, streaming_tsblocks_mapping, streaming_tsblocks_masking, model_info).
+    Returns (bafnetplus, model_info).
     """
     from omegaconf import OmegaConf
 
     from src.models.streaming.bafnetplus_streaming import BAFNetPlusStreaming
-    from src.models.streaming.converters.conv_converter import set_streaming_mode
 
     if ablation_mode != SUPPORTED_ABLATION:
         raise NotImplementedError(
@@ -714,17 +431,15 @@ def prepare_bafnetplus_from_checkpoints(
     )
 
     bafnetplus = streaming.model
-    tsblocks_map = streaming.streaming_tsblocks_mapping
-    tsblocks_mask = streaming.streaming_tsblocks_masking
 
-    # 2. Disable streaming on backbones (ONNX convention: zero-padded encoder/
-    #    decoder). Fusion modules also go non-streaming — state I/O happens
-    #    inline via _stateful_conv1d/2d_inline in the exportable wrapper.
-    set_streaming_mode(bafnetplus.mapping, False)
-    set_streaming_mode(bafnetplus.masking, False)
-    if bafnetplus.use_calibration:
-        set_streaming_mode(bafnetplus.calibration_encoder, False)
-    set_streaming_mode(bafnetplus.alpha_convblocks, False)
+    # Convert all StatefulCausalConv* modules to FunctionalStateful* with
+    # explicit state I/O. This makes wrapper.forward layer-by-layer state-routed
+    # (mirroring BAFNetPlusStreaming.process_samples), so the ONNX graph captures
+    # the same streaming forward as the PyTorch reference.
+    from src.models.streaming.onnx.functional_stateful import convert_module_inplace
+    n_converted = convert_module_inplace(bafnetplus)
+    if verbose:
+        print(f"  Converted {n_converted} StatefulCausalConv* → FunctionalStateful*")
     bafnetplus.eval()
 
     # 3. Read config params for streaming_config.json
@@ -754,7 +469,7 @@ def prepare_bafnetplus_from_checkpoints(
         "infer_type_mapping": str(p_map.infer_type),
         "infer_type_masking": str(p_mask.infer_type),
     }
-    return bafnetplus, tsblocks_map, tsblocks_mask, model_info
+    return bafnetplus, model_info
 
 
 # ---------------------------------------------------------------------------
@@ -809,6 +524,7 @@ def export_bafnetplus_onnx(
         output_names=output_names,
         opset_version=17,
         do_constant_folding=True,
+        dynamo=False,
     )
 
     if verbose:
@@ -861,8 +577,7 @@ def _fixture_inputs_for_chunk(
     """Load (bcs_mag, bcs_pha, acs_mag, acs_pha) for one chunk from a fixture.
 
     The fixture's source ``T`` is inferred from the .bin file size
-    (``bytes / 4 / 201``); legacy fixtures use T=11 (chunk=8 + lookahead=3),
-    the D5d isolated fixture uses T=16 (chunk=16 + lookahead=0).
+    (``bytes / 4 / 201``).
 
     If ``time_frames`` is supplied and smaller than the source T, the last
     dim is sliced — required for D5d's per-tier exports where
@@ -1110,51 +825,108 @@ def quantize_bafnetplus_qdq_for_htp(
         input_shapes[inp.name] = tuple(shape)
 
     class BafnetPlusCalibrationReader(CalibrationDataReader):
-        def __init__(self, fixture_dir, input_shapes, num_samples):
+        """Sequential-streaming calibration reader (H-2-1 fix).
+
+        Previously each calibration sample initialised all 190 state inputs
+        to zeros, regardless of position in the chunk stream. In real
+        streaming inference the state buffers accumulate across chunks,
+        so fusion-path activations (calibration_encoder, alpha_convblocks)
+        see distributions the quantizer never calibrated for → INT8 range
+        mismatch → RMS-blowup catastrophe (observed corr 0.07 / RMS 6.4x
+        vs FP32 ONNX).
+
+        Fix: maintain a persistent state_dict, run an FP32 ORT session
+        on the *pre-quantization* graph for each calibration chunk to
+        produce the next_state tensors, and feed those as the inputs to
+        the subsequent calibration chunk. Optionally skip the first
+        ``state_warmup_chunks`` chunks (states still near zero — not
+        representative of steady state).
+        """
+
+        def __init__(self, fixture_dir, input_shapes, num_samples,
+                     fp32_onnx_path: Optional[str] = None,
+                     state_warmup_chunks: int = 4):
             self.samples: List[Dict[str, "np.ndarray"]] = []
             self.current = 0
+            self.state_warmup_chunks = state_warmup_chunks
+
+            state_names = [n for n in input_shapes if n.startswith("state_")]
+            # Build initial state_dict (all zeros — first chunk's input)
+            state_dict: Dict[str, "np.ndarray"] = {
+                n: np.zeros(input_shapes[n], dtype=np.float32) for n in state_names
+            }
+            graph_time_frames = int(input_shapes["bcs_mag"][2])
+
+            # Source of (bcs_mag, bcs_pha, acs_mag, acs_pha) per chunk
             if fixture_dir is not None and os.path.isdir(fixture_dir):
                 manifest_path = os.path.join(fixture_dir, "manifest.json")
                 with open(manifest_path, "r") as f:
                     manifest = json.load(f)
-                n_chunks = min(num_samples, len(manifest.get("chunks", [])))
-                graph_time_frames = int(input_shapes["bcs_mag"][2])
+                n_chunks = min(num_samples + state_warmup_chunks, len(manifest.get("chunks", [])))
                 if verbose:
                     print(
-                        f"  Calibration: loading {n_chunks} chunks from {fixture_dir} "
-                        f"(slicing to T={graph_time_frames})"
+                        f"  Calibration: sequential streaming over {n_chunks} fixture chunks "
+                        f"(first {state_warmup_chunks} skipped for warmup) from {fixture_dir}"
                     )
-                for chunk_idx in range(n_chunks):
-                    bcs_mag, bcs_pha, acs_mag, acs_pha = _fixture_inputs_for_chunk(
-                        fixture_dir, chunk_idx, time_frames=graph_time_frames,
-                    )
-                    sample: Dict[str, "np.ndarray"] = {
-                        "bcs_mag": bcs_mag.astype(np.float32),
-                        "bcs_pha": bcs_pha.astype(np.float32),
-                        "acs_mag": acs_mag.astype(np.float32),
-                        "acs_pha": acs_pha.astype(np.float32),
-                    }
-                    for name, shape in input_shapes.items():
-                        if name not in sample and name.startswith("state_"):
-                            sample[name] = np.zeros(shape, dtype=np.float32)
-                    self.samples.append(sample)
+
+                def get_chunk_inputs(chunk_idx):
+                    return _fixture_inputs_for_chunk(fixture_dir, chunk_idx, time_frames=graph_time_frames)
             else:
-                # Random fallback
+                n_chunks = num_samples + state_warmup_chunks
                 rng = np.random.default_rng(0)
                 if verbose:
-                    print(f"  Calibration: no fixture_dir, using {num_samples} random samples")
-                for _ in range(num_samples):
-                    sample: Dict[str, "np.ndarray"] = {}
-                    for name, shape in input_shapes.items():
-                        if name.startswith("state_"):
-                            sample[name] = np.zeros(shape, dtype=np.float32)
-                        elif name.endswith("_mag"):
-                            sample[name] = np.abs(rng.standard_normal(shape, dtype=np.float32)) * 0.5
-                        elif name.endswith("_pha"):
-                            sample[name] = (rng.random(shape, dtype=np.float32) * 2 - 1) * np.pi
-                        else:
-                            sample[name] = rng.standard_normal(shape, dtype=np.float32)
+                    print(
+                        f"  Calibration: sequential streaming over {n_chunks} random chunks "
+                        f"(first {state_warmup_chunks} skipped for warmup)"
+                    )
+
+                def get_chunk_inputs(chunk_idx):
+                    mag_shape = input_shapes["bcs_mag"]
+                    pha_shape = input_shapes["bcs_pha"]
+                    bcs_mag = np.abs(rng.standard_normal(mag_shape, dtype=np.float32)) * 0.5
+                    bcs_pha = (rng.random(pha_shape, dtype=np.float32) * 2 - 1) * np.pi
+                    acs_mag = np.abs(rng.standard_normal(mag_shape, dtype=np.float32)) * 0.5
+                    acs_pha = (rng.random(pha_shape, dtype=np.float32) * 2 - 1) * np.pi
+                    return bcs_mag, bcs_pha, acs_mag, acs_pha
+
+            # FP32 ORT session for producing next_state tensors
+            sess = None
+            if fp32_onnx_path is not None and os.path.exists(fp32_onnx_path):
+                import onnxruntime as ort
+                sess = ort.InferenceSession(fp32_onnx_path, providers=["CPUExecutionProvider"])
+                # Map output names to find next_state_* outputs
+                output_names = [o.name for o in sess.get_outputs()]
+            else:
+                output_names = []
+
+            for chunk_idx in range(n_chunks):
+                bcs_mag, bcs_pha, acs_mag, acs_pha = get_chunk_inputs(chunk_idx)
+                sample = {
+                    "bcs_mag": bcs_mag.astype(np.float32),
+                    "bcs_pha": bcs_pha.astype(np.float32),
+                    "acs_mag": acs_mag.astype(np.float32),
+                    "acs_pha": acs_pha.astype(np.float32),
+                    **state_dict,
+                }
+                # Append (skip warmup chunks where state is still near zero)
+                if chunk_idx >= state_warmup_chunks:
                     self.samples.append(sample)
+
+                # Advance state via FP32 forward (if available)
+                if sess is not None and chunk_idx < n_chunks - 1:
+                    ort_outs = sess.run(None, sample)
+                    new_state = {}
+                    for out_name, out_val in zip(output_names, ort_outs):
+                        if out_name.startswith("next_state_"):
+                            in_name = out_name[len("next_"):]  # strip "next_" prefix
+                            if in_name in state_dict:
+                                new_state[in_name] = out_val.astype(np.float32)
+                    if new_state:
+                        state_dict = new_state
+                    # else: no next_state outputs matched → keep zeros (degenerate)
+
+            if verbose:
+                print(f"  Calibration: collected {len(self.samples)} samples (post-warmup)")
 
         def get_next(self):
             if self.current >= len(self.samples):
@@ -1166,8 +938,22 @@ def quantize_bafnetplus_qdq_for_htp(
         def rewind(self):
             self.current = 0
 
+    # NOTE on calibration strategy:
+    #   Tried sequential-streaming calibration (fp32_onnx_path=quant_input,
+    #   state_warmup_chunks=4) with both random and real-recapp fixtures.
+    #   Both REGRESSED — RMS-ratio 19x→123x vs FP32 (worse than zero-state
+    #   random which gave 3.35x). Hypothesis: the new wrapper exposes 24
+    #   extra encoder/decoder state tensors (190 total vs prior 166), and
+    #   sequential rollout pushes those into wider distributions than the
+    #   QDQ minmax calibrator handles well. Real-audio fixture exposes
+    #   low-freq voiced peaks that drive INT8 scale wider than typical
+    #   values, hurting precision for the bulk distribution.
+    #   Reverting to zero-state + random which matches the prior baseline
+    #   (~3.35x RMS ratio).
     calib_reader = BafnetPlusCalibrationReader(
         calibration_fixture_dir, input_shapes, num_calibration_samples,
+        fp32_onnx_path=None,
+        state_warmup_chunks=0,
     )
 
     qnn_config = get_qnn_qdq_config(
@@ -1358,6 +1144,18 @@ def main() -> int:
 
     parser.add_argument("--chkpt_dir_mapping", required=True, type=str)
     parser.add_argument("--chkpt_dir_masking", required=True, type=str)
+    parser.add_argument(
+        "--chkpt_dir_unified",
+        type=str,
+        default=None,
+        help="Optional unified BAFNet+ checkpoint dir (e.g., results/experiments/bafnetplus_50ms). "
+             "If provided, fusion weights (alpha_convblocks, alpha_out, calibration_encoder, "
+             "common_gain_head, relative_gain_head) are loaded from this checkpoint's `best.th` "
+             "AFTER backbone init + Kaiming-random fusion init, overriding the random fusion "
+             "with the trained end-to-end weights. REQUIRED for deployment-quality ONNX; "
+             "without this flag the fusion stage is Kaiming-random (intended only for Stage 2 "
+             "architectural fixture parity, NOT inference quality).",
+    )
     parser.add_argument("--chkpt_file", type=str, default="best.th")
     parser.add_argument("--ablation_mode", type=str, default="full")
     parser.add_argument(
@@ -1399,7 +1197,7 @@ def main() -> int:
     device = "cpu"
 
     # --- Prepare model ---
-    bafnetplus, tsblocks_map, tsblocks_mask, model_info = prepare_bafnetplus_from_checkpoints(
+    bafnetplus, model_info = prepare_bafnetplus_from_checkpoints(
         chkpt_dir_mapping=args.chkpt_dir_mapping,
         chkpt_dir_masking=args.chkpt_dir_masking,
         chkpt_file=args.chkpt_file,
@@ -1408,10 +1206,52 @@ def main() -> int:
         seed=args.seed,
     )
 
+    # --- Overlay trained weights from unified checkpoint (2026-05-11 fix v2) ---
+    # NOTE: previously this filtered to fusion-only prefixes, which left
+    # mapping/masking backbones with the bm_map/bm_mask Stage-1 weights
+    # (pre-joint-fine-tune). The unified checkpoint contains the post-Stage-2
+    # *jointly* fine-tuned mapping/masking weights, which the wrapper MUST use
+    # to be numerically equivalent to BAFNetPlusStreaming.process_samples
+    # (which loads the full unified ckpt via streaming.model.load_state_dict).
+    # Fusion-only filter was the root cause of wrapper-vs-nonstream corr 0.04
+    # and FP32 ONNX vs PT streaming corr 0.77 (see 2026-05-11 cycle).
+    if args.chkpt_dir_unified is not None:
+        unified_path = os.path.join(args.chkpt_dir_unified, args.chkpt_file)
+        print(f"\nLoading FULL unified weights (mapping + masking + fusion) from:\n  {unified_path}")
+        unified_blob = torch.load(unified_path, map_location=device, weights_only=False)
+        unified_sd = unified_blob["model"] if isinstance(unified_blob, dict) and "model" in unified_blob else unified_blob
+        missing, unexpected = bafnetplus.load_state_dict(unified_sd, strict=False)
+        if unexpected:
+            raise RuntimeError(
+                f"unified checkpoint has {len(unexpected)} unexpected keys vs wrapper.bafnetplus state_dict "
+                f"(model does not declare them): {unexpected[:3]}",
+            )
+        if missing:
+            raise RuntimeError(
+                f"unified checkpoint left {len(missing)} keys un-overwritten in wrapper.bafnetplus: "
+                f"{missing[:3]}",
+            )
+        print(f"  Loaded {len(unified_sd)} trained weight tensors (full unified ckpt overlay)")
+        model_info["chkpt_dir_unified"] = args.chkpt_dir_unified
+        model_info["fusion_source"] = "trained_unified_full"
+    else:
+        print("\nWARNING: --chkpt_dir_unified not provided — fusion weights are Kaiming-random "
+              "(seed={}). This ONNX is for architectural fixture parity only, NOT deployment "
+              "quality. Pass --chkpt_dir_unified <unified_ckpt_dir> for trained fusion."
+              .format(args.seed))
+        model_info["fusion_source"] = "kaiming_random_seed_{}".format(args.seed)
+
     n_fft = model_info["n_fft"]
     freq_bins = n_fft // 2 + 1
     freq_size = model_info["freq_size"]
-    export_time_frames = args.chunk_size + max(args.encoder_lookahead, args.decoder_lookahead)
+    # Fix B (2026-05-11): export sees (chunk + encoder_la + decoder_la) frames per
+    # call, matching the redesigned BAFNetPlusStreaming.process_samples single-pass
+    # forward. Previously this was `chunk + max(enc_la, dec_la)`, which only worked
+    # when one of the lookaheads was zero. With both > 0 (e.g. 50ms variant has
+    # enc_la=3, dec_la=3), the wrapper now needs to see all 14 = 8 + 3 + 3 frames
+    # so encoder and decoder share the same input window — byte-equivalent to
+    # BAFNetPlus.forward via spec-streaming (corr 1.0000, SDR +104.5 dB anchor).
+    export_time_frames = args.chunk_size + args.encoder_lookahead + args.decoder_lookahead
 
     print(f"\nDimensions:")
     print(f"  freq_bins (STFT): {freq_bins}")
@@ -1421,7 +1261,8 @@ def main() -> int:
 
     # --- State registry ---
     state_registry = build_bafnetplus_state_registry(
-        bafnetplus, tsblocks_map, tsblocks_mask, freq_size=freq_size, freq_bins=freq_bins,
+        bafnetplus, freq_size=freq_size, freq_bins=freq_bins,
+        export_time_frames=export_time_frames,
     )
     print(f"  num_states: {len(state_registry)}")
 
@@ -1439,8 +1280,6 @@ def main() -> int:
     # --- Wrapper ---
     wrapper = BAFNetPlusStatefulExportableNNCore(
         bafnetplus=bafnetplus,
-        streaming_tsblocks_mapping=tsblocks_map,
-        streaming_tsblocks_masking=tsblocks_mask,
         freq_size=freq_size,
         chunk_size=args.chunk_size,
         state_registry=state_registry,

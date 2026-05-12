@@ -43,7 +43,6 @@ import json
 import logging
 import os
 import subprocess
-from collections import OrderedDict
 from typing import Any, Dict, List, Optional, Tuple
 
 import torch
@@ -51,11 +50,7 @@ import torch.nn as nn
 from torch import Tensor
 
 from src.models.backbone import Backbone
-from src.models.streaming.converters.conv_converter import (
-    convert_to_stateful,
-    set_streaming_mode,
-)
-from src.models.streaming.layers.tsblock import StreamingTSBlock
+from src.models.streaming.converters.conv_converter import convert_to_stateful
 
 logger = logging.getLogger(__name__)
 
@@ -84,203 +79,57 @@ MODEL_PARAMS = dict(
     infer_type="masking",
 )
 
-# Rename map: code key → ONNX state name suffix
-# Keeps compatibility with existing Android streaming_config.json convention.
-STATE_KEY_RENAME = {
-    "sca_dwconv": "ema",
-}
-
-
-# ---------------------------------------------------------------------------
-# Step 1: State Registry Builder
-# ---------------------------------------------------------------------------
-
-
-def build_state_registry(
-    streaming_tsblocks: nn.ModuleList,
-    freq_size: int,
-) -> OrderedDict:
-    """Build an ordered registry of all TSBlock state tensors.
-
-    Calls StreamingTSBlock.init_state() for each block, flattens the nested
-    state structure, and returns an alphabetically sorted OrderedDict mapping
-    canonical state names to their shapes.
-
-    Args:
-        streaming_tsblocks: Converted streaming TSBlock ModuleList.
-        freq_size: Encoded frequency dimension.
-
-    Returns:
-        OrderedDict[str, tuple]: name → shape, sorted alphabetically.
-    """
-    registry: Dict[str, Tuple[int, ...]] = {}
-
-    for blk_idx, block in enumerate(streaming_tsblocks):
-        # init_state returns List[Dict[str, Tensor]] — one dict per time_block
-        block_states = block.init_state(batch_size=1, freq_size=freq_size)
-
-        for tb_idx, tb_state in enumerate(block_states):
-            for section_key, section_dict in [("cab", tb_state["cab"]), ("gpkffn", tb_state["gpkffn"])]:
-                for raw_key, tensor in section_dict.items():
-                    key = STATE_KEY_RENAME.get(raw_key, raw_key)
-                    name = f"state_rf_{blk_idx}_tb{tb_idx}_{section_key}_{key}"
-                    registry[name] = tuple(tensor.shape)
-
-    # Sort alphabetically (matches Android convention)
-    sorted_registry = OrderedDict(sorted(registry.items()))
-    return sorted_registry
-
-
-def _build_state_map(
-    streaming_tsblocks: nn.ModuleList,
-    freq_size: int,
-) -> List[Tuple[str, int, int, str, str]]:
-    """Build a mapping from flat state index to nested structure location.
-
-    Returns a list of (name, block_idx, tb_idx, section, raw_key) sorted
-    alphabetically by name. raw_key is the original dict key (before rename).
-    """
-    entries = []
-
-    for blk_idx, block in enumerate(streaming_tsblocks):
-        block_states = block.init_state(batch_size=1, freq_size=freq_size)
-
-        for tb_idx, tb_state in enumerate(block_states):
-            for section_key, section_dict in [("cab", tb_state["cab"]), ("gpkffn", tb_state["gpkffn"])]:
-                for raw_key in section_dict:
-                    display_key = STATE_KEY_RENAME.get(raw_key, raw_key)
-                    name = f"state_rf_{blk_idx}_tb{tb_idx}_{section_key}_{display_key}"
-                    entries.append((name, blk_idx, tb_idx, section_key, raw_key))
-
-    entries.sort(key=lambda e: e[0])
-    return entries
-
-
 # ---------------------------------------------------------------------------
 # Step 2: StatefulExportableNNCore
 # ---------------------------------------------------------------------------
 
 
 class StatefulExportableNNCore(nn.Module):
-    """ONNX-exportable wrapper with externalized TSBlock states.
+    """ONNX-exportable wrapper using FunctionalStateful + explicit state I/O.
+
+    Routes state through every FunctionalStateful conv in forward order, mirroring
+    the PyTorch streaming forward exactly. Output format (raw mask + raw phase
+    real/imag at full T) matches the previous TSBlock-only externalization wrapper
+    for host StatefulInference.kt backward compatibility — host computes
+    ``atan2(phase_imag, phase_real)`` and applies ``mag * mask`` externally.
 
     Forward signature:
         (mag, pha, *flat_states) → (est_mask, phase_real, phase_imag, *next_flat_states)
 
-    Inputs:
-        mag: [1, F, T]  — compressed magnitude spectrogram
-        pha: [1, F, T]  — phase spectrogram
-        flat_states: N tensors, alphabetically sorted by state name
-
-    Outputs:
-        est_mask: [1, F, T]  — estimated mask
-        phase_real: [1, F, T]  — real part of phase estimate (host does atan2)
-        phase_imag: [1, F, T]  — imaginary part of phase estimate
-        next_flat_states: N tensors (same order as input states)
+    Pre-conditions:
+        - ``model`` has every StatefulCausalConv* replaced by FunctionalStateful*
+          (via :func:`convert_module_inplace`).
+        - ``state_registry`` (FunctionalStateRegistry) lists states in forward order.
     """
 
     def __init__(
         self,
         model: nn.Module,
-        streaming_tsblocks: nn.ModuleList,
         freq_size: int,
         chunk_size: int,
         infer_type: str = "masking",
+        state_registry=None,
     ):
         super().__init__()
-        self.dense_encoder = model.dense_encoder
-        self.mask_decoder = model.mask_decoder
-
-        # Phase decoder sub-modules (skip atan2 for ONNX/QNN compatibility)
-        self.phase_dense_block = model.phase_decoder.dense_block
-        self.phase_conv = model.phase_decoder.phase_conv
-        self.phase_conv_r = model.phase_decoder.phase_conv_r
-        self.phase_conv_i = model.phase_decoder.phase_conv_i
-
-        self.streaming_tsblocks = streaming_tsblocks
+        self.model = model
         self.freq_size = freq_size
         self.chunk_size = chunk_size
         self.infer_type = infer_type
-
-        # Build state map for flatten/unflatten
-        self._state_map = _build_state_map(streaming_tsblocks, freq_size)
-        self._num_blocks = len(streaming_tsblocks)
+        self.state_registry = state_registry
+        self._state_names = list(state_registry.names) if state_registry is not None else []
 
     @property
     def state_names(self) -> List[str]:
-        """Return alphabetically sorted state names."""
-        return [entry[0] for entry in self._state_map]
-
-    def _unflatten_states(
-        self, flat_states: Tuple[Tensor, ...],
-    ) -> List[List[Dict[str, Tensor]]]:
-        """Convert flat state tuple to nested structure for TSBlocks.
-
-        Returns:
-            List[List[Dict[str, Tensor]]]: [block][time_block][section][key]
-        """
-        # Determine structure sizes
-        num_blocks = self._num_blocks
-        # Get time_block_num from first block
-        time_block_num = self.streaming_tsblocks[0].time_block_num
-
-        # Initialize nested structure
-        nested: List[List[Dict[str, Dict[str, Tensor]]]] = []
-        for _ in range(num_blocks):
-            block_states = []
-            for _ in range(time_block_num):
-                block_states.append({"cab": {}, "gpkffn": {}})
-            nested.append(block_states)
-
-        # Fill from flat states using state map
-        for i, (_, blk_idx, tb_idx, section, raw_key) in enumerate(self._state_map):
-            nested[blk_idx][tb_idx][section][raw_key] = flat_states[i]
-
-        return nested
-
-    def _flatten_states(
-        self, nested: List[List[Dict[str, Tensor]]],
-    ) -> Tuple[Tensor, ...]:
-        """Convert nested state structure to flat tuple, alphabetically sorted."""
-        flat = []
-        for _, blk_idx, tb_idx, section, raw_key in self._state_map:
-            flat.append(nested[blk_idx][tb_idx][section][raw_key])
-        return tuple(flat)
+        return list(self._state_names)
 
     def forward(self, mag: Tensor, pha: Tensor, *flat_states: Tensor):
-        """Forward pass with explicit state I/O.
-
-        Args:
-            mag: Magnitude [1, F, T]
-            pha: Phase [1, F, T]
-            *flat_states: Flattened state tensors (alphabetically sorted)
-
-        Returns:
-            Tuple of (est_mask, phase_real, phase_imag, *next_flat_states)
-        """
-        # 1. Stack and permute: [1, 2, T, F]
-        x = torch.stack((mag, pha), dim=1).permute(0, 1, 3, 2)
-
-        # 2. Encoder (non-streaming, zero-padded)
-        x = self.dense_encoder(x)  # [1, C, T, F_enc]
-
-        # 3. Streaming TSBlocks with explicit state I/O
-        nested_states = self._unflatten_states(flat_states)
-        for i, block in enumerate(self.streaming_tsblocks):
-            x, new_block_states = block(x, nested_states[i], state_frames=self.chunk_size)
-            nested_states[i] = new_block_states
-        next_flat_states = self._flatten_states(nested_states)
-
-        # 4. Mask decoder (non-streaming, zero-padded)
-        est_mask = self.mask_decoder(x).squeeze(1).transpose(1, 2)  # [1, F, T]
-
-        # 5. Phase decoder — complex mode (skip atan2)
-        p = self.phase_dense_block(x)
-        p = self.phase_conv(p)
-        phase_real = self.phase_conv_r(p).squeeze(1).transpose(1, 2)  # [1, F, T]
-        phase_imag = self.phase_conv_i(p).squeeze(1).transpose(1, 2)  # [1, F, T]
-
-        return (est_mask, phase_real, phase_imag, *next_flat_states)
+        from src.models.streaming.onnx.functional_core import StateIterator, forward_single_backbone
+        state_iter = StateIterator(list(flat_states))
+        est_mask, phase_real, phase_imag = forward_single_backbone(
+            self.model, mag, pha, state_iter, self.chunk_size,
+        )
+        next_flat = tuple(state_iter.next_states)
+        return (est_mask, phase_real, phase_imag, *next_flat)
 
 
 # ---------------------------------------------------------------------------
@@ -293,13 +142,15 @@ def prepare_from_checkpoint(
     chkpt_file: str = "best.th",
     device: str = "cpu",
     verbose: bool = True,
-) -> Tuple[nn.Module, nn.ModuleList, Dict[str, Any]]:
+) -> Tuple[nn.Module, Dict[str, Any]]:
     """Prepare model from checkpoint for ONNX export.
 
     Returns:
-        Tuple of (model, streaming_tsblocks, model_info)
+        Tuple of (model, model_info)
     """
     from src.models.streaming.utils import prepare_streaming_model
+    from src.models.streaming.onnx.functional_stateful import convert_module_inplace
+    from src.models.streaming.converters.conv_converter import set_streaming_mode
 
     model, metadata = prepare_streaming_model(
         chkpt_dir=chkpt_dir,
@@ -309,11 +160,22 @@ def prepare_from_checkpoint(
         verbose=verbose,
     )
 
-    streaming_tsblocks = metadata["streaming_tsblocks"]
-    model_args = metadata["model_args"]
-
-    # Disable streaming mode for encoder/decoder (non-streaming, zero-padded)
+    # Measure freq_size_encoded BEFORE FunctionalStateful conversion. After
+    # conversion, every conv requires an explicit state argument so a plain
+    # stateless dummy forward fails. We toggle streaming off, run the dummy
+    # encoder, then restore streaming before functional conversion.
+    n_fft = getattr(getattr(metadata["model_args"], "param", metadata["model_args"]), "n_fft", 400)
     set_streaming_mode(model, False)
+    freq_size_encoded = compute_freq_size(model, n_fft, device=device)
+    set_streaming_mode(model, True)
+
+    # Convert StatefulCausalConv* → FunctionalStateful* for explicit state I/O.
+    n_converted = convert_module_inplace(model)
+    if verbose:
+        print(f"  Converted {n_converted} StatefulCausalConv* → FunctionalStateful*")
+    model.eval()
+
+    model_args = metadata["model_args"]
 
     # Backbone hyperparameters live under model_args.param (Hydra `model.param.*`).
     # Older revisions of this script read them off model_args directly, so every
@@ -332,38 +194,46 @@ def prepare_from_checkpoint(
         "infer_type": getattr(params, "infer_type", "masking"),
         "encoder_padding_ratio": tuple(getattr(params, "encoder_padding_ratio", [1.0, 0.0])),
         "decoder_padding_ratio": tuple(getattr(params, "decoder_padding_ratio", [1.0, 0.0])),
+        "freq_size_encoded": freq_size_encoded,
         "chkpt_dir": chkpt_dir,
         "chkpt_file": chkpt_file,
     }
 
-    return model, streaming_tsblocks, model_info
+    return model, model_info
 
 
 def prepare_without_checkpoint(
     device: str = "cpu",
     verbose: bool = True,
-) -> Tuple[nn.Module, nn.ModuleList, Dict[str, Any]]:
+) -> Tuple[nn.Module, Dict[str, Any]]:
     """Prepare model without checkpoint (random weights, for testing).
 
     Returns:
-        Tuple of (model, streaming_tsblocks, model_info)
+        Tuple of (model, model_info)
     """
+    from src.models.streaming.onnx.functional_stateful import convert_module_inplace
+    from src.models.streaming.converters.conv_converter import set_streaming_mode
+
     if verbose:
         print("Preparing model without checkpoint (random weights)")
 
     model = Backbone(**MODEL_PARAMS)
     model = model.to(device).eval()
 
-    # Convert TSBlocks → streaming
-    streaming_tsblocks = StreamingTSBlock.convert_sequence_block(model.sequence_block)
-    streaming_tsblocks = streaming_tsblocks.to(device).eval()
-
-    # Convert encoder/decoder to stateful (for weight compatibility)
+    # Convert encoder/decoder to stateful, then to FunctionalStateful.
     model = convert_to_stateful(model, verbose=verbose, inplace=True)
     model.to(device).eval()
 
-    # Disable streaming mode for encoder/decoder (non-streaming, zero-padded)
+    # Measure freq_size_encoded BEFORE FunctionalStateful conversion (see
+    # prepare_from_checkpoint for rationale).
     set_streaming_mode(model, False)
+    freq_size_encoded = compute_freq_size(model, MODEL_PARAMS["n_fft"], device=device)
+    set_streaming_mode(model, True)
+
+    n_converted = convert_module_inplace(model)
+    if verbose:
+        print(f"  Converted {n_converted} StatefulCausalConv* → FunctionalStateful*")
+    model.eval()
 
     model_info = {
         "n_fft": MODEL_PARAMS["n_fft"],
@@ -375,15 +245,15 @@ def prepare_without_checkpoint(
         "infer_type": MODEL_PARAMS["infer_type"],
         "encoder_padding_ratio": MODEL_PARAMS["encoder_padding_ratio"],
         "decoder_padding_ratio": MODEL_PARAMS["decoder_padding_ratio"],
+        "freq_size_encoded": freq_size_encoded,
         "chkpt_dir": None,
         "chkpt_file": None,
     }
 
     if verbose:
         print(f"  Model: Backbone ({MODEL_PARAMS['num_tsblock']} TSBlocks)")
-        print(f"  Streaming TSBlocks: {len(streaming_tsblocks)} blocks")
 
-    return model, streaming_tsblocks, model_info
+    return model, model_info
 
 
 def compute_freq_size(model: nn.Module, n_fft: int, device: str = "cpu") -> int:
@@ -426,7 +296,7 @@ def export_onnx(
     mag = torch.randn(1, freq_bins, export_time_frames, device=device)
     pha = torch.randn(1, freq_bins, export_time_frames, device=device)
 
-    state_registry = build_state_registry(wrapper.streaming_tsblocks, wrapper.freq_size)
+    state_registry = wrapper.state_registry
     flat_states = []
     for name in state_names:
         shape = state_registry[name]
@@ -549,7 +419,7 @@ def verify_onnx(
 
     sess = ort.InferenceSession(onnx_path, providers=["CPUExecutionProvider"])
     state_names = wrapper.state_names
-    state_registry = build_state_registry(wrapper.streaming_tsblocks, wrapper.freq_size)
+    state_registry = wrapper.state_registry
 
     # Initialize states (zeros)
     pt_flat_states = []
@@ -853,7 +723,7 @@ def quantize_onnx_qdq_for_htp(
 
 def generate_streaming_config(
     model_info: Dict[str, Any],
-    state_registry: OrderedDict,
+    state_registry,
     chunk_size: int,
     encoder_lookahead: int,
     decoder_lookahead: int,
@@ -1013,9 +883,9 @@ Examples:
 
     # --- Prepare model ---
     if args.no_checkpoint:
-        model, streaming_tsblocks, model_info = prepare_without_checkpoint(device=device)
+        model, model_info = prepare_without_checkpoint(device=device)
     else:
-        model, streaming_tsblocks, model_info = prepare_from_checkpoint(
+        model, model_info = prepare_from_checkpoint(
             chkpt_dir=args.chkpt_dir,
             chkpt_file=args.chkpt_file,
             device=device,
@@ -1024,7 +894,7 @@ Examples:
     # --- Compute dimensions ---
     n_fft = model_info["n_fft"]
     freq_bins = n_fft // 2 + 1
-    freq_size = compute_freq_size(model, n_fft, device=device)
+    freq_size = model_info["freq_size_encoded"]
     export_time_frames = args.chunk_size + max(args.encoder_lookahead, args.decoder_lookahead)
 
     print(f"\nDimensions:")
@@ -1033,17 +903,24 @@ Examples:
     print(f"  export_time_frames: {export_time_frames} "
           f"(chunk={args.chunk_size} + lookahead={max(args.encoder_lookahead, args.decoder_lookahead)})")
 
-    # --- Build state registry ---
-    state_registry = build_state_registry(streaming_tsblocks, freq_size)
+    # --- Build state registry (functional) ---
+    from src.models.streaming.onnx.functional_core import (
+        build_single_backbone_state_entries,
+        FunctionalStateRegistry,
+    )
+    state_entries = build_single_backbone_state_entries(
+        model, freq_bins, freq_size, export_time_frames,
+    )
+    state_registry = FunctionalStateRegistry(state_entries)
     print(f"  num_states: {len(state_registry)}")
 
     # --- Create wrapper ---
     wrapper = StatefulExportableNNCore(
         model=model,
-        streaming_tsblocks=streaming_tsblocks,
         freq_size=freq_size,
         chunk_size=args.chunk_size,
         infer_type=model_info["infer_type"],
+        state_registry=state_registry,
     )
     wrapper.eval()
 

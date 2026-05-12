@@ -98,7 +98,10 @@ class BAFNetPlusStreaming(nn.Module):
         self.input_lookahead_frames = int(encoder_lookahead)
         self.total_lookahead = self.input_lookahead_frames + decoder_lookahead
 
-        self.total_frames_needed = chunk_size + self.input_lookahead_frames
+        # Per-chunk frame count: encoder + decoder share (chunk + total_lookahead)
+        # frames in a single forward; state update window limited to chunk_size
+        # via StateFramesContext. Mathematically equivalent to BAFNetPlus.forward.
+        self.total_frames_needed = chunk_size + self.total_lookahead
         if stft_center:
             self.samples_per_chunk = (self.total_frames_needed - 1) * hop_size + self.stft_future_samples
         else:
@@ -126,10 +129,6 @@ class BAFNetPlusStreaming(nn.Module):
         """Reset all internal buffers (input, STFT context, feature, OLA, TSBlock states)."""
         self.bcs_input_buffer = torch.tensor([], dtype=torch.float32)
         self.acs_input_buffer = torch.tensor([], dtype=torch.float32)
-
-        self.bcs_feature_buffer: List[Dict[str, Any]] = []
-        self.acs_feature_buffer: List[Dict[str, Any]] = []
-        self._buffered_frames = 0
 
         if self.stft_center:
             self.bcs_stft_context = torch.zeros(self.win_size // 2, dtype=torch.float32)
@@ -380,42 +379,6 @@ class BAFNetPlusStreaming(nn.Module):
             tsblock_states[i] = new_states
         return mag, ts_out, valid_frames
 
-    def _buffer_features(
-        self,
-        ts_out: Tensor,
-        mag: Tensor,
-        valid_frames: int,
-        feature_buffer: List[Dict[str, Any]],
-    ) -> None:
-        feature_buffer.append(
-            {
-                "features": ts_out[:, :, :valid_frames, :],
-                "mag": mag[:, :, :valid_frames],
-                "frames": valid_frames,
-            }
-        )
-
-    def _extract_extended(self, feature_buffer: List[Dict[str, Any]]) -> Tuple[Tensor, Tensor]:
-        total_needed = self.chunk_size + self.decoder_lookahead
-        all_features = torch.cat([buf["features"] for buf in feature_buffer], dim=2)
-        all_mag = torch.cat([buf["mag"] for buf in feature_buffer], dim=2)
-        return all_features[:, :, :total_needed, :], all_mag[:, :, :total_needed]
-
-    def _slide_feature_buffer(self, feature_buffer: List[Dict[str, Any]], frames_to_remove: int) -> int:
-        removed = 0
-        while removed < frames_to_remove and feature_buffer:
-            buf = feature_buffer[0]
-            if buf["frames"] <= (frames_to_remove - removed):
-                removed += buf["frames"]
-                feature_buffer.pop(0)
-            else:
-                keep_frames = buf["frames"] - (frames_to_remove - removed)
-                buf["features"] = buf["features"][:, :, -keep_frames:, :]
-                buf["mag"] = buf["mag"][:, :, -keep_frames:]
-                buf["frames"] = keep_frames
-                removed = frames_to_remove
-        return removed
-
     def _decode_branch(
         self,
         extended_features: Tensor,
@@ -541,6 +504,10 @@ class BAFNetPlusStreaming(nn.Module):
         """
         Stream two synchronized audio buffers. Returns an enhanced chunk when available.
 
+        Single-pass forward — encoder + sequence_block + decoder + fusion all see
+        the same (chunk_size + total_lookahead) frames of spec. State updates are
+        limited to chunk_size frames via StateFramesContext.
+
         Args:
             bcs_samples: [T] or [1, T] — BCS input chunk.
             acs_samples: [T] or [1, T] — ACS input chunk (same length as bcs_samples).
@@ -607,50 +574,33 @@ class BAFNetPlusStreaming(nn.Module):
             bcs_spec = self._stft(bcs_chunk)
             acs_spec = self._stft(acs_chunk)
 
-        # Encoder: process both branches within one StateFramesContext
-        _, _, T_spec, _ = bcs_spec.shape
-        valid_frames = min(T_spec, self.chunk_size)
-        with StateFramesContext(None if self.disable_state_guard else valid_frames):
-            bcs_mag, bcs_ts_out, vf_bcs = self._process_encoder(
+        # Single-pass forward: encoder + sequence + decoder + fusion all see
+        # (chunk_size + total_lookahead) frames; state updates limited to chunk_size.
+        with StateFramesContext(None if self.disable_state_guard else self.chunk_size):
+            bcs_mag, bcs_ts_out, _ = self._process_encoder(
                 bcs_spec,
                 self.model.mapping.dense_encoder,
                 self.streaming_tsblocks_mapping,
                 self._tsblock_states_mapping,
             )
-            acs_mag, acs_ts_out, vf_acs = self._process_encoder(
+            acs_mag, acs_ts_out, _ = self._process_encoder(
                 acs_spec,
                 self.model.masking.dense_encoder,
                 self.streaming_tsblocks_masking,
                 self._tsblock_states_masking,
             )
-        assert vf_bcs == vf_acs == valid_frames
 
-        self._buffer_features(bcs_ts_out, bcs_mag, valid_frames, self.bcs_feature_buffer)
-        self._buffer_features(acs_ts_out, acs_mag, valid_frames, self.acs_feature_buffer)
-        self._buffered_frames += valid_frames
-
-        total_needed = self.chunk_size + self.decoder_lookahead
-        if self._buffered_frames < total_needed:
-            self.bcs_input_buffer = self.bcs_input_buffer[self.output_samples_per_chunk :]
-            self.acs_input_buffer = self.acs_input_buffer[self.output_samples_per_chunk :]
-            return None
-
-        bcs_ext_feat, bcs_ext_mag = self._extract_extended(self.bcs_feature_buffer)
-        acs_ext_feat, acs_ext_mag = self._extract_extended(self.acs_feature_buffer)
-
-        # Decoder + fusion: share one StateFramesContext for all stateful decoder/fusion convs
-        with StateFramesContext(None if self.disable_state_guard else self.chunk_size):
             bcs_est_mag, _bcs_est_pha, bcs_com_out = self._decode_branch(
-                bcs_ext_feat,
-                bcs_ext_mag,
+                bcs_ts_out,
+                bcs_mag,
                 self.model.mapping.mask_decoder,
                 self.model.mapping.phase_decoder,
                 infer_type="mapping",
                 return_mask=False,
             )
             acs_est_mag, _acs_est_pha, acs_com_out, acs_mask = self._decode_branch(
-                acs_ext_feat,
-                acs_ext_mag,
+                acs_ts_out,
+                acs_mag,
                 self.model.masking.mask_decoder,
                 self.model.masking.phase_decoder,
                 infer_type="masking",
@@ -669,11 +619,6 @@ class BAFNetPlusStreaming(nn.Module):
                 bcs_com_cal, acs_com_cal = bcs_com_out, acs_com_out
 
             est_mag, est_pha = self._fuse(bcs_com_cal, acs_com_cal, acs_mask)
-
-        # Slide feature buffers (drop consumed chunk_size frames)
-        self._slide_feature_buffer(self.bcs_feature_buffer, self.chunk_size)
-        removed = self._slide_feature_buffer(self.acs_feature_buffer, self.chunk_size)
-        self._buffered_frames -= removed
 
         valid_output = self._manual_istft_ola(est_mag, est_pha)
 
@@ -744,7 +689,10 @@ class BAFNetPlusStreaming(nn.Module):
             center=False,
         )
 
-        # --- Phase 2: Sequential fused model forward ---
+        # --- Phase 2: Sequential single-pass model forward (Fix B 2026-05-11) ---
+        # Each spec slice now spans (chunk_size + total_lookahead) frames; the
+        # encoder + decoder + fusion run in one forward and state updates are
+        # limited to chunk_size via StateFramesContext.
         all_mag: List[Tensor] = []
         all_pha: List[Tensor] = []
 
@@ -752,11 +700,8 @@ class BAFNetPlusStreaming(nn.Module):
             bcs_spec = bcs_batch_com[j : j + 1]
             acs_spec = acs_batch_com[j : j + 1]
 
-            _, _, T_spec, _ = bcs_spec.shape
-            valid_frames = min(T_spec, self.chunk_size)
-
-            with StateFramesContext(None if self.disable_state_guard else valid_frames):
-                bcs_mag, bcs_ts_out, vf_bcs = self._process_encoder(
+            with StateFramesContext(None if self.disable_state_guard else self.chunk_size):
+                bcs_mag, bcs_ts_out, _ = self._process_encoder(
                     bcs_spec,
                     self.model.mapping.dense_encoder,
                     self.streaming_tsblocks_mapping,
@@ -769,28 +714,17 @@ class BAFNetPlusStreaming(nn.Module):
                     self._tsblock_states_masking,
                 )
 
-            self._buffer_features(bcs_ts_out, bcs_mag, vf_bcs, self.bcs_feature_buffer)
-            self._buffer_features(acs_ts_out, acs_mag, vf_bcs, self.acs_feature_buffer)
-            self._buffered_frames += vf_bcs
-
-            if self._buffered_frames < self.chunk_size + self.decoder_lookahead:
-                continue
-
-            bcs_ext_feat, bcs_ext_mag = self._extract_extended(self.bcs_feature_buffer)
-            acs_ext_feat, acs_ext_mag = self._extract_extended(self.acs_feature_buffer)
-
-            with StateFramesContext(None if self.disable_state_guard else self.chunk_size):
                 bcs_est_mag, _, bcs_com_out = self._decode_branch(
-                    bcs_ext_feat,
-                    bcs_ext_mag,
+                    bcs_ts_out,
+                    bcs_mag,
                     self.model.mapping.mask_decoder,
                     self.model.mapping.phase_decoder,
                     infer_type="mapping",
                     return_mask=False,
                 )
                 acs_est_mag, _, acs_com_out, acs_mask = self._decode_branch(
-                    acs_ext_feat,
-                    acs_ext_mag,
+                    acs_ts_out,
+                    acs_mag,
                     self.model.masking.mask_decoder,
                     self.model.masking.phase_decoder,
                     infer_type="masking",
@@ -809,10 +743,6 @@ class BAFNetPlusStreaming(nn.Module):
                     bcs_com_cal, acs_com_cal = bcs_com_out, acs_com_out
 
                 est_mag, est_pha = self._fuse(bcs_com_cal, acs_com_cal, acs_mask)
-
-            self._slide_feature_buffer(self.bcs_feature_buffer, self.chunk_size)
-            removed = self._slide_feature_buffer(self.acs_feature_buffer, self.chunk_size)
-            self._buffered_frames -= removed
 
             all_mag.append(est_mag)
             all_pha.append(est_pha)
