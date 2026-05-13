@@ -141,15 +141,6 @@ if __name__ == "__main__":
     parser.add_argument("--output_dir", type=str, default="samples", help="Output directory for enhanced samples. default is samples")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu", help="Specifies the device (cuda or cpu).")
 
-    # Stateful Convolution options
-    parser.add_argument(
-        "--use_stateful_conv",
-        action="store_true",
-        default=False,
-        help="Use stateful convolutions for streaming inference. "
-             "Eliminates zero-padding discontinuity at chunk boundaries."
-    )
-
     args = parser.parse_args()
     local_out_dir = args.output_dir
 
@@ -164,36 +155,12 @@ if __name__ == "__main__":
     runtime = prepare_enhancement_runtime(args, logger=logger)
     model = runtime.model
 
-    # Apply stateful convolutions if requested
-    if args.use_stateful_conv:
-        from src.models.streaming.converters import (
-            convert_to_stateful,
-            set_streaming_mode,
-            get_stateful_layer_count,
-        )
-
-        logger.info("Applying stateful convolutions...")
-        model = convert_to_stateful(model, verbose=False, inplace=True)
-        model.to(args.device)
-        model.eval()
-        set_streaming_mode(model, True)
-
-        layer_counts = get_stateful_layer_count(model)
-        logger.info(f"Stateful conversion complete: {layer_counts['total']} layers")
-        if layer_counts["StatefulCausalConv1d"] > 0:
-            logger.info(f"  - StatefulCausalConv1d: {layer_counts['StatefulCausalConv1d']}")
-        if layer_counts["StatefulAsymmetricConv2d"] > 0:
-            logger.info(f"  - StatefulAsymmetricConv2d: {layer_counts['StatefulAsymmetricConv2d']}")
-        if layer_counts["StatefulCausalConv2d"] > 0:
-            logger.info(f"  - StatefulCausalConv2d: {layer_counts['StatefulCausalConv2d']}")
-
     tt_loader = runtime.data_loader_list[str(args.snr)]
 
     logger.info(f"Dataset: {args.dataset}")
     logger.info(f"Model: {runtime.model_args.model_class}")
     logger.info(f"Checkpoint: {args.chkpt_dir}")
     logger.info(f"Device: {args.device}")
-    logger.info(f"Stateful conv: {args.use_stateful_conv}")
     logger.info(f"Output directory: {local_out_dir}")
     os.makedirs(local_out_dir, exist_ok=True)
 
