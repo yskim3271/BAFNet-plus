@@ -1664,6 +1664,7 @@ def quantize_bafnetplus_qdq(
     auto_exclude_sensitive: bool = True,
     max_calibration_samples: Optional[int] = None,
     verbose: bool = True,
+    init_overrides: Optional[Dict[str, Any]] = None,
 ) -> ExportResult:
     """Produce the S17 INT8 QDQ asset from the S8 FP32 ONNX.
 
@@ -1814,6 +1815,15 @@ def quantize_bafnetplus_qdq(
     # Apply node-exclusion list (atan2 / softmax / top-level sqrt/pow stay in FP32).
     if exclude_list:
         qnn_config.nodes_to_exclude = list(exclude_list)
+    # Cycle 18b Option β: inject QAT-learned per-tensor (scale, zp) overrides via
+    # ORT's ``TensorQuantOverrides`` extra option. Calibration-derived scales for
+    # any tensor present in ``init_overrides`` are replaced at QDQ-insertion time.
+    if init_overrides:
+        existing = dict(getattr(qnn_config, "extra_options", {}) or {})
+        existing["TensorQuantOverrides"] = init_overrides
+        qnn_config.extra_options = existing
+        if verbose:
+            print(f"  TensorQuantOverrides: {len(init_overrides)} tensor overrides applied")
     quantize(
         model_input=str(preproc_path),
         model_output=str(output_path),
