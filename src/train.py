@@ -246,6 +246,119 @@ def _copy_model_source(model_lib, logger):
         logger.warning(f"Model file not found: {src}")
 
 
+def _build_qat_components(args, model, device, logger):
+    """Build QAT-mode (model, teacher, kd_loss) by wrapping ``model`` via PT2E.
+
+    Returns:
+        (prepared_student, teacher_or_None, kd_loss_or_None,
+         warm_start_summary_or_None) — ``teacher`` and ``kd_loss`` are None
+        when ``args.kd.enabled`` is False (KD can be disabled for ablation).
+    """
+    from src.models.streaming.qat import (
+        KDLoss,
+        prepare_bafnetplus_for_qat,
+        warm_start_from_ptq,
+        QNNQuantizer,
+    )
+    from src.models.streaming.qat.kd import DEFAULT_FEATURE_LAYERS, DEFAULT_WEIGHTS
+
+    qat_cfg = args.qat
+    kd_cfg = getattr(args, "kd", None)
+
+    # Build example inputs matching BAFNet+ forward signature: tuple of two
+    # complex spectrograms shaped [B, F, T, 2]. The PT2E exported FX graph
+    # specializes B to the example batch size (Dim.AUTO collapses internal
+    # ``view(B*F, …)`` reshapes), so ``example_batch_size`` MUST equal the
+    # training ``batch_size`` — otherwise the first batch crashes with a
+    # shape mismatch. T is dynamic (cycle 18a fix in ``prepare.py``).
+    import torch as _torch
+    n_fft = int(getattr(args, "n_fft", 400))
+    freq = n_fft // 2 + 1
+    time_frames = int(getattr(qat_cfg, "example_time_frames", 400))
+    example_batch = getattr(qat_cfg, "example_batch_size", None)
+    if example_batch is None:
+        example_batch = args.batch_size
+    example_batch = int(example_batch)
+    bcs_example = _torch.zeros(example_batch, freq, time_frames, 2, device=device)
+    acs_example = _torch.zeros(example_batch, freq, time_frames, 2, device=device)
+    example_inputs = ((bcs_example, acs_example),)
+    logger.info(f"[QAT] PT2E example_inputs: batch={example_batch}, time_frames={time_frames}")
+
+    quantizer = QNNQuantizer(
+        skip_phase_conv=bool(getattr(qat_cfg, "skip_phase_conv", True)),
+        skip_head=bool(getattr(qat_cfg, "skip_head", True)),
+    )
+    logger.info(f"[QAT] Quantizer config: {quantizer.summary()}")
+
+    prepared_student = prepare_bafnetplus_for_qat(
+        model=model,
+        example_inputs=example_inputs,
+        quantizer=quantizer,
+    )
+    logger.info(
+        f"[QAT] PT2E prep: annotated={len(quantizer.annotated_node_names)} "
+        f"skipped={len(quantizer.skipped_node_names)} (Conv/Linear ops)"
+    )
+
+    warm_start_summary = None
+    ptq_path = getattr(qat_cfg, "ptq_onnx_path", None)
+    if ptq_path:
+        ptq_abs = hydra.utils.to_absolute_path(ptq_path)
+        if os.path.exists(ptq_abs):
+            warm_start_summary = warm_start_from_ptq(
+                prepared_student, ptq_abs,
+                verbose=bool(getattr(qat_cfg, "warm_start_verbose", False)),
+            )
+            logger.info(
+                f"[QAT warm-start] mapping_rate={warm_start_summary['mapping_rate']:.1%} "
+                f"({warm_start_summary['num_matched']}/{warm_start_summary['num_pt_total']} "
+                f"PT fake-quants matched; {len(warm_start_summary['unused_onnx'])} ONNX keys unused)"
+            )
+        else:
+            logger.warning(f"[QAT warm-start] PTQ ONNX not found at {ptq_abs}; skipping warm-start (cold init)")
+
+    teacher = None
+    kd_loss = None
+    if kd_cfg is not None and bool(getattr(kd_cfg, "enabled", False)):
+        teacher_args = kd_cfg.get("teacher_model_args", None)
+        teacher_ckpt = getattr(kd_cfg, "teacher_ckpt", None)
+        if teacher_args is None:
+            # Fallback: re-use the student's model spec (BAFNet+ class + same params).
+            teacher_args = OmegaConf.create({
+                "model_lib": args.model.model_lib,
+                "model_class": args.model.model_class,
+                "param": args.model.param,
+            })
+        teacher_params = OmegaConf.to_container(teacher_args.param, resolve=True)
+        teacher_params.setdefault("load_pretrained_weights", False)
+        teacher = load_model(
+            teacher_args.model_lib, teacher_args.model_class, teacher_params, device
+        )
+        if teacher_ckpt is not None:
+            teacher_ckpt_abs = hydra.utils.to_absolute_path(teacher_ckpt)
+            ckpt_pkg = torch.load(teacher_ckpt_abs, map_location=device, weights_only=False)
+            state_dict = ckpt_pkg["model"] if isinstance(ckpt_pkg, dict) and "model" in ckpt_pkg else ckpt_pkg
+            teacher.load_state_dict(state_dict)
+            logger.info(f"[QAT KD] Teacher loaded from {teacher_ckpt_abs}")
+        else:
+            logger.warning("[QAT KD] No teacher_ckpt; teacher uses freshly-built FP32 weights (likely wrong)")
+        teacher.eval()
+        for p in teacher.parameters():
+            p.requires_grad_(False)
+
+        feature_layers = list(kd_cfg.get("feature_layers", DEFAULT_FEATURE_LAYERS))
+        weights = OmegaConf.to_container(kd_cfg.get("weights", OmegaConf.create(DEFAULT_WEIGHTS)), resolve=True)
+        kd_loss = KDLoss(feature_layers=feature_layers, weights=weights).to(device)
+        hook_hits = kd_loss.register_hooks(prepared_student, teacher)
+        logger.info(
+            f"[QAT KD] Hook hits: student={len(hook_hits['student_hit'])}, "
+            f"teacher={len(hook_hits['teacher_hit'])} (feature-level KD will be sparse "
+            f"on PT2E student — output-level dominates)"
+        )
+
+    return prepared_student, teacher, kd_loss, warm_start_summary
+
+
 def run(args):
     logger = setup_logger("train")
 
@@ -274,19 +387,34 @@ def run(args):
     if args.save_code:
         _copy_model_source(model_lib, logger)
 
+    # QAT mode (cycle 17): training_mode='qat' wraps model via PT2E, drops the
+    # MetricGAN discriminator (CPU batch_pesq bottleneck), and adds self-KD.
+    training_mode = str(getattr(args, "training_mode", "gan")).lower()
+    teacher = None
+    kd_loss = None
+    if training_mode == "qat":
+        logger.info("[Training mode] QAT (PT2E + KD; discriminator dropped)")
+        model, teacher, kd_loss, _ = _build_qat_components(args, model, device, logger)
+        discriminator = None
+    else:
+        logger.info("[Training mode] GAN (PESQ-GAN MetricGANDiscriminator)")
+        discriminator = MetricGANDiscriminator().to(device)
+
     optim_class = _get_optim_class(args.optim)
-    discriminator = MetricGANDiscriminator().to(device)
     optim = _build_optimizer(args, model, optim_class, logger)
-    optim_disc = optim_class(
-        discriminator.parameters(), lr=args.lr,
-        weight_decay=args.weight_decay, betas=args.betas,
-    )
+    if discriminator is not None:
+        optim_disc = optim_class(
+            discriminator.parameters(), lr=args.lr,
+            weight_decay=args.weight_decay, betas=args.betas,
+        )
+    else:
+        optim_disc = None
 
     logger.info(
         f"[Scheduler] Cosine Annealing (warmup={args.warmup_epochs} epochs, eta_min={args.eta_min})"
     )
     scheduler = _build_cosine_warmup_scheduler(optim, args)
-    scheduler_disc = _build_cosine_warmup_scheduler(optim_disc, args)
+    scheduler_disc = _build_cosine_warmup_scheduler(optim_disc, args) if optim_disc is not None else None
 
     dset = args.dset.get("dataset", "TAPS")
     logger.info(f"Dataset selected: {dset}")
@@ -322,6 +450,8 @@ def run(args):
         args=args,
         logger=logger,
         device=device,
+        teacher=teacher,
+        kd_loss=kd_loss,
     )
     solver.train()
     sys.exit(0)

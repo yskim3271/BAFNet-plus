@@ -1,0 +1,90 @@
+# @package _global_
+#
+# BAFNet+ Phase C QAT (cycle 17 scaffolding entry).
+#
+# Mode: PT2E + Full-scope (all Conv/Linear in trunk) + PESQ-GAN dropped +
+# Self-KD against FP32 D1 teacher (results/experiments/bafnetplus_50ms/best.th).
+#
+# Reference: BAFNetPlus/results/profiling/phase_c_qat_plan.md
+#
+# Cycle 17 = scaffolding only; cycle 18 starts the 2-epoch pilot. See the plan
+# for the full 17→21 cycle sequence.
+#
+# The ``@package _global_`` header puts top-level keys (training_mode, qat, kd,
+# kd_weight, fit_steps) at ``cfg.<name>`` instead of ``cfg.model.<name>``, so
+# the training loop can read them directly.
+
+model:
+  model_lib: bafnetplus
+  model_class: BAFNetPlus
+  input_type: acs+bcs
+  param:
+    ablation_mode: full
+    conv_depth: 4
+    conv_channels: 16
+    conv_kernel_size: 7
+    calibration_hidden_channels: 16
+    calibration_depth: 2
+    calibration_kernel_size: 5
+    calibration_max_common_log_gain: 0.5
+    calibration_max_relative_log_gain: 1.0
+    checkpoint_mapping: null
+    checkpoint_masking: null
+
+# Switch the training loop into QAT mode. ``src/train.py`` reads this top-level
+# key; absence / 'gan' keeps the legacy MetricGAN path intact.
+training_mode: qat
+
+qat:
+  scope: full
+  scheme: w8a16  # per-channel symmetric int8 weight + per-tensor affine uint16 activation
+  ptq_onnx_path: results/onnx/bafnetplus_50ms_int8_qdq_trunk_t2.onnx
+  warm_start_verbose: false
+  skip_phase_conv: true
+  skip_head: true
+  example_time_frames: 400
+  # PT2E specializes batch to this value at prepare time — keep equal to the
+  # training ``batch_size``. ``null`` (default) inherits from ``batch_size``.
+  example_batch_size: null
+
+kd:
+  enabled: true
+  teacher_ckpt: results/experiments/bafnetplus_50ms/best.th
+  feature_layers:
+    - mapping.sequence_block.0
+    - mapping.sequence_block.1
+    - mapping.sequence_block.2
+    - mapping.sequence_block.3
+    - masking.sequence_block.0
+    - masking.sequence_block.1
+    - masking.sequence_block.2
+    - masking.sequence_block.3
+  weights:
+    output_mag: 1.0
+    output_pha: 1.0
+    output_com: 1.0
+    feature_uniform: 0.5
+
+# KD vs reconstruction balance — applied to ``kd_dict['total']`` in Solver.
+kd_weight: 1.0
+
+# Optional early-stop after N batches for smoke runs (CPU). Leave null for
+# normal full-epoch training. Smoke command:
+#   python -m src.train +model=bafnetplus_qat +dset=taps fit_steps=2 device=cpu
+fit_steps: null
+
+# Loss balance — drop the MetricGAN ``metric`` term to 0 (no discriminator
+# in QAT mode anyway). Other reconstruction weights match the base recipe.
+loss:
+  magnitude: 0.9
+  phase: 0.3
+  complex: 0.1
+  consistency: 0.1
+  metric: 0.0
+
+# Conservative QAT-friendly optim (base / 10).
+lr: 1e-4
+weight_decay: 0.0
+max_grad_norm: 1.0
+epochs: 20
+warmup_epochs: 2

@@ -47,9 +47,6 @@ run.sh
 docs/**/logs/
 Todo.md
 
-# Private tests
-tests/
-
 # Private results
 results/
 

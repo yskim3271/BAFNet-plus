@@ -33,8 +33,24 @@ python results/track_experiment.py --update
 # Compute receptive field and latency
 python src/compute_rf.py --experiment prk_1117_1 --csv results/experiments.csv
 
-# Streaming inference with LaCoSENet wrapper
-# (see src/models/streaming/lacosenet.py for API details)
+# Streaming inference — PT wrapper / ORT host wrapper (post-2026-05-13 rebuild)
+# - PT streaming: BAFNetPlusStreaming.from_checkpoint('results/experiments/bafnetplus_50ms')
+#   (src/models/streaming/bafnetplus_streaming.py — S6)
+# - FP32 ONNX export: export_bafnetplus_to_onnx_from_checkpoint(...)
+#   (src/models/streaming/onnx/export.py — S8; sidecar JSON schema
+#   's8-bafnetplus-functional-fp32', 190 states, T_export=14)
+# - ORT host wrapper: BAFNetPlusOrtStreaming.from_onnx('results/onnx/bafnetplus_50ms_fp32.onnx')
+#   (src/models/streaming/onnx/ort_wrapper.py — S9; same public API as PT wrapper)
+
+# Full-utterance 3-path eval harness (S10):
+python -m src.analysis.eval_streaming --preset full \
+  --unified-ckpt-dir results/experiments/bafnetplus_50ms \
+  --onnx-artifact results/onnx/bafnetplus_50ms_fp32.onnx \
+  --output-json results/eval_streaming/run.json \
+  --output-markdown results/eval_streaming/run.md
+# Or via the canonical shell wrapper:
+./scripts/eval_streaming.sh full
+./scripts/eval_streaming.sh smoke   # TAPS idx [0] only, LP target 1e-4
 ```
 
 ### Linting and Testing
@@ -106,12 +122,21 @@ def mag_pha_to_complex(mag: Tensor, pha: Tensor) -> Tensor:
 - `src/runtime_common.py`: Shared runtime helpers for evaluation/enhancement CLIs
 - `src/utils.py`: Utility functions
 - `src/models/backbone.py`: Backbone model architecture (BatchNorm2d, CausalConv1d SCA)
-- `src/models/streaming/`: Streaming inference modules
-  - `converters/`: Layer converters (conv, reshape_free)
-  - `layers/`: Stateful layers (stateful_conv, reshape_free, reshape_free_stateful)
-  - `lacosenet.py`: LaCoSENet streaming wrapper (dual-buffer lookahead)
-  - `utils.py`: StateFramesContext, prepare_streaming_model
-  - `cpu_optimizations.py`: BN folding for CPU inference
+- `src/models/streaming/`: Streaming inference modules (post-2026-05-13 rebuild)
+  - `layers/stateful_conv.py`: Stateful `CausalConv1d` / `AsymmetricConv2d` / `CausalConv2d` (S2)
+  - `lookahead.py`: `compute_lookahead(backbone) -> (L_enc, L_dec)` (S2)
+  - `context.py`: `StateFramesContext` thread-local (S2)
+  - `converters.py`: `convert_to_stateful` / `prepare_streaming_model` (S2)
+  - `backbone_streaming.py`: PT streaming single-Backbone wrapper (S3)
+  - `bafnetplus_streaming.py`: PT streaming `BAFNetPlusStreaming` wrapper (S6)
+  - `onnx/functional_stateful.py`: Explicit-state functional conv variants (S2)
+  - `onnx/state_registry.py`: Functional-state collection (S2)
+  - `onnx/backbone_core.py`: `ExportableBackboneCore` single-Backbone export form (S4)
+  - `onnx/bafnetplus_core.py`: `BAFNetPlusCore` (non-streaming, S5) +
+    `ExportableBAFNetPlusCore` (functional-stateful, S8)
+  - `onnx/export.py`: FP32 ONNX export drivers + multi-step verify (S4 + S8)
+  - `onnx/ort_wrapper.py`: `BAFNetPlusOrtStreaming` (S9; FP32 ONNX host wrapper,
+    same public API as the PT wrapper)
 - `results/track_experiment.py`: Experiment tracking and result parser
 
 ### Configuration
@@ -195,12 +220,20 @@ BAFNet-plus/
 │       ├── backbone.py   # Backbone (BatchNorm2d, CausalConv1d SCA)
 │       ├── bafnet.py
 │       ├── discriminator.py  # MetricGAN discriminator
-│       └── streaming/    # Streaming inference
-│           ├── lacosenet.py      # LaCoSENet streaming wrapper
-│           ├── utils.py          # StateFramesContext, model preparation
-│           ├── cpu_optimizations.py  # BN folding
-│           ├── converters/       # Layer converters (conv, reshape_free)
-│           └── layers/           # Stateful layers
+│       └── streaming/    # Streaming inference (rebuilt 2026-05-13)
+│           ├── context.py            # StateFramesContext (S2)
+│           ├── converters.py         # convert_to_stateful, prepare_streaming_model (S2)
+│           ├── lookahead.py          # compute_lookahead (S2)
+│           ├── backbone_streaming.py # PT streaming single-Backbone wrapper (S3)
+│           ├── bafnetplus_streaming.py # PT streaming BAFNet+ wrapper (S6)
+│           ├── layers/stateful_conv.py # StatefulCausalConv1d / AsymmetricConv2d / CausalConv2d (S2)
+│           └── onnx/             # FP32 ONNX export + ORT host wrapper
+│               ├── functional_stateful.py # Explicit-state conv variants (S2)
+│               ├── state_registry.py      # State collection (S2)
+│               ├── backbone_core.py       # ExportableBackboneCore (S4)
+│               ├── bafnetplus_core.py     # BAFNetPlusCore (S5) + ExportableBAFNetPlusCore (S8)
+│               ├── export.py              # ONNX export driver + verify (S4 + S8)
+│               └── ort_wrapper.py         # BAFNetPlusOrtStreaming (S9)
 ├── conf/                  # Hydra configurations
 ├── dataset/               # Dataset file lists
 ├── scripts/               # Experiment scripts
@@ -440,3 +473,39 @@ export CUDA_VISIBLE_DEVICES=""
 - 다음 Stage 착수용 프롬프트는 **파일로 저장하지 말고 세션 응답으로 직접 출력**한다.
 - `docs/review/BAFNETPLUS_STAGE<N>_PROMPT.md` 같은 파일 생성 금지 (사용자가 프롬프트를 복사해 다음 세션에 붙여넣는 용도이므로 파일 불필요).
 - Stage 실행 결과 / 포스트모템은 `docs/review/BAFNETPLUS_PORT_PLAN.md` 같은 상위 계획 문서에 기록하는 것만 허용.
+
+### Host parity 1-utt cycle gating convention (2026-05-16)
+
+Cycle 의사결정용 host parity 는 **1 utt (TAPS idx=0)** 로 진행한다. 기존 5-utt
+"S1 validation list" 는 wiki promotion / deployable verification / 논문 측정
+단계에서만 사용한다 (3-tier 운영).
+
+| Tier | 용도 | utt 수 | `--taps-indices` | 소요 시간 (INT8 QDQ 기준) |
+|---|---|:---:|---|---:|
+| 1 | Cycle gating (의사결정) | **1** | `0` | 약 5 분 |
+| 2 | Wiki promotion (결과 기록) | 5 | `0 1 2 3 4` | 약 25 분 |
+| 3 | Paper / deployable verification | 30+ | full TAPS test split | 수 시간 |
+
+**근거**:
+- 이전 S17~S24 cycle 들의 5-utt `|dRO|` 분포 std 가 좁음 (≤ 0.04). Cycle-decisive
+  차이 (Δ ≥ 0.1) 의 판정에는 1-utt 측정의 noise 가 안전한 마진 안에 있음.
+- idx=0 은 5-utt mean 의 합리적 추정치 — 예: S21 baseline 의 idx=0 `|dRO|` 0.355
+  vs 5-utt mean 0.331 (Δ 0.024, std 0.04 안).
+- 기존 `eval_streaming.sh smoke` preset 의 convention 과 일치 (S10 부터).
+
+**Tier 2 / Tier 3 로 promotion 해야 하는 경우**:
+- Δ `|dRO|` < 0.05 같은 작은 차이의 통계적 유의성 필요 시 → Tier 2 (5 utt)
+- Deployable bound (`|d_PESQ| ≤ 5e-2`) 직전 측정 → Tier 2 또는 Tier 3
+- 논문 측정 (Main Table, Supp) → Tier 3 (full split + multi-seed)
+- Wiki 결과 테이블 기록 직전 → Tier 2 로 재측정 후 기록
+
+**코드/스크립트 정책**:
+- `Android_projects/scripts/parity/check_onnx_parity.py` 의 `--taps-indices` default
+  는 `[0,1,2,3,4]` 그대로 유지 (S11+ canonical contract, downstream tools 의존성
+  존재). 변경하지 않는다.
+- Cycle 작업 시에는 호출 측에서 `--taps-indices 0` 을 **명시적으로 전달**.
+- Wiki promotion / paper 측정 시에는 명시 없이 default 사용 또는 `0 1 2 3 4` 명시.
+
+Cross-ref:
+[wiki § Host parity (current)](../docs/wiki/concepts/android-streaming-deployment.md#host-parity-current)
+의 cycle gating note.

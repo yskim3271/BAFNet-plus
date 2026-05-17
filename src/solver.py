@@ -11,33 +11,44 @@ from .stft import mag_pha_istft, mag_pha_stft
 from .checkpoint import copy_state, swap_state
 from .losses import batch_pesq, phase_losses
 from .utils import LogProgress, pull_metric
-            
+
 
 class Solver(object):
     def __init__(
-        self, 
-        data, 
+        self,
+        data,
         model,
         discriminator,
-        optim, 
+        optim,
         optim_disc,
         scheduler,
         scheduler_disc,
-        args, 
-        logger, 
-        device=None
+        args,
+        logger,
+        device=None,
+        teacher=None,
+        kd_loss=None,
     ):
         # Dataloaders and samplers
         self.tr_loader = data['tr_loader']      # Training DataLoader
         self.va_loader = data['va_loader']      # Validation DataLoader
         self.ev_loader_list = data['ev_loader_list']      # Evaluation DataLoader
-        
+
         self.model = model
         self.discriminator = discriminator
         self.optim = optim
         self.optim_disc = optim_disc
         self.scheduler = scheduler
         self.scheduler_disc = scheduler_disc
+
+        # QAT-mode extras (cycle 17): teacher = frozen FP32 D1 base, kd_loss = KDLoss
+        # instance with hooks already registered. When ``discriminator is None``
+        # the GAN path is fully skipped; when ``kd_loss is not None`` its terms
+        # are added to ``loss_gen``.
+        self.teacher = teacher
+        self.kd_loss = kd_loss
+        self.kd_weight = float(getattr(args, "kd_weight", 1.0))
+        self.fit_steps = getattr(args, "fit_steps", None)
 
         # loss weights
         self.loss = args.loss
@@ -79,9 +90,11 @@ class Solver(object):
         package = {}
         package['model'] = copy_state(self.model.state_dict())
         package['best_state'] = self.best_state
-        package['discriminator'] = copy_state(self.discriminator.state_dict())
+        if self.discriminator is not None:
+            package['discriminator'] = copy_state(self.discriminator.state_dict())
         package['optimizer'] = self.optim.state_dict()
-        package['optimizer_disc'] = self.optim_disc.state_dict()
+        if self.optim_disc is not None:
+            package['optimizer_disc'] = self.optim_disc.state_dict()
         package['scheduler'] = self.scheduler.state_dict() if self.scheduler is not None else None
         package['scheduler_disc'] = self.scheduler_disc.state_dict() if self.scheduler_disc is not None else None
         package['args'] = self.args
@@ -139,10 +152,12 @@ class Solver(object):
                     
             self.model.load_state_dict(model_state)
             self.optim.load_state_dict(optim_state)
-            
-            self.discriminator.load_state_dict(model_disc_state)
-            self.optim_disc.load_state_dict(optim_disc_state)
-            
+
+            if self.discriminator is not None and model_disc_state is not None:
+                self.discriminator.load_state_dict(model_disc_state)
+            if self.optim_disc is not None and optim_disc_state is not None:
+                self.optim_disc.load_state_dict(optim_disc_state)
+
             if self.scheduler is not None and scheduler_state is not None:
                 self.scheduler.load_state_dict(scheduler_state)
             if self.scheduler_disc is not None and scheduler_disc_state is not None:
@@ -242,6 +257,9 @@ class Solver(object):
         name = f"Train | Epoch {epoch + 1}"
 
         logprog = LogProgress(self.logger, data_loader, updates=self.num_prints, name=name)
+        use_discriminator = self.discriminator is not None
+        use_kd = self.kd_loss is not None and self.teacher is not None
+        steps_done = 0
 
         for i, data in enumerate(logprog):
 
@@ -256,42 +274,52 @@ class Solver(object):
             clean_com = clean_com.to(self.device)
             one_labels = torch.ones(clean_mag.shape[0]).to(self.device)
 
+            if use_kd:
+                self.kd_loss.clear()
+                with torch.no_grad():
+                    teacher_mag, teacher_pha, teacher_com = self.teacher(model_input)
+
             clean_mag_hat, clean_pha_hat, clean_com_hat = self.model(model_input)
 
             clean_acs_hat = mag_pha_istft(clean_mag_hat, clean_pha_hat, **self.stft_args)
             clean_mag_hat_recon, clean_pha_hat_recon, clean_com_hat_recon = mag_pha_stft(clean_acs_hat, **self.stft_args)
 
-            # Discriminator step
-            clean_acs_list = list(clean_acs.cpu().numpy())
-            clean_acs_list_hat = list(clean_acs_hat.detach().cpu().numpy())
-            batch_pesq_score = batch_pesq(clean_acs_list, clean_acs_list_hat, workers=self.num_workers)
+            loss_metric_val = 0.0
+            if use_discriminator:
+                # Discriminator step (MetricGAN PESQ-prediction path)
+                clean_acs_list = list(clean_acs.cpu().numpy())
+                clean_acs_list_hat = list(clean_acs_hat.detach().cpu().numpy())
+                batch_pesq_score = batch_pesq(clean_acs_list, clean_acs_list_hat, workers=self.num_workers)
 
-            disc_score_real = self.discriminator(clean_mag.unsqueeze(1), clean_mag.unsqueeze(1))
-            disc_score_fake = self.discriminator(clean_mag.unsqueeze(1), clean_mag_hat_recon.detach().unsqueeze(1))
+                disc_score_real = self.discriminator(clean_mag.unsqueeze(1), clean_mag.unsqueeze(1))
+                disc_score_fake = self.discriminator(clean_mag.unsqueeze(1), clean_mag_hat_recon.detach().unsqueeze(1))
 
-            loss_disc_r = F.mse_loss(one_labels, disc_score_real.flatten())
+                loss_disc_r = F.mse_loss(one_labels, disc_score_real.flatten())
 
-            if batch_pesq_score is not None:
-                loss_disc_g = F.mse_loss(batch_pesq_score.to(self.device), disc_score_fake.flatten())
+                if batch_pesq_score is not None:
+                    loss_disc_g = F.mse_loss(batch_pesq_score.to(self.device), disc_score_fake.flatten())
+                else:
+                    loss_disc_g = 0
+
+                loss_disc = loss_disc_r + loss_disc_g
+
+                self.optim_disc.zero_grad()
+                loss_disc.backward()
+                self.optim_disc.step()
+
+                logprog.append(**{"Disc_Loss": format(loss_disc.item(), "4.5f")})
+
+                disc_score_gen = self.discriminator(clean_mag.unsqueeze(1), clean_mag_hat_recon.unsqueeze(1))
+                loss_metric = F.mse_loss(disc_score_gen.flatten(), one_labels)
+                loss_metric_val = loss_metric.item()
             else:
-                loss_disc_g = 0
+                loss_metric = torch.zeros((), device=clean_mag.device, dtype=clean_mag.dtype)
 
-            loss_disc = loss_disc_r + loss_disc_g
-
-            self.optim_disc.zero_grad()
-            loss_disc.backward()
-            self.optim_disc.step()
-
-            logprog.append(**{"Disc_Loss": format(loss_disc.item(), "4.5f")})
-
-            # Generator losses
+            # Generator losses (reconstruction)
             loss_magnitude = F.mse_loss(clean_mag, clean_mag_hat)
             loss_phase = phase_losses(clean_pha, clean_pha_hat)
             loss_complex = F.mse_loss(clean_com, clean_com_hat) * 2
             loss_consistency = F.mse_loss(clean_com_hat, clean_com_hat_recon) * 2
-
-            disc_score_gen = self.discriminator(clean_mag.unsqueeze(1), clean_mag_hat_recon.unsqueeze(1))
-            loss_metric = F.mse_loss(disc_score_gen.flatten(), one_labels)
 
             loss_gen = loss_metric * self.loss.metric + \
                     loss_complex * self.loss.complex + \
@@ -299,13 +327,22 @@ class Solver(object):
                     loss_magnitude * self.loss.magnitude + \
                     loss_phase * self.loss.phase
 
+            kd_total_val = 0.0
+            if use_kd:
+                kd_dict = self.kd_loss(
+                    student_out=(clean_mag_hat, clean_pha_hat, clean_com_hat),
+                    teacher_out=(teacher_mag, teacher_pha, teacher_com),
+                )
+                loss_gen = loss_gen + self.kd_weight * kd_dict["total"]
+                kd_total_val = kd_dict["total"].item()
+
             # Generator optimizer step
             self.optim.zero_grad()
             loss_gen.backward()
 
             max_grad_norm = getattr(self.args, 'max_grad_norm', 5.0)
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=max_grad_norm)
-            if hasattr(self.discriminator, 'parameters'):
+            if use_discriminator and hasattr(self.discriminator, 'parameters'):
                 torch.nn.utils.clip_grad_norm_(self.discriminator.parameters(), max_norm=max_grad_norm)
 
             self.optim.step()
@@ -316,7 +353,8 @@ class Solver(object):
                 "Phase_Loss": loss_phase.item(),
                 "Complex_Loss": loss_complex.item(),
                 "Consistency_Loss": loss_consistency.item(),
-                "Metric_Loss": loss_metric.item(),
+                "Metric_Loss": loss_metric_val,
+                "KD_Loss": kd_total_val,
                 "Gen_Loss": loss_gen.item(),
             }
 
@@ -327,13 +365,18 @@ class Solver(object):
                         self.writer.add_scalar(f"Train/{k}", v, epoch * len(data_loader) + i)
 
             total_loss += loss_gen.item()
+            steps_done += 1
+            if self.fit_steps is not None and steps_done >= int(self.fit_steps):
+                self.logger.info(f"[fit_steps] Stopping epoch after {steps_done} batches (smoke mode)")
+                break
 
         if self.scheduler is not None:
             self.scheduler.step()
         if self.scheduler_disc is not None:
             self.scheduler_disc.step()
 
-        return total_loss / len(data_loader)
+        denom = steps_done if steps_done > 0 else len(data_loader)
+        return total_loss / denom
 
     def _run_validation(self, epoch):
         """Validate model by computing average PESQ on validation set."""
