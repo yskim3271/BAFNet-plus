@@ -25,8 +25,10 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+import numpy as np
 import torch
 import torch.nn as nn
+from onnxruntime.quantization import QuantType
 
 logger = logging.getLogger(__name__)
 
@@ -62,26 +64,39 @@ def extract_qat_scales(qat_model: nn.Module) -> Dict[str, Dict[str, Any]]:
 
 # -------------------------------------------- PT→ONNX tensor-name resolution
 
-_DTYPE_TO_QUANT_TYPE: Dict[torch.dtype, str] = {
-    torch.int8: "QInt8",
-    torch.uint8: "QUInt8",
-    torch.int16: "QInt16",
-    torch.uint16: "QUInt16",
+_DTYPE_TO_QUANT_TYPE: Dict[torch.dtype, QuantType] = {
+    torch.int8: QuantType.QInt8,
+    torch.uint8: QuantType.QUInt8,
+    torch.int16: QuantType.QInt16,
+    torch.uint16: QuantType.QUInt16,
+}
+
+_QUANT_TYPE_TO_NP_DTYPE: Dict[QuantType, Any] = {
+    QuantType.QInt8: np.int8,
+    QuantType.QUInt8: np.uint8,
+    QuantType.QInt16: np.int16,
+    QuantType.QUInt16: np.uint16,
 }
 
 
 def _build_override_for_tensor(
     info: Dict[str, Any],
     *,
-    fallback_quant_type: str = "QUInt16",
-) -> Optional[Dict[str, Any]]:
+    fallback_quant_type: QuantType = QuantType.QUInt16,
+) -> Optional[List[Dict[str, Any]]]:
     """Convert one ``extract_qat_scales`` entry into an ORT TensorQuantOverrides
-    sub-dict (the inner dict; caller wraps it in a 1-element list).
+    *list* (the value that gets stored as ``overrides[tensor_name]``).
+
+    Per-tensor → 1-element list with scalar scale/zp.
+    Per-channel → C-element list, each entry holding one channel's scalar
+    scale/zp + shared ``axis`` (ORT's
+    ``_calc_initializer_quant_params`` iterates this list per channel).
 
     Returns ``None`` if the entry can't be serialized (unsupported dtype).
     """
     dtype = info.get("dtype")
     quant_type = _DTYPE_TO_QUANT_TYPE.get(dtype, fallback_quant_type)
+    zp_np_dtype = _QUANT_TYPE_TO_NP_DTYPE[quant_type]
     scale = info["scale"]
     zp = info["zero_point"]
 
@@ -91,23 +106,35 @@ def _build_override_for_tensor(
     # decision: symmetric quant produces zp=0 (signed) or zp=2**(b-1)
     # (unsigned), asymmetric produces a fitted zp. We drop `symmetric` and
     # let ORT consume the explicit values.
+    #
+    # ORT 1.26+ also requires numpy-array scale/zp (``.squeeze()`` is called
+    # in QDQQuantizer.calc_quant_params) and the per-channel override format
+    # to be one dict per channel (cycle 18b-2 fixes).
 
     if scale.ndim == 0 or scale.numel() == 1:
-        # Per-tensor.
-        return {
+        s_val = float(scale.item() if scale.ndim == 0 else scale.flatten()[0].item())
+        zp_val = int(zp.item() if zp.ndim == 0 else zp.flatten()[0].item())
+        return [{
             "quant_type": quant_type,
-            "scale": float(scale.item() if scale.ndim == 0 else scale.flatten()[0].item()),
-            "zero_point": int(zp.item() if zp.ndim == 0 else zp.flatten()[0].item()),
-        }
+            "scale": np.array(s_val, dtype=np.float32),
+            "zero_point": np.array(zp_val, dtype=zp_np_dtype),
+        }]
 
-    # Per-channel — keep as plain lists for JSON-friendly transport into ORT.
     ch_axis = info.get("ch_axis")
-    return {
-        "quant_type": quant_type,
-        "scale": scale.detach().cpu().float().numpy().tolist(),
-        "zero_point": zp.detach().cpu().to(torch.int64).numpy().tolist(),
-        "axis": int(ch_axis) if ch_axis is not None else 0,
-    }
+    axis = int(ch_axis) if ch_axis is not None and int(ch_axis) >= 0 else 0
+    scale_np = scale.detach().cpu().float().numpy().astype(np.float32).reshape(-1)
+    zp_np = zp.detach().cpu().numpy().astype(zp_np_dtype).reshape(-1)
+    if scale_np.shape != zp_np.shape:
+        return None
+    return [
+        {
+            "quant_type": quant_type,
+            "scale": np.array(float(scale_np[c]), dtype=np.float32),
+            "zero_point": np.array(int(zp_np[c]), dtype=zp_np_dtype),
+            "axis": axis,
+        }
+        for c in range(scale_np.shape[0])
+    ]
 
 
 def build_init_overrides_from_qat(
@@ -154,13 +181,13 @@ def build_init_overrides_from_qat(
         if candidate is None:
             unmatched_pt.append(pt_path)
             continue
-        sub = _build_override_for_tensor(info)
-        if sub is None:
+        sub_list = _build_override_for_tensor(info)
+        if sub_list is None:
             unmatched_pt.append(pt_path)
             continue
         # If multiple PT fake-quants map to the same ONNX key (graph branches
         # sharing an activation), keep the first (deterministic).
-        overrides.setdefault(candidate, [sub])
+        overrides.setdefault(candidate, sub_list)
         matched[pt_path] = candidate
         used_onnx.add(candidate)
 

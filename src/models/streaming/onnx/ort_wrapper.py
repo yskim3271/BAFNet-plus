@@ -978,6 +978,7 @@ _HEAD_ACCEPTED_SCHEMAS = (
 )
 _COMBINED_ACCEPTED_SCHEMAS = (
     "s21-bafnetplus-split-v1",
+    "s21-bafnetplus-split-v1+qat-pilot",
 )
 
 
