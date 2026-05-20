@@ -25,6 +25,10 @@ lightning_logs/
 *.out
 *.err
 
+# Scratch and profiling output
+tmp/
+onnxruntime_profile__*.json
+
 
 # Don't Change Below This Line (Private)
 # Temporary inference/evaluation outputs
