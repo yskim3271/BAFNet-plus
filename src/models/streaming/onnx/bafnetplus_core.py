@@ -728,6 +728,14 @@ class ExportableBAFNetPlusCore(nn.Module):
         calibration_max_relative_log_gain: float,
         n_fft: int,
         phase_output_mode: str = "atan2",
+        emit_debug_alpha: bool = False,
+        alpha_clamp_threshold: Optional[float] = None,
+        alpha_safe_sqrt: bool = False,
+        emit_debug_mapping_decoder: bool = False,
+        emit_debug_mapping_tsblock_internals: bool = False,
+        emit_debug_mapping_tsblock_boundaries: bool = False,
+        phase_normalization_epsilon: float = 1e-8,
+        phase_normalization_squared_epsilon: float = 1e-16,
     ) -> None:
         super().__init__()
         if mapping_core.infer_type != "mapping":
@@ -781,6 +789,114 @@ class ExportableBAFNetPlusCore(nn.Module):
         self.calibration_max_relative_log_gain: float = float(calibration_max_relative_log_gain)
         self.n_fft: int = int(n_fft)
         self.phase_output_mode: str = phase_output_mode
+        # Debug-only: emit the first alpha conv block's intermediate tensors
+        # (alpha_features, conv0_conv, conv0_bn, conv0_prelu) as extra graph
+        # outputs for cycle 18b-8 sub-op root-cause forensics. Production path
+        # (False) is unaffected — the production forward / output_names / state
+        # contract are bit-exact when this flag is False.
+        self.emit_debug_alpha: bool = bool(emit_debug_alpha)
+        # Cycle 18b-9 alpha-feature numerical workaround knobs (both default
+        # off → bit-identical to production arithmetic; FP32 host PESQ
+        # unchanged). When set, they target the rare FP16-overflow spots in
+        # the module-level ``_build_alpha_features`` that the cycle 18b-8
+        # forensic identified as the root sub-op of the catastrophic mapping-
+        # decoder cascade on device idx 0 (PESQ 1.0276 → ≤1.0 noise).
+        self.alpha_clamp_threshold: Optional[float] = (
+            None if alpha_clamp_threshold is None else float(alpha_clamp_threshold)
+        )
+        self.alpha_safe_sqrt: bool = bool(alpha_safe_sqrt)
+        # Cycle 18b-10 forensic: capture 9 mapping-branch decoder intermediate
+        # outputs (sequence_block output + 4 mask_decoder dense_block iter
+        # outputs + 4 phase_decoder dense_block iter outputs). Production
+        # path (False) is unaffected — the production forward / output_names
+        # / state contract are bit-exact when this flag is False. Mutually
+        # exclusive with emit_debug_alpha and alpha workaround knobs.
+        if emit_debug_mapping_decoder and self.emit_debug_alpha:
+            raise ValueError(
+                "emit_debug_mapping_decoder and emit_debug_alpha are mutually exclusive"
+            )
+        if emit_debug_mapping_decoder and (
+            self.alpha_clamp_threshold is not None or self.alpha_safe_sqrt
+        ):
+            raise ValueError(
+                "emit_debug_mapping_decoder is incompatible with alpha workaround "
+                "options (alpha_clamp_threshold / alpha_safe_sqrt); pick one."
+            )
+        if emit_debug_mapping_decoder and not mapping_core.emit_debug_decoders:
+            raise ValueError(
+                "emit_debug_mapping_decoder=True requires mapping_core.emit_debug_decoders=True; "
+                "use ExportableBAFNetPlusCore.from_bafnetplus to plumb the flag correctly."
+            )
+        self.emit_debug_mapping_decoder: bool = bool(emit_debug_mapping_decoder)
+        # Cycle 18b-11 Tier 1A forensic: capture 8 mapping-branch
+        # TSBlock-internal intermediate outputs from the LAST TSBlock's
+        # freq_stage (SimpleGate + SCA multiply + 4× GPKFFN attn*conv +
+        # GPKFFN proj_last + final state_84 input). Mutually exclusive
+        # with emit_debug_alpha, emit_debug_mapping_decoder, and alpha
+        # workaround knobs (one debug variant per exported ONNX).
+        if emit_debug_mapping_tsblock_internals and self.emit_debug_alpha:
+            raise ValueError(
+                "emit_debug_mapping_tsblock_internals and emit_debug_alpha are mutually exclusive"
+            )
+        if emit_debug_mapping_tsblock_internals and emit_debug_mapping_decoder:
+            raise ValueError(
+                "emit_debug_mapping_tsblock_internals and emit_debug_mapping_decoder are mutually exclusive"
+            )
+        if emit_debug_mapping_tsblock_internals and (
+            self.alpha_clamp_threshold is not None or self.alpha_safe_sqrt
+        ):
+            raise ValueError(
+                "emit_debug_mapping_tsblock_internals is incompatible with alpha workaround "
+                "options (alpha_clamp_threshold / alpha_safe_sqrt); pick one."
+            )
+        if emit_debug_mapping_tsblock_internals and not mapping_core.emit_debug_tsblock_internals:
+            raise ValueError(
+                "emit_debug_mapping_tsblock_internals=True requires "
+                "mapping_core.emit_debug_tsblock_internals=True; use "
+                "ExportableBAFNetPlusCore.from_bafnetplus to plumb the flag correctly."
+            )
+        self.emit_debug_mapping_tsblock_internals: bool = bool(emit_debug_mapping_tsblock_internals)
+        # Cycle 18b-12 Track (v) forensic: capture one mapping-branch
+        # output per TSBlock (boundary-only — no intra-block code touched).
+        # For the 50ms BAFNet+ recipe this is 4 outputs. Mutually
+        # exclusive with all other debug + workaround variants (one debug
+        # variant per exported ONNX).
+        if emit_debug_mapping_tsblock_boundaries and self.emit_debug_alpha:
+            raise ValueError(
+                "emit_debug_mapping_tsblock_boundaries and emit_debug_alpha are mutually exclusive"
+            )
+        if emit_debug_mapping_tsblock_boundaries and emit_debug_mapping_decoder:
+            raise ValueError(
+                "emit_debug_mapping_tsblock_boundaries and emit_debug_mapping_decoder are mutually exclusive"
+            )
+        if emit_debug_mapping_tsblock_boundaries and emit_debug_mapping_tsblock_internals:
+            raise ValueError(
+                "emit_debug_mapping_tsblock_boundaries and emit_debug_mapping_tsblock_internals are mutually exclusive"
+            )
+        if emit_debug_mapping_tsblock_boundaries and (
+            self.alpha_clamp_threshold is not None or self.alpha_safe_sqrt
+        ):
+            raise ValueError(
+                "emit_debug_mapping_tsblock_boundaries is incompatible with alpha workaround "
+                "options (alpha_clamp_threshold / alpha_safe_sqrt); pick one."
+            )
+        if emit_debug_mapping_tsblock_boundaries and not mapping_core.emit_debug_tsblock_boundaries:
+            raise ValueError(
+                "emit_debug_mapping_tsblock_boundaries=True requires "
+                "mapping_core.emit_debug_tsblock_boundaries=True; use "
+                "ExportableBAFNetPlusCore.from_bafnetplus to plumb the flag correctly."
+            )
+        self.emit_debug_mapping_tsblock_boundaries: bool = bool(emit_debug_mapping_tsblock_boundaries)
+        # Cycle 18b-11 Tier 1B FP16-safe epsilon: bias and squared-floor
+        # epsilons used inside ``_phase_components_to_complex``. Defaults
+        # match the cycle 18b-3 production arithmetic (1e-8 / 1e-16); when
+        # raised to FP16-safe values (e.g. 1e-3 / 1e-6) the export-time
+        # graph avoids the FP16 ``flush-to-zero → 0/0 → NaN/inf`` corner
+        # that Codex identified as the real cause of the cycle 18b-8 alpha
+        # 2/8442 nonfinite spots. Training/host-eval paths are untouched
+        # (this only affects ``ExportableBAFNetPlusCore._run_branch``).
+        self.phase_normalization_epsilon: float = float(phase_normalization_epsilon)
+        self.phase_normalization_squared_epsilon: float = float(phase_normalization_squared_epsilon)
 
         # Collect functional stateful modules in registration (DFS) order for state routing
         # + naming. Calibration first, then alpha — matches the frozen state-name order.
@@ -813,6 +929,14 @@ class ExportableBAFNetPlusCore(nn.Module):
         model: BAFNetPlus,
         *,
         phase_output_mode: str = "atan2",
+        emit_debug_alpha: bool = False,
+        alpha_clamp_threshold: Optional[float] = None,
+        alpha_safe_sqrt: bool = False,
+        emit_debug_mapping_decoder: bool = False,
+        emit_debug_mapping_tsblock_internals: bool = False,
+        emit_debug_mapping_tsblock_boundaries: bool = False,
+        phase_normalization_epsilon: float = 1e-8,
+        phase_normalization_squared_epsilon: float = 1e-16,
     ) -> "ExportableBAFNetPlusCore":
         """Build a functional-stateful exportable core from a :class:`BAFNetPlus`.
 
@@ -857,6 +981,9 @@ class ExportableBAFNetPlusCore(nn.Module):
         mapping_core = ExportableBackboneCore.from_backbone(
             model.mapping,
             phase_output_mode=phase_output_mode,
+            emit_debug_decoders=emit_debug_mapping_decoder,
+            emit_debug_tsblock_internals=emit_debug_mapping_tsblock_internals,
+            emit_debug_tsblock_boundaries=emit_debug_mapping_tsblock_boundaries,
         )
         masking_core = ExportableBackboneCore.from_backbone(
             model.masking,
@@ -902,6 +1029,14 @@ class ExportableBAFNetPlusCore(nn.Module):
             calibration_max_relative_log_gain=model.calibration_max_relative_log_gain,
             n_fft=n_fft,
             phase_output_mode=phase_output_mode,
+            emit_debug_alpha=emit_debug_alpha,
+            alpha_clamp_threshold=alpha_clamp_threshold,
+            alpha_safe_sqrt=alpha_safe_sqrt,
+            emit_debug_mapping_decoder=emit_debug_mapping_decoder,
+            emit_debug_mapping_tsblock_internals=emit_debug_mapping_tsblock_internals,
+            emit_debug_mapping_tsblock_boundaries=emit_debug_mapping_tsblock_boundaries,
+            phase_normalization_epsilon=phase_normalization_epsilon,
+            phase_normalization_squared_epsilon=phase_normalization_squared_epsilon,
         )
 
     # ------------------------------------------------------------- state counts
@@ -1009,8 +1144,102 @@ class ExportableBAFNetPlusCore(nn.Module):
         """
         nexts = [f"next_{n}" for n in self.get_state_names()]
         if self.phase_output_mode == "complex":
-            return ["est_mag", "phase_real", "phase_imag"] + nexts
-        return ["est_mag", "est_pha", "est_com"] + nexts
+            base = ["est_mag", "phase_real", "phase_imag"] + nexts
+        else:
+            base = ["est_mag", "est_pha", "est_com"] + nexts
+        if self.emit_debug_mapping_decoder:
+            base = base + self.debug_mapping_decoder_output_names()
+        if self.emit_debug_mapping_tsblock_internals:
+            base = base + self.debug_mapping_tsblock_output_names()
+        if self.emit_debug_mapping_tsblock_boundaries:
+            base = base + self.debug_mapping_tsblock_boundary_output_names()
+        if self.emit_debug_alpha:
+            base = base + self.debug_alpha_output_names()
+        return base
+
+    def debug_mapping_tsblock_boundary_output_names(self) -> List[str]:
+        """Names of the cycle 18b-12 Track (v) mapping-branch TSBlock
+        boundary debug outputs (graph order).
+
+        These trail the production outputs when
+        :attr:`emit_debug_mapping_tsblock_boundaries` is True; they are
+        absent from the graph when the flag is False. The captures come
+        from the **mapping branch** only (the masking branch is
+        instrumentation-free in this variant). Names follow the cycle
+        18b-10 ``debug_mapping_`` convention by stripping the
+        ``debug_`` prefix from the backbone-level
+        :meth:`ExportableBackboneCore.debug_tsblock_boundary_output_names`
+        and replacing it with ``debug_mapping_``.
+        """
+        names: List[str] = []
+        for n in self.mapping_core.debug_tsblock_boundary_output_names():
+            if n.startswith("debug_"):
+                names.append("debug_mapping_" + n[len("debug_"):])
+            else:
+                names.append("debug_mapping_" + n)
+        return names
+
+    def debug_mapping_tsblock_output_names(self) -> List[str]:
+        """Names of the cycle 18b-11 Tier 1A mapping-branch TSBlock-internal
+        debug outputs (in graph order).
+
+        These trail the production outputs when
+        :attr:`emit_debug_mapping_tsblock_internals` is True; they are
+        absent from the graph when the flag is False. The 8 captures come
+        from the **mapping branch** only — the masking branch is
+        instrumentation-free in this variant. Names follow the cycle
+        18b-10 ``debug_mapping_`` convention by stripping the
+        ``debug_`` prefix from the backbone-level
+        :meth:`ExportableBackboneCore.debug_tsblock_output_names` and
+        replacing it with ``debug_mapping_``.
+        """
+        names: List[str] = []
+        for n in self.mapping_core.debug_tsblock_output_names():
+            if n.startswith("debug_"):
+                names.append("debug_mapping_" + n[len("debug_"):])
+            else:
+                names.append("debug_mapping_" + n)
+        return names
+
+    def debug_mapping_decoder_output_names(self) -> List[str]:
+        """Names of the cycle 18b-10 mapping-decoder debug outputs (in graph order).
+
+        These trail the production outputs (``est_mag/phase_real/phase_imag/next_*``
+        or atan2 equivalent) when ``emit_debug_mapping_decoder=True``; they
+        are absent from the graph when the flag is False (production path).
+        The 9 captures come from the **mapping branch only** (the cycle 18b-7B
+        Scenario C cascade hotspot — mapping states 84-91 with first
+        divergence at step 4 for idx 0).
+
+        Order mirrors :meth:`ExportableBackboneCore.debug_decoder_output_names`
+        with a ``debug_mapping_`` prefix to disambiguate from the never-
+        captured masking branch.
+        """
+        return [
+            "debug_mapping_seq_block_out",
+            "debug_mapping_mask_dense_0",
+            "debug_mapping_mask_dense_1",
+            "debug_mapping_mask_dense_2",
+            "debug_mapping_mask_dense_3",
+            "debug_mapping_phase_dense_0",
+            "debug_mapping_phase_dense_1",
+            "debug_mapping_phase_dense_2",
+            "debug_mapping_phase_dense_3",
+        ]
+
+    def debug_alpha_output_names(self) -> List[str]:
+        """Names of the cycle 18b-8 debug intermediate outputs (in graph order).
+
+        These trail the production outputs (``est_mag/phase_real/phase_imag/next_*``
+        or atan2 equivalent) when ``emit_debug_alpha=True``; they are absent
+        from the graph when the flag is False (production path).
+        """
+        return [
+            "debug_alpha_features",
+            "debug_alpha_conv0_conv",
+            "debug_alpha_conv0_bn",
+            "debug_alpha_conv0_prelu",
+        ]
 
     # ---------------------------------------------------------------- init shapes
     def init_states(
@@ -1241,10 +1470,10 @@ class ExportableBAFNetPlusCore(nn.Module):
         # by 1 ULP and propagates through the calibration / alpha softmax
         # blend; the explicit mask closes that drift at the source. Mapping
         # branch keeps the 3-output path (bcs_mask is never consumed).
-        bcs_est_mag, bcs_est_com, _bcs_mask, map_next_states = self._run_branch(
+        bcs_est_mag, bcs_est_com, _bcs_mask, map_next_states, map_debug_outs = self._run_branch(
             self.mapping_core, bcs_mag, bcs_pha, map_states, expose_mask=False
         )
-        acs_est_mag, acs_est_com, acs_mask, mask_next_states = self._run_branch(
+        acs_est_mag, acs_est_com, acs_mask, mask_next_states, _mask_debug_outs = self._run_branch(
             self.masking_core, acs_mag, acs_pha, mask_states, expose_mask=True
         )
         # acs_mask is non-None here because expose_mask=True; the explicit
@@ -1280,8 +1509,22 @@ class ExportableBAFNetPlusCore(nn.Module):
         if self.mask_only_alpha:
             alpha = acs_mask.unsqueeze(1).transpose(2, 3)  # [B, 1, T, F]
         else:
-            alpha = _build_alpha_features(bcs_com_fused, acs_com_fused, acs_mask)
-        alpha = self._forward_alpha_convblocks(alpha, alpha_iter)
+            alpha = _build_alpha_features(
+                bcs_com_fused,
+                acs_com_fused,
+                acs_mask,
+                clamp_threshold=self.alpha_clamp_threshold,
+                safe_sqrt=self.alpha_safe_sqrt,
+            )
+        debug_alpha_outputs: List[Tensor] = []
+        if self.emit_debug_alpha:
+            # Cycle 18b-8 forensic: capture alpha-stack input + first conv block's
+            # 3 sub-outputs (conv, BN, PReLU) for sub-op divergence bisection.
+            debug_alpha_outputs.append(alpha)
+            alpha, conv0_captures = self._forward_alpha_convblocks_with_debug(alpha, alpha_iter)
+            debug_alpha_outputs.extend(conv0_captures)
+        else:
+            alpha = self._forward_alpha_convblocks(alpha, alpha_iter)
         alpha = self.alpha_out(alpha)
         alpha = alpha.transpose(2, 3)
         alpha = torch.softmax(alpha, dim=1)
@@ -1301,6 +1544,23 @@ class ExportableBAFNetPlusCore(nn.Module):
             list(map_next_states) + list(mask_next_states) + list(cal_iter.next_states) + list(alpha_iter.next_states)
         )
 
+        # Trailing slice order matches :meth:`output_names`:
+        # 1) cycle 18b-10 mapping decoder captures (9) when enabled, then
+        # 2) cycle 18b-11 Tier 1A mapping-branch tsblock internals (8)
+        #    when enabled, then 3) cycle 18b-8 alpha captures (4) when
+        #    enabled. The mapping-branch flags are mutually exclusive with
+        #    each other and with the alpha flag at __init__ time, so at
+        #    most one trailing block from the mapping branch is non-empty.
+        trailing_debug: List[Tensor] = []
+        if self.emit_debug_mapping_decoder:
+            trailing_debug.extend(map_debug_outs)
+        if self.emit_debug_mapping_tsblock_internals:
+            trailing_debug.extend(map_debug_outs)
+        if self.emit_debug_mapping_tsblock_boundaries:
+            trailing_debug.extend(map_debug_outs)
+        if self.emit_debug_alpha:
+            trailing_debug.extend(debug_alpha_outputs)
+
         if self.phase_output_mode == "complex":
             # S20 atan2-free output: emit fused complex components directly.
             # est_mag uses the same sqrt formula complex_to_mag_pha would use
@@ -1309,9 +1569,13 @@ class ExportableBAFNetPlusCore(nn.Module):
             fused_real = est_com[..., 0]
             fused_imag = est_com[..., 1]
             est_mag = torch.sqrt(fused_real**2 + fused_imag**2 + 1e-8)
+            if trailing_debug:
+                return (est_mag, fused_real, fused_imag) + tuple(all_next_states) + tuple(trailing_debug)
             return (est_mag, fused_real, fused_imag) + tuple(all_next_states)
 
         est_mag, est_pha = complex_to_mag_pha(est_com)
+        if trailing_debug:
+            return (est_mag, est_pha, est_com) + tuple(all_next_states) + tuple(trailing_debug)
         return (est_mag, est_pha, est_com) + tuple(all_next_states)
 
     def _run_branch(
@@ -1322,17 +1586,18 @@ class ExportableBAFNetPlusCore(nn.Module):
         prev_states: Tuple[Tensor, ...],
         *,
         expose_mask: bool = False,
-    ) -> Tuple[Tensor, Tensor, Optional[Tensor], List[Tensor]]:
+    ) -> Tuple[Tensor, Tensor, Optional[Tensor], List[Tensor], List[Tensor]]:
         """Run one branch core with the supplied prev-states; return
-        ``(est_mag, est_com, raw_mask_or_None, next_states_list)``.
+        ``(est_mag, est_com, raw_mask_or_None, next_states_list, debug_outs_list)``.
 
         Handles both ``phase_output_mode`` settings of the underlying core:
 
         - ``atan2``: backbone returns ``(est_mag, est_pha, est_com,
-          *next_states)`` — we take ``est_mag`` and ``est_com`` directly.
+          *next_states[, *debug_outs])`` — we take ``est_mag`` and ``est_com``
+          directly.
         - ``complex`` (S20 atan2-free): backbone returns ``(est_mag,
-          phase_real, phase_imag, *next_states)`` — we reconstruct ``est_com``
-          via the algebraic identity
+          phase_real, phase_imag, *next_states[, *debug_outs])`` — we
+          reconstruct ``est_com`` via the algebraic identity
           ``mag_pha_to_complex(mag, atan2(im+eps, re+eps))
           = mag * (re+eps, im+eps) / sqrt((re+eps)^2 + (im+eps)^2)``,
           keeping ``atan2`` OUT of the per-branch graph compute. The fused
@@ -1345,26 +1610,41 @@ class ExportableBAFNetPlusCore(nn.Module):
         is returned alongside ``est_mag`` / ``est_com``. The outer
         :meth:`forward` uses this on the masking branch to skip the
         ``acs_mask = est_mag / mag`` recovery and its (a*b)/a 1-ULP drift.
+
+        ``debug_outs_list`` is empty unless ``core.emit_debug_decoders`` is
+        True (cycle 18b-10 forensic). The outer :meth:`forward` only sets
+        this flag on the mapping branch, so the masking branch always
+        returns an empty list.
         """
+        n_extra_debug = 0
+        if getattr(core, "emit_debug_decoders", False):
+            n_extra_debug += len(core.debug_decoder_output_names())
+        if getattr(core, "emit_debug_tsblock_internals", False):
+            n_extra_debug += len(core.debug_tsblock_output_names())
+        if getattr(core, "emit_debug_tsblock_boundaries", False):
+            n_extra_debug += len(core.debug_tsblock_boundary_output_names())
         if expose_mask:
             outs = core.forward_with_mask(mag, pha, *prev_states)
-            est_mag = outs[0]
-            if core.phase_output_mode == "complex":
-                est_com = _phase_components_to_complex(est_mag, outs[1], outs[2])
-            else:
-                est_com = outs[2]
-            mask = outs[3]
-            next_states = list(outs[4:])
-            return est_mag, est_com, mask, next_states
-
-        outs = core(mag, pha, *prev_states)
+            n_prefix = 4  # est_mag, b, c, mask
+        else:
+            outs = core(mag, pha, *prev_states)
+            n_prefix = 3  # est_mag, b, c
         est_mag = outs[0]
         if core.phase_output_mode == "complex":
-            est_com = _phase_components_to_complex(est_mag, outs[1], outs[2])
+            est_com = _phase_components_to_complex(
+                est_mag,
+                outs[1],
+                outs[2],
+                phase_normalization_epsilon=self.phase_normalization_epsilon,
+                phase_normalization_squared_epsilon=self.phase_normalization_squared_epsilon,
+            )
         else:
             est_com = outs[2]
-        next_states = list(outs[3:])
-        return est_mag, est_com, None, next_states
+        mask = outs[3] if expose_mask else None
+        state_end = n_prefix + core.num_states
+        next_states = list(outs[n_prefix:state_end])
+        debug_outs = list(outs[state_end : state_end + n_extra_debug])
+        return est_mag, est_com, mask, next_states, debug_outs
 
     def _forward_calibration_encoder(self, x: Tensor, state_iter: StateIterator) -> Tensor:
         """Run the calibration encoder with functional state routing.
@@ -1399,6 +1679,37 @@ class ExportableBAFNetPlusCore(nn.Module):
                 else:
                     x = layer(x)
         return x
+
+    def _forward_alpha_convblocks_with_debug(
+        self,
+        x: Tensor,
+        state_iter: StateIterator,
+    ) -> Tuple[Tensor, List[Tensor]]:
+        """Cycle 18b-8 forensic variant: capture the first block's 3 sub-outputs.
+
+        Identical algebra to :meth:`_forward_alpha_convblocks` (same state
+        routing, same per-layer call order, same tensor values), but records
+        the first block's intra-Sequential outputs ``[conv_out, bn_out,
+        prelu_out]`` for sub-op divergence bisection. Used only when
+        :attr:`emit_debug_alpha` is True.
+
+        Returns:
+            ``(final_x, [conv0_conv_out, conv0_bn_out, conv0_prelu_out])`` —
+            the final tensor matches what :meth:`_forward_alpha_convblocks`
+            would return; the captures are the first block's 3 intermediates
+            in layer order.
+        """
+        captures: List[Tensor] = []
+        for i, block in enumerate(self.alpha_convblocks):
+            inner = cast(nn.Sequential, block)
+            for layer in inner:
+                if isinstance(layer, FunctionalStatefulCausalConv2d):
+                    x = state_iter.run_layer(layer, x, state_frames=self.state_frames_for_update)
+                else:
+                    x = layer(x)
+                if i == 0:
+                    captures.append(x)
+        return x, captures
 
     def __repr__(self) -> str:
         return (
@@ -2214,6 +2525,9 @@ def _phase_components_to_complex(
     mag: Tensor,
     phase_real: Tensor,
     phase_imag: Tensor,
+    *,
+    phase_normalization_epsilon: float = 1e-8,
+    phase_normalization_squared_epsilon: float = 1e-16,
 ) -> Tensor:
     """Reconstruct a complex spectrogram from magnitude + raw phase components.
 
@@ -2230,21 +2544,40 @@ def _phase_components_to_complex(
     complex spectrogram is bit-equivalent (FP32, libm precision) to the
     atan2-mode reconstruction.
 
+    Cycle 18b-11 Tier 1B: the two epsilons are exposed as keyword args so
+    callers (the S8 :class:`ExportableBAFNetPlusCore`) can substitute
+    FP16-safe values (e.g. ``1e-3`` / ``1e-6``) to avoid the
+    ``flush-to-zero → 0/0 → NaN/inf`` corner that Codex identified as the
+    real cause of the cycle 18b-8 alpha 2/8442 nonfinite spots. Defaults
+    are preserved so the S5 :class:`BAFNetPlusCore` reference path and
+    any other un-instrumented caller stay bit-identical to the cycle
+    18b-3 production arithmetic. FP16 reference:
+    ``min_normal ≈ 6.10e-5``, ``min_subnormal ≈ 5.96e-8``; ``1e-8`` is at
+    subnormal scale and ``1e-16`` flushes to 0 — both unsafe on device.
+
     Args:
         mag: ``[B, F, T]`` est_mag from the per-branch backbone.
         phase_real: ``[B, F, T]`` raw ``phase_conv_r`` output.
         phase_imag: ``[B, F, T]`` raw ``phase_conv_i`` output.
+        phase_normalization_epsilon: linear bias added to ``phase_real`` and
+            ``phase_imag`` before squaring (default ``1e-8``, the cycle
+            18b-3 production value).
+        phase_normalization_squared_epsilon: floor added inside the sqrt
+            (default ``1e-16``, the cycle 18b-3 production value).
 
     Returns:
         ``[B, F, T, 2]`` complex spectrogram (real, imag stacked on dim=-1).
     """
-    eps = 1e-8
-    re = phase_real + eps
-    im = phase_imag + eps
-    # The +1e-16 floor inside the sqrt guards against the (re=im=-eps) corner
+    eps_lin = phase_normalization_epsilon
+    eps_sq = phase_normalization_squared_epsilon
+    re = phase_real + eps_lin
+    im = phase_imag + eps_lin
+    # The +eps_sq floor inside the sqrt guards against the (re=im=-eps) corner
     # where the numerator vanishes exactly — its ULP impact on typical
-    # phase-decoder magnitudes (re, im ~ O(0.1-1)) is below FP32 noise.
-    norm = torch.sqrt(re**2 + im**2 + 1e-16)
+    # phase-decoder magnitudes (re, im ~ O(0.1-1)) is below FP32 noise at
+    # the default 1e-16. Cycle 18b-11 raises it to 1e-6 for FP16-safe
+    # operation on the QNN HTP-FP16 delegate.
+    norm = torch.sqrt(re**2 + im**2 + eps_sq)
     return torch.stack((mag * re / norm, mag * im / norm), dim=-1)
 
 
@@ -2271,12 +2604,48 @@ def _build_alpha_features(
     bcs_com_cal: Tensor,
     acs_com_cal: Tensor,
     acs_mask: Tensor,
+    *,
+    clamp_threshold: Optional[float] = None,
+    safe_sqrt: bool = False,
 ) -> Tensor:
     """TF-wise fusion features — mirrors
-    :meth:`BAFNetPlus._build_alpha_features`."""
+    :meth:`BAFNetPlus._build_alpha_features`.
+
+    Cycle 18b-9 export-time options (both default off → bit-identical to the
+    cycle 18b-3 production arithmetic; FP32 host parity unchanged):
+
+    - ``clamp_threshold``: if not ``None``, clamp each ``bcs/acs_com_cal`` real
+      and imag component to ``[-clamp_threshold, +clamp_threshold]`` before
+      squaring. Suppresses the rare ``|x|>256`` spots that overflow FP16 after
+      squaring on the Mali-G715 NNAPI delegate (cycle 18b-8 forensic finding:
+      2/8442 spot positions at step 0 with ``x²+y² > 65504``).
+    - ``safe_sqrt``: if True, clamp the sum ``x²+y²+eps`` to ``≤ FP16_SAFE_MAX
+      = 6.5e4`` (just under FP16 max 65504) before sqrt. Saturates the residual
+      overflow risk after pre-clamp for spots where even
+      ``clamp_threshold²·2 + eps`` straddles the FP16 ceiling.
+
+    Both options modify the module-level (S8 export) helper only;
+    :meth:`BAFNetPlus._build_alpha_features` (training / host-eval) is
+    intentionally untouched so training-path accuracy is preserved.
+    """
     eps = 1e-8
-    bcs_mag_cal = torch.sqrt(bcs_com_cal[:, :, :, 0] ** 2 + bcs_com_cal[:, :, :, 1] ** 2 + eps)
-    acs_mag_cal = torch.sqrt(acs_com_cal[:, :, :, 0] ** 2 + acs_com_cal[:, :, :, 1] ** 2 + eps)
+    bcs_re = bcs_com_cal[:, :, :, 0]
+    bcs_im = bcs_com_cal[:, :, :, 1]
+    acs_re = acs_com_cal[:, :, :, 0]
+    acs_im = acs_com_cal[:, :, :, 1]
+    if clamp_threshold is not None:
+        bcs_re = torch.clamp(bcs_re, -clamp_threshold, clamp_threshold)
+        bcs_im = torch.clamp(bcs_im, -clamp_threshold, clamp_threshold)
+        acs_re = torch.clamp(acs_re, -clamp_threshold, clamp_threshold)
+        acs_im = torch.clamp(acs_im, -clamp_threshold, clamp_threshold)
+    bcs_sq = bcs_re ** 2 + bcs_im ** 2 + eps
+    acs_sq = acs_re ** 2 + acs_im ** 2 + eps
+    if safe_sqrt:
+        FP16_SAFE_MAX = 6.5e4
+        bcs_sq = torch.clamp(bcs_sq, max=FP16_SAFE_MAX)
+        acs_sq = torch.clamp(acs_sq, max=FP16_SAFE_MAX)
+    bcs_mag_cal = torch.sqrt(bcs_sq)
+    acs_mag_cal = torch.sqrt(acs_sq)
     return torch.stack([bcs_mag_cal, acs_mag_cal, acs_mask], dim=1).transpose(2, 3)
 
 

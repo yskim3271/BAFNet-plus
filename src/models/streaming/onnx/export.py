@@ -74,6 +74,66 @@ _NUM_NON_STATE_OUTPUTS_COMPLEX = 3  # est_mag, phase_real, phase_imag
 # Sidecar schema versions for the two BAFNetPlus FP32 graph variants.
 _BAFNETPLUS_SCHEMA_FP32_ATAN2 = "s8-bafnetplus-functional-fp32"
 _BAFNETPLUS_SCHEMA_FP32_COMPLEX = "s20-bafnetplus-functional-fp32-complex"
+# Cycle 18b-8 debug variant of the FP32 complex graph: adds 4 alpha-stack
+# intermediate outputs (debug_alpha_features + first-block conv/BN/PReLU) for
+# sub-op divergence forensics. Production output contract is preserved — the
+# debug outputs trail the production outputs in graph order.
+_BAFNETPLUS_SCHEMA_FP32_COMPLEX_DEBUG_ALPHA = "s20-bafnetplus-functional-fp32-complex-debug-alpha-v1"
+_NUM_DEBUG_ALPHA_OUTPUTS = 4  # debug_alpha_features + conv0_conv + conv0_bn + conv0_prelu
+# Cycle 18b-10 debug variant of the FP32 complex graph: adds 9 mapping-branch
+# decoder intermediate outputs (sequence_block output + 4 mask_decoder
+# dense_block iter outputs + 4 phase_decoder dense_block iter outputs) for
+# mapping-cascade sub-op divergence forensics. Production output contract is
+# preserved — the debug outputs trail the production outputs in graph order.
+_BAFNETPLUS_SCHEMA_FP32_COMPLEX_DEBUG_MAPPING = "s20-bafnetplus-functional-fp32-complex-debug-mapping-v1"
+_NUM_DEBUG_MAPPING_OUTPUTS = 9  # seq_block_out + 4 mask_dense + 4 phase_dense
+# Cycle 18b-11 Tier 1A debug variant of the FP32 complex graph: adds 8
+# mapping-branch TSBlock-internal intermediate outputs from the LAST
+# TSBlock's freq_stage (SimpleGate + SCA multiply + 4× GPKFFN attn*conv +
+# GPKFFN proj_last + final state_84 input) for Codex's narrowed sub-op
+# divergence forensics. Production output contract is preserved — the
+# debug outputs trail the production outputs in graph order. Mutually
+# exclusive with cycle 18b-8 debug-alpha, cycle 18b-10 debug-mapping, and
+# cycle 18b-9 alpha workaround variants.
+_BAFNETPLUS_SCHEMA_FP32_COMPLEX_DEBUG_TSBLOCK = "s20-bafnetplus-functional-fp32-complex-debug-tsblock-v1"
+_NUM_DEBUG_TSBLOCK_OUTPUTS = 8  # simplegate + sca_mult + 4× attnconv + proj_last + state_84_input
+# Cycle 18b-12 Track (v) boundary-only TSBlock probe variant: emits one
+# debug output per TSBlock (block output captured post time_stage +
+# freq_stage + residual) without any intra-block code change. For the
+# 50ms BAFNet+ recipe (num_tsblock=4) the count is 4; the constant below
+# tracks that expected anchor. Production schema
+# ``s20-bafnetplus-functional-fp32-complex`` stays bound to the
+# 0-debug-output combination so the deployed D3 sidecar md5
+# (804f7b1d…) stays byte-identical.
+_BAFNETPLUS_SCHEMA_FP32_COMPLEX_DEBUG_TSBLOCK_BOUNDARY = (
+    "s20-bafnetplus-functional-fp32-complex-debug-tsblock-boundary-v1"
+)
+_NUM_DEBUG_TSBLOCK_BOUNDARY_OUTPUTS = 4  # one per TSBlock on the 50ms recipe
+# Cycle 18b-11 Tier 1B FP16-safe epsilon variant of the FP32 complex
+# graph: same op set / output contract as production, but the in-graph
+# ``_phase_components_to_complex`` uses raised epsilons (default 1e-3 /
+# 1e-6) that survive FP16 ``flush-to-zero`` on the QNN HTP-FP16 delegate.
+# Codex's host FP16 emulation predicts the cycle 18b-8 alpha 2/8442
+# nonfinite spots vanish under this variant. Production schema
+# ``s20-bafnetplus-functional-fp32-complex`` stays bound to the
+# 1e-8 / 1e-16 defaults so the deployed D3 sidecar md5 (804f7b1d…) stays
+# byte-identical.
+_BAFNETPLUS_SCHEMA_FP32_COMPLEX_FP16_SAFE_EPSILON = (
+    "s20-bafnetplus-functional-fp32-complex-fp16-safe-epsilon-v1"
+)
+# Cycle 18b-9 alpha-feature numerical workaround variants of the FP32 complex
+# graph. The production output contract (3 non-state + 190 next-state) is
+# preserved; only the in-graph arithmetic of the module-level
+# ``_build_alpha_features`` is modified at export time. The schema token
+# disambiguates the variants for downstream tooling. Production schema
+# ``s20-bafnetplus-functional-fp32-complex`` stays bound to the
+# ``alpha_clamp_threshold=None`` + ``alpha_safe_sqrt=False`` combination so
+# the deployed D3 sidecar md5 (804f7b1d…) stays byte-identical.
+_BAFNETPLUS_SCHEMA_FP32_COMPLEX_CLAMP = "s20-bafnetplus-functional-fp32-complex-clamp-v1"
+_BAFNETPLUS_SCHEMA_FP32_COMPLEX_SAFE_SQRT = "s20-bafnetplus-functional-fp32-complex-safe-sqrt-v1"
+_BAFNETPLUS_SCHEMA_FP32_COMPLEX_CLAMP_SAFE_SQRT = (
+    "s20-bafnetplus-functional-fp32-complex-clamp-safe-sqrt-v1"
+)
 
 # Sidecar schema versions for the S21 split-graph variant (B2 deployable track).
 # The trunk is FP32 by default; ``quantize_bafnetplus_qdq`` flips its schema to
@@ -1099,9 +1159,174 @@ def export_bafnetplus_core_to_onnx(
     )
 
     core_meta = core.metadata(chunk_size=chunk_size, freq_size=freq_size_val)
-    schema_version = (
-        _BAFNETPLUS_SCHEMA_FP32_COMPLEX if core.phase_output_mode == "complex" else _BAFNETPLUS_SCHEMA_FP32_ATAN2
+    emit_debug_alpha = bool(getattr(core, "emit_debug_alpha", False))
+    emit_debug_mapping_decoder = bool(getattr(core, "emit_debug_mapping_decoder", False))
+    emit_debug_mapping_tsblock_internals = bool(
+        getattr(core, "emit_debug_mapping_tsblock_internals", False)
     )
+    emit_debug_mapping_tsblock_boundaries = bool(
+        getattr(core, "emit_debug_mapping_tsblock_boundaries", False)
+    )
+    alpha_clamp_threshold = getattr(core, "alpha_clamp_threshold", None)
+    alpha_safe_sqrt = bool(getattr(core, "alpha_safe_sqrt", False))
+    has_alpha_workaround = (alpha_clamp_threshold is not None) or alpha_safe_sqrt
+    phase_norm_eps = float(getattr(core, "phase_normalization_epsilon", 1e-8))
+    phase_norm_sq_eps = float(getattr(core, "phase_normalization_squared_epsilon", 1e-16))
+    has_fp16_safe_eps = (phase_norm_eps != 1e-8) or (phase_norm_sq_eps != 1e-16)
+    if emit_debug_mapping_decoder:
+        # Cycle 18b-10: debug-mapping schema only applies on top of the FP32
+        # complex graph (the production deploy variant we're forensically
+        # inspecting). Mutually exclusive with cycle 18b-8 debug-alpha and
+        # cycle 18b-9 alpha workaround knobs — pick one debug variant per
+        # exported ONNX.
+        if core.phase_output_mode != "complex":
+            raise ValueError(
+                "emit_debug_mapping_decoder=True requires phase_output_mode='complex' "
+                f"(got {core.phase_output_mode!r})"
+            )
+        if emit_debug_alpha:
+            raise ValueError(
+                "emit_debug_mapping_decoder=True is incompatible with emit_debug_alpha=True; "
+                "pick one debug variant."
+            )
+        if has_alpha_workaround:
+            raise ValueError(
+                "emit_debug_mapping_decoder=True is incompatible with alpha workaround "
+                "options (alpha_clamp_threshold / alpha_safe_sqrt); pick one."
+            )
+        if has_fp16_safe_eps:
+            raise ValueError(
+                "emit_debug_mapping_decoder=True is incompatible with FP16-safe epsilons; "
+                "pick one variant."
+            )
+        schema_version = _BAFNETPLUS_SCHEMA_FP32_COMPLEX_DEBUG_MAPPING
+    elif emit_debug_mapping_tsblock_internals:
+        # Cycle 18b-11 Tier 1A: debug-tsblock schema only applies on top
+        # of the FP32 complex graph. Mutually exclusive with all other
+        # debug / workaround variants — pick one per exported ONNX.
+        if core.phase_output_mode != "complex":
+            raise ValueError(
+                "emit_debug_mapping_tsblock_internals=True requires phase_output_mode='complex' "
+                f"(got {core.phase_output_mode!r})"
+            )
+        if emit_debug_alpha:
+            raise ValueError(
+                "emit_debug_mapping_tsblock_internals=True is incompatible with emit_debug_alpha=True; "
+                "pick one debug variant."
+            )
+        if has_alpha_workaround:
+            raise ValueError(
+                "emit_debug_mapping_tsblock_internals=True is incompatible with alpha workaround "
+                "options (alpha_clamp_threshold / alpha_safe_sqrt); pick one."
+            )
+        if has_fp16_safe_eps:
+            raise ValueError(
+                "emit_debug_mapping_tsblock_internals=True is incompatible with FP16-safe epsilons; "
+                "pick one variant."
+            )
+        schema_version = _BAFNETPLUS_SCHEMA_FP32_COMPLEX_DEBUG_TSBLOCK
+    elif emit_debug_mapping_tsblock_boundaries:
+        # Cycle 18b-12 Track (v): boundary-only TSBlock schema applies
+        # on top of the FP32 complex graph. Mutually exclusive with all
+        # other debug / workaround variants.
+        if core.phase_output_mode != "complex":
+            raise ValueError(
+                "emit_debug_mapping_tsblock_boundaries=True requires phase_output_mode='complex' "
+                f"(got {core.phase_output_mode!r})"
+            )
+        if emit_debug_alpha:
+            raise ValueError(
+                "emit_debug_mapping_tsblock_boundaries=True is incompatible with emit_debug_alpha=True; "
+                "pick one debug variant."
+            )
+        if has_alpha_workaround:
+            raise ValueError(
+                "emit_debug_mapping_tsblock_boundaries=True is incompatible with alpha workaround "
+                "options (alpha_clamp_threshold / alpha_safe_sqrt); pick one."
+            )
+        if has_fp16_safe_eps:
+            raise ValueError(
+                "emit_debug_mapping_tsblock_boundaries=True is incompatible with FP16-safe epsilons; "
+                "pick one variant."
+            )
+        schema_version = _BAFNETPLUS_SCHEMA_FP32_COMPLEX_DEBUG_TSBLOCK_BOUNDARY
+    elif has_fp16_safe_eps:
+        # Cycle 18b-11 Tier 1B: FP16-safe epsilon variant of the FP32
+        # complex graph only. Mutually exclusive with all debug + alpha
+        # workaround variants — pick one per exported ONNX.
+        if core.phase_output_mode != "complex":
+            raise ValueError(
+                "FP16-safe epsilons require phase_output_mode='complex' "
+                f"(got {core.phase_output_mode!r})"
+            )
+        if emit_debug_alpha:
+            raise ValueError(
+                "FP16-safe epsilons are incompatible with emit_debug_alpha=True; pick one variant."
+            )
+        if has_alpha_workaround:
+            raise ValueError(
+                "FP16-safe epsilons are incompatible with alpha workaround "
+                "options (alpha_clamp_threshold / alpha_safe_sqrt); pick one."
+            )
+        schema_version = _BAFNETPLUS_SCHEMA_FP32_COMPLEX_FP16_SAFE_EPSILON
+    elif emit_debug_alpha:
+        # Cycle 18b-8: debug-alpha schema only applies on top of the FP32 complex
+        # graph (the production deploy variant we're forensically inspecting).
+        if core.phase_output_mode != "complex":
+            raise ValueError(
+                "emit_debug_alpha=True requires phase_output_mode='complex' "
+                f"(got {core.phase_output_mode!r})"
+            )
+        if has_alpha_workaround:
+            raise ValueError(
+                "emit_debug_alpha=True is incompatible with alpha workaround "
+                "options (alpha_clamp_threshold / alpha_safe_sqrt); pick one."
+            )
+        schema_version = _BAFNETPLUS_SCHEMA_FP32_COMPLEX_DEBUG_ALPHA
+    elif has_alpha_workaround:
+        # Cycle 18b-9: numerical workaround variants of the FP32 complex graph
+        # only — the atan2 path is not affected by the FP16 overflow root sub-op
+        # (which appears only on the device's FP16 NNAPI delegate against the
+        # complex deploy graph).
+        if core.phase_output_mode != "complex":
+            raise ValueError(
+                "alpha workaround (alpha_clamp_threshold / alpha_safe_sqrt) requires "
+                f"phase_output_mode='complex' (got {core.phase_output_mode!r})"
+            )
+        if (alpha_clamp_threshold is not None) and alpha_safe_sqrt:
+            schema_version = _BAFNETPLUS_SCHEMA_FP32_COMPLEX_CLAMP_SAFE_SQRT
+        elif alpha_clamp_threshold is not None:
+            schema_version = _BAFNETPLUS_SCHEMA_FP32_COMPLEX_CLAMP
+        else:
+            schema_version = _BAFNETPLUS_SCHEMA_FP32_COMPLEX_SAFE_SQRT
+    else:
+        schema_version = (
+            _BAFNETPLUS_SCHEMA_FP32_COMPLEX if core.phase_output_mode == "complex" else _BAFNETPLUS_SCHEMA_FP32_ATAN2
+        )
+    io_block: Dict[str, Any] = {
+        "input_names": core_meta["input_names"],
+        "output_names": core_meta["output_names"],
+        "state_names": core_meta["state_names"],
+        "state_shapes": core_meta["state_shapes"],
+        "num_non_state_outputs": _NUM_NON_STATE_OUTPUTS_ATAN2,
+        "state_order": core_meta["state_order"],
+    }
+    if emit_debug_mapping_decoder:
+        debug_names = core.debug_mapping_decoder_output_names()
+        io_block["debug_output_names"] = debug_names
+        io_block["num_debug_outputs"] = _NUM_DEBUG_MAPPING_OUTPUTS
+    elif emit_debug_mapping_tsblock_internals:
+        debug_names = core.debug_mapping_tsblock_output_names()
+        io_block["debug_output_names"] = debug_names
+        io_block["num_debug_outputs"] = _NUM_DEBUG_TSBLOCK_OUTPUTS
+    elif emit_debug_mapping_tsblock_boundaries:
+        debug_names = core.debug_mapping_tsblock_boundary_output_names()
+        io_block["debug_output_names"] = debug_names
+        io_block["num_debug_outputs"] = len(debug_names)
+    elif emit_debug_alpha:
+        debug_names = core.debug_alpha_output_names()
+        io_block["debug_output_names"] = debug_names
+        io_block["num_debug_outputs"] = _NUM_DEBUG_ALPHA_OUTPUTS
     metadata: Dict[str, Any] = {
         "schema_version": schema_version,
         "produced_by": "src.models.streaming.onnx.export.export_bafnetplus_core_to_onnx",
@@ -1138,19 +1363,39 @@ def export_bafnetplus_core_to_onnx(
             "calibration_max_common_log_gain": core_meta["calibration_max_common_log_gain"],
             "calibration_max_relative_log_gain": core_meta["calibration_max_relative_log_gain"],
         },
-        "io": {
-            "input_names": core_meta["input_names"],
-            "output_names": core_meta["output_names"],
-            "state_names": core_meta["state_names"],
-            "state_shapes": core_meta["state_shapes"],
-            "num_non_state_outputs": _NUM_NON_STATE_OUTPUTS_ATAN2,
-            "state_order": core_meta["state_order"],
-        },
+        "io": io_block,
         "branches": core_meta["branches"],
         "checkpoint": checkpoint_info,
         "onnx_file": output_path.name,
         "onnx_size_bytes": output_path.stat().st_size,
     }
+    if emit_debug_alpha:
+        # Surfaced only on the debug variant so the production sidecar JSON
+        # stays byte-identical (md5 804f7b1d... on the deployed 50 ms anchor).
+        metadata["core"]["emit_debug_alpha"] = True
+    if emit_debug_mapping_decoder:
+        # Cycle 18b-10: surfaced only on the debug-mapping variant so the
+        # production sidecar JSON stays byte-identical.
+        metadata["core"]["emit_debug_mapping_decoder"] = True
+    if emit_debug_mapping_tsblock_internals:
+        # Cycle 18b-11 Tier 1A: surfaced only on the debug-tsblock variant
+        # so the production sidecar JSON stays byte-identical.
+        metadata["core"]["emit_debug_mapping_tsblock_internals"] = True
+    if emit_debug_mapping_tsblock_boundaries:
+        # Cycle 18b-12 Track (v): surfaced only on the boundary variant
+        # so the production sidecar JSON stays byte-identical.
+        metadata["core"]["emit_debug_mapping_tsblock_boundaries"] = True
+    if alpha_clamp_threshold is not None:
+        # Cycle 18b-9: surfaced only on the workaround variants so the
+        # production sidecar JSON stays byte-identical.
+        metadata["core"]["alpha_clamp_threshold"] = float(alpha_clamp_threshold)
+    if alpha_safe_sqrt:
+        metadata["core"]["alpha_safe_sqrt"] = True
+    if has_fp16_safe_eps:
+        # Cycle 18b-11 Tier 1B: surfaced only on the fp16-safe-epsilon
+        # variant so the production sidecar JSON stays byte-identical.
+        metadata["core"]["phase_normalization_epsilon"] = phase_norm_eps
+        metadata["core"]["phase_normalization_squared_epsilon"] = phase_norm_sq_eps
     if metadata_extra:
         metadata["extra"] = metadata_extra
 
@@ -1183,6 +1428,14 @@ def export_bafnetplus_to_onnx_from_checkpoint(
     compress_factor: float = 0.3,
     opset_version: int = 17,
     verbose: bool = True,
+    emit_debug_alpha: bool = False,
+    alpha_clamp_threshold: Optional[float] = None,
+    alpha_safe_sqrt: bool = False,
+    emit_debug_mapping_decoder: bool = False,
+    emit_debug_mapping_tsblock_internals: bool = False,
+    emit_debug_mapping_tsblock_boundaries: bool = False,
+    phase_normalization_epsilon: float = 1e-8,
+    phase_normalization_squared_epsilon: float = 1e-16,
 ) -> ExportResult:
     """One-shot wrapper: load unified BAFNet+ ckpt → build exportable core → export.
 
@@ -1220,6 +1473,14 @@ def export_bafnetplus_to_onnx_from_checkpoint(
     core = ExportableBAFNetPlusCore.from_bafnetplus(
         bafnet,
         phase_output_mode=phase_output_mode,
+        emit_debug_alpha=emit_debug_alpha,
+        alpha_clamp_threshold=alpha_clamp_threshold,
+        alpha_safe_sqrt=alpha_safe_sqrt,
+        emit_debug_mapping_decoder=emit_debug_mapping_decoder,
+        emit_debug_mapping_tsblock_internals=emit_debug_mapping_tsblock_internals,
+        emit_debug_mapping_tsblock_boundaries=emit_debug_mapping_tsblock_boundaries,
+        phase_normalization_epsilon=phase_normalization_epsilon,
+        phase_normalization_squared_epsilon=phase_normalization_squared_epsilon,
     )
     return export_bafnetplus_core_to_onnx(
         core,

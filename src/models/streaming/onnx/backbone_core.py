@@ -267,6 +267,9 @@ class ExportableBackboneCore(nn.Module):
         encoder_lookahead: int,
         decoder_lookahead: int,
         phase_output_mode: str = "atan2",
+        emit_debug_decoders: bool = False,
+        emit_debug_tsblock_internals: bool = False,
+        emit_debug_tsblock_boundaries: bool = False,
     ) -> None:
         """Build a core from already-functional submodules. Use :meth:`from_backbone` instead.
 
@@ -282,16 +285,57 @@ class ExportableBackboneCore(nn.Module):
             encoder_lookahead: ``L_enc`` (encoder right-padding frame sum).
             decoder_lookahead: ``L_dec`` (decoder right-padding frame sum).
             phase_output_mode: ``'atan2'`` or ``'complex'``.
+            emit_debug_decoders: Cycle 18b-10 forensic flag. When True, the
+                forward emits 9 additional debug intermediate tensors trailing
+                the production outputs: the sequence_block output (= input to
+                both decoders) + the 4 mask_decoder dense_block iteration
+                outputs + the 4 phase_decoder dense_block iteration outputs.
+                Production path (False) is unaffected — forward / output_names
+                / state contract are bit-exact when this flag is False.
+            emit_debug_tsblock_internals: Cycle 18b-11 Tier 1A forensic flag.
+                When True, the forward emits 8 additional debug intermediate
+                tensors capturing the freq_stage sub-ops of the LAST TSBlock
+                (Codex's narrowing of cycle 18b-10's "TSBlock cascade"
+                hypothesis to ``mapping.sequence_block.<last>.freq_stage``):
+                SimpleGate output + SCA multiply output + GPKFFN
+                ``attn*conv`` product per kernel (4 kernels) + GPKFFN
+                proj_last output + the final TSBlock output (= state_84
+                input). Production path (False) is unaffected; mutually
+                exclusive with ``emit_debug_decoders``.
+            emit_debug_tsblock_boundaries: Cycle 18b-12 Track (v) forensic
+                flag. When True, the forward emits one additional debug
+                output per TSBlock — the block's output tensor — without
+                touching any intra-block code. Minimum perturbation: the
+                last-TSBlock 8-tap intra-block probe (cycle 18b-11) appeared
+                to suppress the cycle 18b-10 step-4 catastrophic event
+                (Heisenberg-style observation effect); the boundary-only
+                4-tap variant tests whether reducing the per-block capture
+                count + keeping intra-block code untouched preserves the
+                event. Number of outputs equals the number of TSBlocks
+                (typically 4 for the 50ms BAFNet+ recipe). Mutually
+                exclusive with ``emit_debug_decoders`` and
+                ``emit_debug_tsblock_internals``.
 
         Raises:
             ValueError: If ``infer_type`` or ``phase_output_mode`` is not a
-                recognised value.
+                recognised value, or if more than one of the three debug
+                flags is set.
         """
         super().__init__()
         if infer_type not in ("masking", "mapping"):
             raise ValueError(f"infer_type must be 'masking' or 'mapping', got {infer_type!r}")
         if phase_output_mode not in ("atan2", "complex"):
             raise ValueError(f"phase_output_mode must be 'atan2' or 'complex', got {phase_output_mode!r}")
+        _debug_count = (
+            int(bool(emit_debug_decoders))
+            + int(bool(emit_debug_tsblock_internals))
+            + int(bool(emit_debug_tsblock_boundaries))
+        )
+        if _debug_count > 1:
+            raise ValueError(
+                "emit_debug_decoders / emit_debug_tsblock_internals / "
+                "emit_debug_tsblock_boundaries are mutually exclusive"
+            )
         self.dense_encoder = dense_encoder
         self.sequence_block = sequence_block
         self.mask_decoder = mask_decoder
@@ -301,6 +345,9 @@ class ExportableBackboneCore(nn.Module):
         self.encoder_lookahead: int = int(encoder_lookahead)
         self.decoder_lookahead: int = int(decoder_lookahead)
         self.phase_output_mode: str = phase_output_mode
+        self.emit_debug_decoders: bool = bool(emit_debug_decoders)
+        self.emit_debug_tsblock_internals: bool = bool(emit_debug_tsblock_internals)
+        self.emit_debug_tsblock_boundaries: bool = bool(emit_debug_tsblock_boundaries)
         self.state_frames_for_update: Optional[int] = None
         self._functional_modules: List[Tuple[str, nn.Module]] = []
         self._collect_functional_modules()
@@ -354,11 +401,114 @@ class ExportableBackboneCore(nn.Module):
         return ["mag", "pha"] + self.get_state_names()
 
     def output_names(self) -> List[str]:
-        """Frozen ONNX output names (depend on :attr:`phase_output_mode`)."""
+        """Frozen ONNX output names (depend on :attr:`phase_output_mode`).
+
+        When :attr:`emit_debug_decoders` is True, the cycle 18b-10 forensic
+        intermediates (see :meth:`debug_decoder_output_names`) trail the
+        production outputs in graph order. When
+        :attr:`emit_debug_tsblock_internals` is True, the cycle 18b-11 Tier
+        1A forensic intermediates (see :meth:`debug_tsblock_output_names`)
+        trail the production outputs in graph order. The two debug flags are
+        mutually exclusive.
+        """
         nexts = [f"next_{n}" for n in self.get_state_names()]
         if self.phase_output_mode == "complex":
-            return ["est_mag", "phase_real", "phase_imag"] + nexts
-        return ["est_mag", "est_pha", "est_com"] + nexts
+            base = ["est_mag", "phase_real", "phase_imag"] + nexts
+        else:
+            base = ["est_mag", "est_pha", "est_com"] + nexts
+        if self.emit_debug_decoders:
+            base = base + self.debug_decoder_output_names()
+        if self.emit_debug_tsblock_internals:
+            base = base + self.debug_tsblock_output_names()
+        if self.emit_debug_tsblock_boundaries:
+            base = base + self.debug_tsblock_boundary_output_names()
+        return base
+
+    def debug_tsblock_boundary_output_names(self) -> List[str]:
+        """Names of the cycle 18b-12 Track (v) boundary debug outputs (graph order).
+
+        One name per TSBlock, formatted ``debug_tsblock_{i}_output`` for
+        ``i in range(num_blocks)`` — captured after the block's full
+        forward (time_stage + freq_stage + residual). For the 50ms BAFNet+
+        recipe this is 4 names: ``debug_tsblock_0_output`` through
+        ``debug_tsblock_3_output``. Absent when
+        :attr:`emit_debug_tsblock_boundaries` is False.
+        """
+        n_blocks = len(list(cast(nn.Sequential, self.sequence_block)))
+        return [f"debug_tsblock_{i}_output" for i in range(n_blocks)]
+
+    def debug_tsblock_output_names(self) -> List[str]:
+        """Names of the cycle 18b-11 Tier 1A debug outputs (in graph order).
+
+        These trail the production outputs when
+        :attr:`emit_debug_tsblock_internals` is True; they are absent when
+        the flag is False. The 8 captures come from the **last TSBlock's
+        freq_stage** (Codex's narrowing of cycle 18b-10's "TSBlock cascade
+        at step 4" hypothesis). Order matches the graph evaluation order
+        inside :meth:`_forward_cab_with_debug` + :meth:`_forward_gpkffn_with_debug`:
+
+        1. SimpleGate output (``cab.sg``)
+        2. SCA multiply output (``x * cab.sca(x)``)
+        3. GPKFFN ``attn_out * conv_out`` per kernel (one entry per kernel
+           in ``gpkffn.kernel_list``, typically 4 for k ∈ {3, 5, 7, 11}).
+        4. GPKFFN ``proj_last`` output (``proj_last(x) * scale + shortcut``)
+        5. Final TSBlock output (= sequence_block output, ≈ ``state_84``
+           input — a cross-reference with cycle 18b-10's
+           ``debug_seq_block_out``).
+
+        Names are dynamically derived from the last block's GPKFFN
+        ``kernel_list`` so the schema stays robust to different recipes.
+        """
+        blocks = list(cast(nn.Sequential, self.sequence_block))
+        if not blocks:
+            return []
+        last_idx = len(blocks) - 1
+        last_block = blocks[last_idx]
+        kernel_list: List[int] = []
+        for sub_seq in cast(nn.Sequential, last_block.freq_stage):
+            for sub_block in cast(nn.Sequential, sub_seq):
+                if hasattr(sub_block, "proj_first"):
+                    kernel_list = list(sub_block.kernel_list)
+                    break
+            if kernel_list:
+                break
+        prefix = f"debug_tsblock_{last_idx}_freq"
+        names = [
+            f"{prefix}_simplegate",
+            f"{prefix}_sca_mult",
+        ]
+        for k in kernel_list:
+            names.append(f"{prefix}_gpkffn_attnconv_{int(k)}")
+        names.append(f"{prefix}_proj_last")
+        names.append(f"debug_tsblock_{last_idx}_state_84_input")
+        return names
+
+    def debug_decoder_output_names(self) -> List[str]:
+        """Names of the cycle 18b-10 debug intermediate outputs (in graph order).
+
+        These trail the production outputs when ``emit_debug_decoders=True``;
+        they are absent from the graph when the flag is False (production
+        path). The 9 captures are:
+
+        - ``debug_seq_block_out`` — output of the sequence_block (= input to
+          BOTH mask_decoder and phase_decoder). Localizes whether non-finite
+          values are already present at the decoder boundary.
+        - ``debug_mask_dense_{0,1,2,3}`` — the 4 mask_decoder dense_block
+          iteration outputs (states 84-87 in the BAFNet+ S8 ordering).
+        - ``debug_phase_dense_{0,1,2,3}`` — the 4 phase_decoder dense_block
+          iteration outputs (states 88-91).
+        """
+        return [
+            "debug_seq_block_out",
+            "debug_mask_dense_0",
+            "debug_mask_dense_1",
+            "debug_mask_dense_2",
+            "debug_mask_dense_3",
+            "debug_phase_dense_0",
+            "debug_phase_dense_1",
+            "debug_phase_dense_2",
+            "debug_phase_dense_3",
+        ]
 
     # ---------------------------------------------------------------- init shapes
     def init_states(
@@ -471,6 +621,9 @@ class ExportableBackboneCore(nn.Module):
         backbone: Backbone,
         *,
         phase_output_mode: str = "atan2",
+        emit_debug_decoders: bool = False,
+        emit_debug_tsblock_internals: bool = False,
+        emit_debug_tsblock_boundaries: bool = False,
     ) -> "ExportableBackboneCore":
         """Build an exportable core from an instantiated **original** ``Backbone``.
 
@@ -541,6 +694,9 @@ class ExportableBackboneCore(nn.Module):
             encoder_lookahead=lookahead.encoder_lookahead,
             decoder_lookahead=lookahead.decoder_lookahead,
             phase_output_mode=phase_output_mode,
+            emit_debug_decoders=emit_debug_decoders,
+            emit_debug_tsblock_internals=emit_debug_tsblock_internals,
+            emit_debug_tsblock_boundaries=emit_debug_tsblock_boundaries,
         )
 
     # ------------------------------------------------------------------ forward
@@ -549,18 +705,21 @@ class ExportableBackboneCore(nn.Module):
         mag: Tensor,
         pha: Tensor,
         prev_states: List[Tensor],
-    ) -> Tuple[Tensor, Tensor, Tensor, Tensor, List[Tensor]]:
+    ) -> Tuple[Tensor, Tensor, Tensor, Tensor, List[Tensor], List[Tensor]]:
         """Shared body for :meth:`forward` and :meth:`forward_with_mask`.
 
-        Returns ``(est_mag, b, c, mask, next_states)`` where ``(b, c)`` is the
-        ``(est_pha, est_com)`` pair in atan2 mode or the ``(phase_real,
-        phase_imag)`` pair in complex mode. ``mask`` is the raw
-        ``mask_decoder`` output (``[B, F, T]``) — the same tensor BAFNet+'s
-        eval-reference :meth:`BAFNetPlus.forward` consumes via
-        ``self.masking(acs_com, return_mask=True)`` for the calibration / alpha
-        features. Exposing it lets the outer BAFNet+ core skip the
+        Returns ``(est_mag, b, c, mask, next_states, debug_captures)`` where
+        ``(b, c)`` is the ``(est_pha, est_com)`` pair in atan2 mode or the
+        ``(phase_real, phase_imag)`` pair in complex mode. ``mask`` is the
+        raw ``mask_decoder`` output (``[B, F, T]``) — the same tensor
+        BAFNet+'s eval-reference :meth:`BAFNetPlus.forward` consumes via
+        ``self.masking(acs_com, return_mask=True)`` for the calibration /
+        alpha features. Exposing it lets the outer BAFNet+ core skip the
         ``acs_mask = acs_est_mag / acs_mag`` recovery (S5 design compromise)
         that introduces an ``(a*b)/a`` 1-ULP drift on the recovered mask.
+
+        ``debug_captures`` is empty unless :attr:`emit_debug_decoders` is
+        True; see :meth:`debug_decoder_output_names` for the in-order names.
         """
         state_iter = StateIterator(prev_states)
 
@@ -570,10 +729,36 @@ class ExportableBackboneCore(nn.Module):
         x = self._forward_dense_encoder(x, state_iter)  # [B, C, T, F_enc]
         _, _c, _t_enc, f_enc = x.shape
 
-        x = self._forward_sequence_block(x, state_iter, b_dim, f_enc)  # [B, C, T, F_enc]
+        tsblock_captures: List[Tensor] = []
+        if self.emit_debug_tsblock_internals:
+            x = self._forward_sequence_block_with_tsblock_debug(
+                x, state_iter, b_dim, f_enc, tsblock_captures
+            )
+        elif self.emit_debug_tsblock_boundaries:
+            x = self._forward_sequence_block_with_boundary_debug(
+                x, state_iter, b_dim, f_enc, tsblock_captures
+            )
+        else:
+            x = self._forward_sequence_block(x, state_iter, b_dim, f_enc)  # [B, C, T, F_enc]
 
-        mask = self._forward_mask_decoder(x, state_iter).squeeze(1).transpose(1, 2)  # [B, F, T]
-        phase_out = self._forward_phase_decoder(x, state_iter)
+        debug_captures: List[Tensor] = []
+        if self.emit_debug_decoders:
+            debug_captures.append(x)  # debug_seq_block_out
+            mask_raw, mask_dense_captures = self._forward_mask_decoder_with_debug(x, state_iter)
+            debug_captures.extend(mask_dense_captures)
+            phase_out, phase_dense_captures = self._forward_phase_decoder_with_debug(x, state_iter)
+            debug_captures.extend(phase_dense_captures)
+        else:
+            mask_raw = self._forward_mask_decoder(x, state_iter)
+            phase_out = self._forward_phase_decoder(x, state_iter)
+        # Cycle 18b-11 Tier 1A: tsblock internals (graph order — emitted
+        # before the production outputs in the live forward, but appended
+        # to debug_captures AFTER the cycle 18b-10 mapping decoder captures
+        # so the trailing slice ordering matches output_names()'s order
+        # (decoder first then tsblock). Mutually exclusive in practice.
+        debug_captures.extend(tsblock_captures)
+
+        mask = mask_raw.squeeze(1).transpose(1, 2)  # [B, F, T]
 
         if self.infer_type == "masking":
             est_mag = mag * mask
@@ -584,11 +769,11 @@ class ExportableBackboneCore(nn.Module):
             x_r, x_i = phase_out  # type: ignore[misc]
             x_r = x_r.squeeze(1).transpose(1, 2)  # [B, F, T]
             x_i = x_i.squeeze(1).transpose(1, 2)
-            return est_mag, x_r, x_i, mask, list(state_iter.next_states)
+            return est_mag, x_r, x_i, mask, list(state_iter.next_states), debug_captures
 
         est_pha = phase_out.squeeze(1).transpose(1, 2)  # type: ignore[union-attr]   # [B, F, T]
         est_com = mag_pha_to_complex(est_mag, est_pha, stack_dim=-1)  # [B, F, T, 2]
-        return est_mag, est_pha, est_com, mask, list(state_iter.next_states)
+        return est_mag, est_pha, est_com, mask, list(state_iter.next_states), debug_captures
 
     def forward(self, mag: Tensor, pha: Tensor, *prev_states: Tensor) -> Tuple[Tensor, ...]:
         """Run the explicit-state forward.
@@ -617,8 +802,8 @@ class ExportableBackboneCore(nn.Module):
             raise ValueError(
                 f"ExportableBackboneCore.forward: expected {self.num_states} prev_states, " f"got {len(prev_states)}"
             )
-        a, b, c, _mask, next_states = self._forward_impl(mag, pha, list(prev_states))
-        return (a, b, c) + tuple(next_states)
+        a, b, c, _mask, next_states, debug_captures = self._forward_impl(mag, pha, list(prev_states))
+        return (a, b, c) + tuple(next_states) + tuple(debug_captures)
 
     def forward_with_mask(self, mag: Tensor, pha: Tensor, *prev_states: Tensor) -> Tuple[Tensor, ...]:
         """Forward variant that exposes the raw ``mask_decoder`` output.
@@ -640,8 +825,8 @@ class ExportableBackboneCore(nn.Module):
                 f"ExportableBackboneCore.forward_with_mask: expected {self.num_states} prev_states, "
                 f"got {len(prev_states)}"
             )
-        a, b, c, mask, next_states = self._forward_impl(mag, pha, list(prev_states))
-        return (a, b, c, mask) + tuple(next_states)
+        a, b, c, mask, next_states, debug_captures = self._forward_impl(mag, pha, list(prev_states))
+        return (a, b, c, mask) + tuple(next_states) + tuple(debug_captures)
 
     # ------------------------------------------------------------ submodule paths
     # The helpers below take ``Any`` for the submodule arg: typing them as
@@ -840,6 +1025,268 @@ class ExportableBackboneCore(nn.Module):
             return x_r, x_i
         # Same epsilons as src.models.backbone.PhaseDecoder.forward (gradient-stability floor).
         return torch.atan2(x_i + 1e-8, x_r + 1e-8)
+
+    def _forward_ds_ddb_with_debug(
+        self,
+        x: Tensor,
+        ds_ddb: Any,
+        state_iter: StateIterator,
+    ) -> Tuple[Tensor, List[Tensor]]:
+        """Cycle 18b-10 forensic variant: capture every dense_block iteration output.
+
+        Identical algebra to :meth:`_forward_ds_ddb` (same state routing,
+        same per-layer call order, same tensor values), but records the
+        ``x`` output of each dense_block iteration for sub-op divergence
+        bisection. Used only when :attr:`emit_debug_decoders` is True.
+
+        Returns:
+            ``(final_x, [x_after_iter_0, x_after_iter_1, x_after_iter_2,
+            x_after_iter_3])`` — the final tensor matches what
+            :meth:`_forward_ds_ddb` would return; the captures are the
+            per-iteration outputs.
+        """
+        captures: List[Tensor] = []
+        skip = x
+        for dense_conv in ds_ddb.dense_block:  # nn.ModuleList
+            layer_input = skip
+            for layer in dense_conv:  # nn.Sequential
+                if isinstance(layer, (FunctionalStatefulConv2d, FunctionalStatefulCausalConv2d)):
+                    layer_input = state_iter.run_layer(layer, layer_input, state_frames=self.state_frames_for_update)
+                else:
+                    layer_input = layer(layer_input)
+            x = layer_input
+            captures.append(x)
+            skip = torch.cat([x, skip], dim=1)
+        return x, captures
+
+    def _forward_mask_decoder_with_debug(
+        self,
+        x: Tensor,
+        state_iter: StateIterator,
+    ) -> Tuple[Tensor, List[Tensor]]:
+        """Cycle 18b-10 forensic variant of :meth:`_forward_mask_decoder`.
+
+        Same algebra, but captures the 4 dense_block iteration outputs
+        (BEFORE ``mask_conv`` / squeeze / lsigmoid). Returns ``(mask_raw,
+        [iter_0, iter_1, iter_2, iter_3])`` where ``mask_raw`` shape is
+        ``[B, 1, T, F]`` matching :meth:`_forward_mask_decoder`'s return.
+        """
+        decoder: Any = self.mask_decoder
+        x, captures = self._forward_ds_ddb_with_debug(x, decoder.dense_block, state_iter)
+        x = decoder.mask_conv(x)
+        x = x.squeeze(1).transpose(1, 2)
+        x = decoder.lsigmoid(x).transpose(1, 2).unsqueeze(1)
+        return cast(Tensor, x), captures
+
+    def _forward_phase_decoder_with_debug(
+        self,
+        x: Tensor,
+        state_iter: StateIterator,
+    ) -> Tuple[Union[Tensor, Tuple[Tensor, Tensor]], List[Tensor]]:
+        """Cycle 18b-10 forensic variant of :meth:`_forward_phase_decoder`.
+
+        Same algebra, but captures the 4 dense_block iteration outputs
+        (BEFORE ``phase_conv`` / ``phase_conv_r`` / ``phase_conv_i``).
+        Return type matches :meth:`_forward_phase_decoder` (single tensor in
+        atan2 mode, ``(x_r, x_i)`` in complex mode) plus the 4 captures.
+        """
+        decoder: Any = self.phase_decoder
+        x, captures = self._forward_ds_ddb_with_debug(x, decoder.dense_block, state_iter)
+        x = decoder.phase_conv(x)
+        x_r = decoder.phase_conv_r(x)
+        x_i = decoder.phase_conv_i(x)
+        if self.phase_output_mode == "complex":
+            return (x_r, x_i), captures
+        return torch.atan2(x_i + 1e-8, x_r + 1e-8), captures
+
+    # ---------------------------------------------------------------- cycle 18b-12
+    def _forward_sequence_block_with_boundary_debug(
+        self,
+        x: Tensor,
+        state_iter: StateIterator,
+        b: int,
+        f_enc: int,
+        captures: List[Tensor],
+    ) -> Tensor:
+        """Cycle 18b-12 Track (v) forensic variant of :meth:`_forward_sequence_block`.
+
+        Identical algebra to :meth:`_forward_sequence_block` (no intra-block
+        modification — each ``_forward_ts_block`` call is unchanged). The
+        only difference is that the per-block output is appended to
+        ``captures`` after each iteration, producing one debug tensor per
+        TSBlock in graph order (matches
+        :meth:`debug_tsblock_boundary_output_names`).
+        """
+        for ts_block in cast(nn.Sequential, self.sequence_block):
+            x = self._forward_ts_block(x, ts_block, state_iter, b, f_enc)
+            captures.append(x)
+        return x
+
+    # ---------------------------------------------------------------- cycle 18b-11
+    def _forward_sequence_block_with_tsblock_debug(
+        self,
+        x: Tensor,
+        state_iter: StateIterator,
+        b: int,
+        f_enc: int,
+        captures: List[Tensor],
+    ) -> Tensor:
+        """Cycle 18b-11 Tier 1A forensic variant of :meth:`_forward_sequence_block`.
+
+        Identical algebra to :meth:`_forward_sequence_block` (same state
+        routing, same per-block call order, same tensor values), but for
+        the LAST TSBlock routes the freq_stage through the
+        ``_forward_*_with_debug`` helpers so the 7 freq_stage sub-op
+        outputs (SimpleGate / SCA mult / 4× GPKFFN attn*conv / proj_last)
+        plus the final block output (= state_84 input) are recorded into
+        ``captures``. Order matches :meth:`debug_tsblock_output_names`.
+        """
+        blocks = list(cast(nn.Sequential, self.sequence_block))
+        last_idx = len(blocks) - 1
+        for i, ts_block in enumerate(blocks):
+            if i == last_idx:
+                x = self._forward_ts_block_with_freq_debug(x, ts_block, state_iter, captures)
+            else:
+                x = self._forward_ts_block(x, ts_block, state_iter, b, f_enc)
+        captures.append(x)  # debug_tsblock_<last>_state_84_input
+        return x
+
+    def _forward_ts_block_with_freq_debug(
+        self,
+        x: Tensor,
+        ts_block: ReshapeFreeTSBlock,
+        state_iter: StateIterator,
+        captures: List[Tensor],
+    ) -> Tensor:
+        """Cycle 18b-11 forensic: same as :meth:`_forward_ts_block` with
+        the freq_stage routed through :meth:`_forward_stage_with_debug`."""
+        residual = x
+        x = self._forward_stage(x, ts_block.time_stage, state_iter) + residual * ts_block.beta_t
+        residual = x
+        x = self._forward_stage_with_debug(x, ts_block.freq_stage, state_iter, captures) + residual * ts_block.beta_f
+        return x
+
+    def _forward_stage_with_debug(
+        self,
+        x: Tensor,
+        stage: nn.Sequential,
+        state_iter: StateIterator,
+        captures: List[Tensor],
+    ) -> Tensor:
+        """Cycle 18b-11 forensic: same as :meth:`_forward_stage` but routes
+        CAB through :meth:`_forward_cab_with_debug` and GPKFFN through
+        :meth:`_forward_gpkffn_with_debug` so their sub-op outputs are
+        captured. Order matches :meth:`debug_tsblock_output_names`."""
+        for block in stage:
+            for sub_block in cast(nn.Sequential, block):
+                if hasattr(sub_block, "sca"):
+                    x = self._forward_cab_with_debug(x, sub_block, state_iter, captures)
+                elif hasattr(sub_block, "proj_first"):
+                    x = self._forward_gpkffn_with_debug(x, sub_block, state_iter, captures)
+                else:
+                    x = sub_block(x)
+        return x
+
+    def _forward_cab_with_debug(
+        self,
+        x: Tensor,
+        cab: Any,
+        state_iter: StateIterator,
+        captures: List[Tensor],
+    ) -> Tensor:
+        """Cycle 18b-11 forensic variant of :meth:`_forward_cab`.
+
+        Same algebra and state routing, but appends two captures to
+        ``captures``:
+
+        1. SimpleGate output (``cab.sg(x)`` — Codex's 1st-tier FP16
+           overflow candidate at the freq_stage cascade).
+        2. SCA multiply output (``x * sca_out`` — Codex's 2nd-tier
+           candidate; channel-wise squeeze attention can amplify).
+        """
+        skip = x
+        x = cab.norm(x)
+        x = cab.pwconv1(x)
+        if isinstance(cab.dwconv, _TIME_AXIS_FUNCTIONAL_TYPE):
+            x = state_iter.run_layer(cab.dwconv, x, state_frames=self.state_frames_for_update)
+        else:
+            x = cab.dwconv(x)
+        x = cab.sg(x)
+        captures.append(x)  # SimpleGate output
+
+        if isinstance(cab.sca, nn.Sequential):
+            sca_out = x
+            for layer in cab.sca:
+                if isinstance(layer, _TIME_AXIS_FUNCTIONAL_TYPE):
+                    sca_out = state_iter.run_layer(layer, sca_out, state_frames=self.state_frames_for_update)
+                else:
+                    sca_out = layer(sca_out)
+            x = x * sca_out
+        else:
+            x = x * cab.sca(x)
+        captures.append(x)  # SCA multiply output
+
+        x = cab.pwconv2(x)
+        if getattr(cab, "fold_residual_scale", False):
+            x = skip + x
+        else:
+            x = skip + x * cab.beta
+        if getattr(cab, "post_norm", False):
+            x = cab.post_norm_layer(x)
+        return cast(Tensor, x)
+
+    def _forward_gpkffn_with_debug(
+        self,
+        x: Tensor,
+        gpkffn: Any,
+        state_iter: StateIterator,
+        captures: List[Tensor],
+    ) -> Tensor:
+        """Cycle 18b-11 forensic variant of :meth:`_forward_gpkffn`.
+
+        Same algebra and state routing, but for each expand-ratio chunk
+        appends the ``attn_out * conv_out`` product (Codex's GPKFFN-side
+        overflow candidate — multi-kernel attention × parallel conv
+        product, can compound to ~e^something). After the cat + proj_last
+        + residual, appends the proj_last output (final accumulator at the
+        block boundary).
+        """
+        shortcut = x
+        x = gpkffn.norm(x)
+        x = gpkffn.proj_first(x)
+        expand_ratio = int(gpkffn.expand_ratio)
+        kernel_list = list(gpkffn.kernel_list)
+
+        x_chunks: List[Tensor] = list(torch.chunk(x, expand_ratio, dim=1))
+        for i in range(expand_ratio):
+            ks = kernel_list[i]
+            attn_module = getattr(gpkffn, f"attn_{ks}")
+            conv_module = getattr(gpkffn, f"conv_{ks}")
+
+            attn_out = x_chunks[i]
+            for layer in attn_module:
+                if isinstance(layer, _TIME_AXIS_FUNCTIONAL_TYPE):
+                    attn_out = state_iter.run_layer(layer, attn_out, state_frames=self.state_frames_for_update)
+                else:
+                    attn_out = layer(attn_out)
+
+            if isinstance(conv_module, _TIME_AXIS_FUNCTIONAL_TYPE):
+                conv_out = state_iter.run_layer(conv_module, x_chunks[i], state_frames=self.state_frames_for_update)
+            else:
+                conv_out = conv_module(x_chunks[i])
+
+            x_chunks[i] = attn_out * conv_out
+            captures.append(x_chunks[i])  # GPKFFN attn*conv per kernel
+
+        x = torch.cat(x_chunks, dim=1)
+        if getattr(gpkffn, "fold_residual_scale", False):
+            x = gpkffn.proj_last(x) + shortcut
+        else:
+            x = gpkffn.proj_last(x) * gpkffn.scale + shortcut
+        captures.append(x)  # GPKFFN proj_last output
+        if getattr(gpkffn, "post_norm", False):
+            x = gpkffn.post_norm_layer(x)
+        return cast(Tensor, x)
 
     def __repr__(self) -> str:
         return (

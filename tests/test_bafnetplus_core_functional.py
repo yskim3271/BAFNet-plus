@@ -729,6 +729,93 @@ def test_init_states_shapes_match_fusion_geometry():
     assert tuple(alpha_3.shape) == (1, 16, 6, FREQ_SIZE + 6), tuple(alpha_3.shape)
 
 
+def test_emit_debug_mapping_tsblock_boundaries_bit_exact_and_finite():
+    """Cycle 18b-12 Track (v) boundary probe: when
+    ``emit_debug_mapping_tsblock_boundaries=True``, the production
+    outputs (est_mag/phase_real/phase_imag + 110 next_states) match the
+    no-debug variant bit-for-bit, and the trailing boundary captures
+    (one per TSBlock) are all finite.
+    """
+    torch.manual_seed(2039)
+    bafnet = _synthetic_bafnetplus("full")
+    prod_core = ExportableBAFNetPlusCore.from_bafnetplus(
+        bafnet, phase_output_mode="complex"
+    ).eval()
+    debug_core = ExportableBAFNetPlusCore.from_bafnetplus(
+        bafnet,
+        phase_output_mode="complex",
+        emit_debug_mapping_tsblock_boundaries=True,
+    ).eval()
+
+    T = T_EXPORT
+    bcs_com = _gen_complex(seed=2031, freq_size=FREQ_SIZE, t=T)
+    acs_com = _gen_complex(seed=2032, freq_size=FREQ_SIZE, t=T)
+    bcs_mag, bcs_pha = complex_to_mag_pha(bcs_com, stack_dim=-1)
+    acs_mag, acs_pha = complex_to_mag_pha(acs_com, stack_dim=-1)
+
+    states = prod_core.init_states(batch_size=1, freq_size=FREQ_SIZE, time_frames=T)
+    with torch.no_grad():
+        prod_core.set_state_frames_for_update(CHUNK_SIZE)
+        debug_core.set_state_frames_for_update(CHUNK_SIZE)
+        prod_outs = prod_core(bcs_mag, bcs_pha, acs_mag, acs_pha, *states)
+        debug_outs = debug_core(bcs_mag, bcs_pha, acs_mag, acs_pha, *states)
+
+    n_prod = 3 + prod_core.num_states
+    assert len(prod_outs) == n_prod, (len(prod_outs), n_prod)
+    debug_names = debug_core.debug_mapping_tsblock_boundary_output_names()
+    expected_n_debug = bafnet.mapping.num_tsblock
+    assert len(debug_names) == expected_n_debug, (debug_names, expected_n_debug)
+    assert len(debug_outs) == n_prod + expected_n_debug, (
+        len(debug_outs),
+        n_prod,
+        expected_n_debug,
+    )
+    for i in range(n_prod):
+        assert torch.equal(prod_outs[i], debug_outs[i]), (
+            f"production output {i} differs between prod and debug variants"
+        )
+    for j, cap in enumerate(debug_outs[n_prod:]):
+        assert torch.isfinite(cap).all(), f"boundary capture {j} ({debug_names[j]}) contains non-finite values"
+    expected_names = [f"debug_mapping_tsblock_{i}_output" for i in range(expected_n_debug)]
+    assert debug_names == expected_names, (debug_names, expected_names)
+    output_names = debug_core.output_names()
+    assert output_names[-expected_n_debug:] == expected_names, output_names[-expected_n_debug:]
+
+
+def test_emit_debug_mapping_tsblock_boundaries_mutex():
+    """Cycle 18b-12 Track (v) boundary probe rejects co-set with any
+    other debug / workaround variant at construction time.
+
+    Some conflicting flag combinations fire the backbone-level mutex
+    (``ExportableBackboneCore.__init__``) before the bafnetplus-level
+    mutex (``ExportableBAFNetPlusCore.__init__``); both error sites
+    speak "mutually exclusive" / "incompatible", which is what we
+    assert against here.
+    """
+    bafnet = _synthetic_bafnetplus("full")
+    for kwargs in (
+        {"emit_debug_alpha": True},
+        {"emit_debug_mapping_decoder": True},
+        {"emit_debug_mapping_tsblock_internals": True},
+    ):
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            ExportableBAFNetPlusCore.from_bafnetplus(
+                bafnet,
+                phase_output_mode="complex",
+                emit_debug_mapping_tsblock_boundaries=True,
+                **kwargs,
+            )
+    with pytest.raises(
+        ValueError, match="emit_debug_mapping_tsblock_boundaries.*alpha workaround"
+    ):
+        ExportableBAFNetPlusCore.from_bafnetplus(
+            bafnet,
+            phase_output_mode="complex",
+            emit_debug_mapping_tsblock_boundaries=True,
+            alpha_clamp_threshold=10.0,
+        )
+
+
 def test_full_sequence_parity_independent_of_state_frames_setting():
     """Running the single-shot full-sequence forward with state_frames_for_update
     = chunk_size vs None gives bit-identical outputs (when input length is
