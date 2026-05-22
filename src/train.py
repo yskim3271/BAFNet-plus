@@ -7,6 +7,8 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 import logging
+import importlib
+import inspect
 import psutil
 import hydra
 import random
@@ -375,8 +377,12 @@ def run(args):
 
     model_params = OmegaConf.to_container(model_args.param, resolve=True)
     if args.continue_from is not None:
-        model_params['load_pretrained_weights'] = False
-        logger.info("[Resume] Skipping pretrained weights loading (will load from checkpoint)")
+        # `load_pretrained_weights` is only accepted by joint models (BAFNet/BAFNetPlus)
+        # that load pretrained sub-backbones; standalone Backbone has no such kwarg.
+        _model_cls = getattr(importlib.import_module(f"src.models.{model_lib}"), model_class_name)
+        if 'load_pretrained_weights' in inspect.signature(_model_cls).parameters:
+            model_params['load_pretrained_weights'] = False
+            logger.info("[Resume] Skipping pretrained weights loading (will load from checkpoint)")
 
     model = load_model(model_lib, model_class_name, model_params, device)
 
