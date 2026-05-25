@@ -198,6 +198,7 @@ def prepare_evaluation_runtime(
     conf.test_hf_dataset = str(getattr(args, "test_hf_dataset", "") or "")
     conf.test_subset = str(getattr(args, "test_subset", "") or "")
     conf.eval_squim = bool(getattr(args, "eval_squim", False))
+    conf.eval_dnsmos = bool(getattr(args, "eval_dnsmos", False))
 
     stt_language = resolve_stt_language(
         args.dataset,
@@ -317,6 +318,7 @@ def build_evaluation_output(metrics: Any, args: Any, runtime: RuntimeBundle) -> 
         "test_hf_dataset": str(getattr(args, "test_hf_dataset", "") or ""),
         "test_subset": str(getattr(args, "test_subset", "") or ""),
         "eval_squim": bool(getattr(args, "eval_squim", False)),
+        "eval_dnsmos": bool(getattr(args, "eval_dnsmos", False)),
     }
     return {
         "metadata": metadata,

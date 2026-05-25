@@ -199,6 +199,35 @@ class SquimEvaluator:
         return float(stoi.item()), float(pesq.item()), float(sisdr.item())
 
 
+class DNSMOSEvaluator:
+    """DNSMOS P.835 non-intrusive evaluator (ovrl / sig / bak / p808 MOS).
+
+    Wraps ``speechmos.dnsmos`` (Microsoft DNS-Challenge ONNX model). Used
+    alongside ``SquimEvaluator`` for Vibravox ``speech_noisy`` test reporting
+    where the headset reference is noisy (T1 §V.B). DNSMOS is CPU-only ONNX
+    inference (~450 ms/utt on the bundled model); ``device`` is accepted for
+    API parity with ``SquimEvaluator`` but ignored.
+    """
+
+    def __init__(self, device: str = "cuda", logger: Optional[logging.Logger] = None):
+        self.logger = logger or logging.getLogger(__name__)
+        from speechmos import dnsmos as _dnsmos
+        self._dnsmos = _dnsmos
+        self.sample_rate = 16000
+        self.logger.info("DNSMOSEvaluator initialized (sample_rate=16000, ONNX CPU)")
+
+    def evaluate_one(self, waveform: np.ndarray) -> Tuple[float, float, float, float]:
+        """Predict (ovrl_mos, sig_mos, bak_mos, p808_mos) for one mono utterance."""
+        w = np.asarray(waveform, dtype=np.float32).reshape(-1)
+        out = self._dnsmos.run(w, sr=self.sample_rate)
+        return (
+            float(out["ovrl_mos"]),
+            float(out["sig_mos"]),
+            float(out["bak_mos"]),
+            float(out["p808_mos"]),
+        )
+
+
 def evaluate(
     args: DictConfig,
     model: torch.nn.Module,
@@ -244,6 +273,11 @@ def evaluate(
     if bool(getattr(args, 'eval_squim', False)):
         squim_evaluator = SquimEvaluator(device=args.device, logger=logger)
 
+    # Initialize DNSMOS evaluator (non-intrusive P.835 ovrl/sig/bak/p808 MOS)
+    dnsmos_evaluator = None
+    if bool(getattr(args, 'eval_dnsmos', False)):
+        dnsmos_evaluator = DNSMOSEvaluator(device=args.device, logger=logger)
+
     save_per_utt = bool(getattr(args, 'save_per_utterance', False))
 
     for snr, data_loader in data_loader_list.items():
@@ -251,6 +285,7 @@ def evaluate(
         enhanced = []
         results  = []
         squim_results: List[Tuple[float, float, float]] = [] if squim_evaluator else []
+        dnsmos_results: List[Tuple[float, float, float, float]] = [] if dnsmos_evaluator else []
         utt_ids: List[str] = [] if save_per_utt else []
         bcs_gain_db = getattr(args, 'bcs_gain_db', 0.0)
         acs_gain_db = getattr(args, 'acs_gain_db', 0.0)
@@ -287,6 +322,8 @@ def evaluate(
                 results.append(compute_metrics(clean_acs, clean_acs_hat))
                 if squim_evaluator:
                     squim_results.append(squim_evaluator.evaluate_one(clean_acs_hat))
+                if dnsmos_evaluator:
+                    dnsmos_results.append(dnsmos_evaluator.evaluate_one(clean_acs_hat))
                 if save_per_utt:
                     utt_ids.append(utt_id[0])
 
@@ -309,6 +346,14 @@ def evaluate(
             metrics[snr_key]['squim_pesq'] = float(squim_pesq)
             metrics[snr_key]['squim_sisdr'] = float(squim_sisdr)
             logger.info(bold(f"{prefix}Squim-Objective on {snr}dB: STOI={squim_stoi:.4f}, PESQ={squim_pesq:.4f}, SI-SDR={squim_sisdr:.4f}"))
+
+        if dnsmos_evaluator:
+            dns_ovrl, dns_sig, dns_bak, dns_p808 = np.mean(dnsmos_results, axis=0)
+            metrics[snr_key]['dnsmos_ovrl'] = float(dns_ovrl)
+            metrics[snr_key]['dnsmos_sig'] = float(dns_sig)
+            metrics[snr_key]['dnsmos_bak'] = float(dns_bak)
+            metrics[snr_key]['dnsmos_p808'] = float(dns_p808)
+            logger.info(bold(f"{prefix}DNSMOS on {snr}dB: ovrl={dns_ovrl:.4f}, sig={dns_sig:.4f}, bak={dns_bak:.4f}, p808={dns_p808:.4f}"))
 
         # STT evaluation (model reused!)
         per_utt_cer: Optional[List[float]] = None
@@ -342,6 +387,11 @@ def evaluate(
                     rec["squim_stoi"] = float(squim_results[i][0])
                     rec["squim_pesq"] = float(squim_results[i][1])
                     rec["squim_sisdr"] = float(squim_results[i][2])
+                if dnsmos_evaluator:
+                    rec["dnsmos_ovrl"] = float(dnsmos_results[i][0])
+                    rec["dnsmos_sig"] = float(dnsmos_results[i][1])
+                    rec["dnsmos_bak"] = float(dnsmos_results[i][2])
+                    rec["dnsmos_p808"] = float(dnsmos_results[i][3])
                 per_utt_block[uid] = rec
             metrics[snr_key]["per_utterance"] = per_utt_block
 
@@ -398,6 +448,10 @@ if __name__=="__main__":
                         help="Compute Squim-Objective non-intrusive STOI/PESQ/SI-SDR estimates "
                              "(torchaudio.pipelines.SQUIM_OBJECTIVE). Recommended for Vibravox "
                              "speech_noisy where intrusive PESQ is unreliable due to noisy reference.")
+    parser.add_argument("--eval_dnsmos", default=False, action="store_true",
+                        help="Compute DNSMOS P.835 non-intrusive ovrl/sig/bak/p808 MOS "
+                             "(speechmos.dnsmos, ONNX). Complements --eval_squim for Vibravox "
+                             "speech_noisy T1 reporting alignment.")
     parser.add_argument("--stt_language", type=str, default=None,
                         help="STT language (korean, french, english, etc.). "
                              "Auto-detected from dataset if not specified.")
