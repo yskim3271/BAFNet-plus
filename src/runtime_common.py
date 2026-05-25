@@ -197,6 +197,7 @@ def prepare_evaluation_runtime(
     conf.test_bypass_mixing = bool(getattr(args, "test_bypass_mixing", False))
     conf.test_hf_dataset = str(getattr(args, "test_hf_dataset", "") or "")
     conf.test_subset = str(getattr(args, "test_subset", "") or "")
+    conf.eval_squim = bool(getattr(args, "eval_squim", False))
 
     stt_language = resolve_stt_language(
         args.dataset,
@@ -206,10 +207,38 @@ def prepare_evaluation_runtime(
     conf.stt_language = stt_language
 
     model_args = conf.model
+    # Mirror train.py resume guard: when the joint model (BAFNet/BAFNetPlus)
+    # accepts ``load_pretrained_weights``, force it False — the eval checkpoint
+    # already carries the final fused weights, so the pre-trained sub-model
+    # weight copy is redundant. The sub-checkpoints are still needed to extract
+    # ``args_mapping``/``args_masking`` configs, so we rebase absolute paths
+    # baked at training time (often RunPod absolutes like ``/workspace/...``)
+    # to local sibling directories of ``chkpt_dir`` when they exist.
+    import importlib
+    import inspect
+    model_params = OmegaConf.to_container(model_args.param, resolve=True)
+    _model_cls = getattr(
+        importlib.import_module(f"src.models.{model_args.model_lib}"),
+        model_args.model_class,
+    )
+    if "load_pretrained_weights" in inspect.signature(_model_cls).parameters:
+        model_params["load_pretrained_weights"] = False
+    for _key in ("checkpoint_mapping", "checkpoint_masking"):
+        _p = model_params.get(_key)
+        if _p and not Path(_p).exists():
+            _candidate = Path(args.chkpt_dir).parent / Path(_p).parent.name / Path(_p).name
+            if _candidate.exists():
+                model_params[_key] = str(_candidate)
+            else:
+                raise FileNotFoundError(
+                    f"Sub-checkpoint {_key}={_p} not found locally; "
+                    f"tried fallback {_candidate}. Place the sibling checkpoint "
+                    f"under {Path(args.chkpt_dir).parent} or update the config."
+                )
     model = load_model(
         model_args.model_lib,
         model_args.model_class,
-        model_args.param,
+        model_params,
         args.device,
     )
     model = load_checkpoint(model, args.chkpt_dir, args.chkpt_file, args.device)
@@ -287,6 +316,7 @@ def build_evaluation_output(metrics: Any, args: Any, runtime: RuntimeBundle) -> 
         "test_bypass_mixing": test_bypass_mixing,
         "test_hf_dataset": str(getattr(args, "test_hf_dataset", "") or ""),
         "test_subset": str(getattr(args, "test_subset", "") or ""),
+        "eval_squim": bool(getattr(args, "eval_squim", False)),
     }
     return {
         "metadata": metadata,

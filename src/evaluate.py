@@ -12,6 +12,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 import torch
+import torchaudio
 import numpy as np
 import nlptutti as sarmetric
 import logging
@@ -171,6 +172,33 @@ class STTEvaluator:
         return cer, wer, cer_list, wer_list
 
 
+class SquimEvaluator:
+    """Squim-Objective non-intrusive evaluator (STOI / PESQ / SI-SDR estimates).
+
+    Loads ``torchaudio.pipelines.SQUIM_OBJECTIVE`` once and reuses it. Used for
+    Vibravox ``speech_noisy`` test where headset reference is noisy and
+    intrusive PESQ is unreliable — matches Vibravox paper (T1) Table V
+    reporting convention (Squim-STOI / Noresqa-MOS). Returns three predicted
+    metrics per utterance; no clean reference required.
+    """
+
+    def __init__(self, device: str = "cuda", logger: Optional[logging.Logger] = None):
+        self.device = device
+        self.logger = logger or logging.getLogger(__name__)
+        self.logger.info("Loading Squim-Objective model")
+        bundle = torchaudio.pipelines.SQUIM_OBJECTIVE
+        self.model = bundle.get_model().to(device).eval()
+        self.sample_rate = bundle.sample_rate
+        self.logger.info(f"SquimEvaluator initialized (sample_rate={self.sample_rate})")
+
+    @torch.no_grad()
+    def evaluate_one(self, waveform: np.ndarray) -> Tuple[float, float, float]:
+        """Predict (Squim-STOI, Squim-PESQ, Squim-SI-SDR) for one mono utterance."""
+        w = torch.as_tensor(waveform, dtype=torch.float32, device=self.device).reshape(1, -1)
+        stoi, pesq, sisdr = self.model(w)
+        return float(stoi.item()), float(pesq.item()), float(sisdr.item())
+
+
 def evaluate(
     args: DictConfig,
     model: torch.nn.Module,
@@ -211,12 +239,18 @@ def evaluate(
             logger=logger
         )
 
+    # Initialize Squim-Objective evaluator (non-intrusive STOI/PESQ/SI-SDR estimates)
+    squim_evaluator = None
+    if bool(getattr(args, 'eval_squim', False)):
+        squim_evaluator = SquimEvaluator(device=args.device, logger=logger)
+
     save_per_utt = bool(getattr(args, 'save_per_utterance', False))
 
     for snr, data_loader in data_loader_list.items():
         iterator = LogProgress(logger, data_loader, name=f"Evaluate on {snr}dB")
         enhanced = []
         results  = []
+        squim_results: List[Tuple[float, float, float]] = [] if squim_evaluator else []
         utt_ids: List[str] = [] if save_per_utt else []
         bcs_gain_db = getattr(args, 'bcs_gain_db', 0.0)
         acs_gain_db = getattr(args, 'acs_gain_db', 0.0)
@@ -251,6 +285,8 @@ def evaluate(
 
                 enhanced.append((clean_acs_hat, text[0]))
                 results.append(compute_metrics(clean_acs, clean_acs_hat))
+                if squim_evaluator:
+                    squim_results.append(squim_evaluator.evaluate_one(clean_acs_hat))
                 if save_per_utt:
                     utt_ids.append(utt_id[0])
 
@@ -266,6 +302,13 @@ def evaluate(
             "segSNR": segSNR
         }
         logger.info(bold(f"{prefix}Performance on {snr}dB: PESQ={pesq:.4f}, STOI={stoi:.4f}, CSIG={csig:.4f}, CBAK={cbak:.4f}, COVL={covl:.4f}"))
+
+        if squim_evaluator:
+            squim_stoi, squim_pesq, squim_sisdr = np.mean(squim_results, axis=0)
+            metrics[snr_key]['squim_stoi'] = float(squim_stoi)
+            metrics[snr_key]['squim_pesq'] = float(squim_pesq)
+            metrics[snr_key]['squim_sisdr'] = float(squim_sisdr)
+            logger.info(bold(f"{prefix}Squim-Objective on {snr}dB: STOI={squim_stoi:.4f}, PESQ={squim_pesq:.4f}, SI-SDR={squim_sisdr:.4f}"))
 
         # STT evaluation (model reused!)
         per_utt_cer: Optional[List[float]] = None
@@ -295,6 +338,10 @@ def evaluate(
                 if per_utt_cer is not None:
                     rec["cer"] = float(per_utt_cer[i])
                     rec["wer"] = float(per_utt_wer[i])
+                if squim_evaluator:
+                    rec["squim_stoi"] = float(squim_results[i][0])
+                    rec["squim_pesq"] = float(squim_results[i][1])
+                    rec["squim_sisdr"] = float(squim_results[i][2])
                 per_utt_block[uid] = rec
             metrics[snr_key]["per_utterance"] = per_utt_block
 
@@ -347,6 +394,10 @@ if __name__=="__main__":
                         help="Log file name. default is output.log")
     parser.add_argument("--eval_stt", default=False, action="store_true",
                         help="Evaluate STT performance")
+    parser.add_argument("--eval_squim", default=False, action="store_true",
+                        help="Compute Squim-Objective non-intrusive STOI/PESQ/SI-SDR estimates "
+                             "(torchaudio.pipelines.SQUIM_OBJECTIVE). Recommended for Vibravox "
+                             "speech_noisy where intrusive PESQ is unreliable due to noisy reference.")
     parser.add_argument("--stt_language", type=str, default=None,
                         help="STT language (korean, french, english, etc.). "
                              "Auto-detected from dataset if not specified.")
