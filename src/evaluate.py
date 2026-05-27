@@ -228,6 +228,62 @@ class DNSMOSEvaluator:
         )
 
 
+class PEREvaluator:
+    """Phoneme Error Rate evaluator using HF wav2vec2 phonemizer.
+
+    Matches T4 (Mimi WASPAA 2025) / T1 (Vibravox §VI) protocol: the same
+    phonemizer model is applied to both the enhanced output and the headset
+    reference; PER is the character-level edit-distance ratio between the
+    two IPA phoneme strings. Default model is
+    ``Cnam-LMSSC/phonemizer_headset_microphone`` (Wav2Vec2ForCTC fine-tuned
+    on Vibravox headset, IPA token vocab, 16 kHz).
+    """
+
+    def __init__(
+        self,
+        model_id: str = "Cnam-LMSSC/phonemizer_headset_microphone",
+        device: str = "cuda",
+        logger: Optional[logging.Logger] = None,
+    ):
+        from transformers import AutoProcessor, AutoModelForCTC
+        self.logger = logger or logging.getLogger(__name__)
+        self.device = device
+        self.model_id = model_id
+        self.logger.info(f"Loading phonemizer: {model_id}")
+        self.processor = AutoProcessor.from_pretrained(model_id)
+        self.model = AutoModelForCTC.from_pretrained(model_id).to(device).eval()
+        self.sample_rate = 16000
+        self.logger.info(f"PEREvaluator initialized (sample_rate={self.sample_rate})")
+
+    @torch.no_grad()
+    def _phonemize(self, waveform: np.ndarray) -> str:
+        w = np.asarray(waveform, dtype=np.float32).reshape(-1)
+        inputs = self.processor(
+            w, sampling_rate=self.sample_rate, return_tensors="pt",
+        ).input_values.to(self.device)
+        logits = self.model(inputs).logits
+        pred_ids = torch.argmax(logits, dim=-1)
+        return self.processor.batch_decode(pred_ids)[0]
+
+    def evaluate_one(
+        self, enhanced: np.ndarray, reference: np.ndarray,
+    ) -> Tuple[float, str, str]:
+        """Compute PER for one (enhanced, reference) pair using shared phonemizer.
+
+        Returns ``(per, pred_phonemes, ref_phonemes)``. ``per`` is the
+        character-level edit distance (IPA tokens are single characters in
+        this tokenizer) of the predicted phoneme string against the reference,
+        normalised by reference length. If the reference is empty, PER is 0.
+        """
+        import jiwer
+        pred = self._phonemize(enhanced)
+        ref = self._phonemize(reference)
+        if len(ref) == 0:
+            return 0.0, pred, ref
+        per = float(jiwer.cer(ref, pred))
+        return per, pred, ref
+
+
 def evaluate(
     args: DictConfig,
     model: torch.nn.Module,
@@ -278,6 +334,14 @@ def evaluate(
     if bool(getattr(args, 'eval_dnsmos', False)):
         dnsmos_evaluator = DNSMOSEvaluator(device=args.device, logger=logger)
 
+    # Initialize PER evaluator (HF wav2vec2 phonemizer; T4-style shared phonemizer
+    # protocol — enhanced vs reference IPA edit distance).
+    per_evaluator = None
+    if bool(getattr(args, 'eval_per', False)):
+        per_model_id = str(getattr(args, 'per_model_id',
+                                   'Cnam-LMSSC/phonemizer_headset_microphone'))
+        per_evaluator = PEREvaluator(model_id=per_model_id, device=args.device, logger=logger)
+
     save_per_utt = bool(getattr(args, 'save_per_utterance', False))
 
     for snr, data_loader in data_loader_list.items():
@@ -286,6 +350,7 @@ def evaluate(
         results  = []
         squim_results: List[Tuple[float, float, float]] = [] if squim_evaluator else []
         dnsmos_results: List[Tuple[float, float, float, float]] = [] if dnsmos_evaluator else []
+        per_results: List[Tuple[float, str, str]] = [] if per_evaluator else []
         utt_ids: List[str] = [] if save_per_utt else []
         bcs_gain_db = getattr(args, 'bcs_gain_db', 0.0)
         acs_gain_db = getattr(args, 'acs_gain_db', 0.0)
@@ -324,6 +389,8 @@ def evaluate(
                     squim_results.append(squim_evaluator.evaluate_one(clean_acs_hat))
                 if dnsmos_evaluator:
                     dnsmos_results.append(dnsmos_evaluator.evaluate_one(clean_acs_hat))
+                if per_evaluator:
+                    per_results.append(per_evaluator.evaluate_one(clean_acs_hat, clean_acs))
                 if save_per_utt:
                     utt_ids.append(utt_id[0])
 
@@ -354,6 +421,11 @@ def evaluate(
             metrics[snr_key]['dnsmos_bak'] = float(dns_bak)
             metrics[snr_key]['dnsmos_p808'] = float(dns_p808)
             logger.info(bold(f"{prefix}DNSMOS on {snr}dB: ovrl={dns_ovrl:.4f}, sig={dns_sig:.4f}, bak={dns_bak:.4f}, p808={dns_p808:.4f}"))
+
+        if per_evaluator:
+            per_mean = float(np.mean([p[0] for p in per_results]))
+            metrics[snr_key]['per'] = per_mean
+            logger.info(bold(f"{prefix}PER on {snr}dB: {per_mean:.4f} (model={per_evaluator.model_id})"))
 
         # STT evaluation (model reused!)
         per_utt_cer: Optional[List[float]] = None
@@ -392,6 +464,10 @@ def evaluate(
                     rec["dnsmos_sig"] = float(dnsmos_results[i][1])
                     rec["dnsmos_bak"] = float(dnsmos_results[i][2])
                     rec["dnsmos_p808"] = float(dnsmos_results[i][3])
+                if per_evaluator:
+                    rec["per"] = float(per_results[i][0])
+                    rec["phoneme_pred"] = str(per_results[i][1])
+                    rec["phoneme_ref"] = str(per_results[i][2])
                 per_utt_block[uid] = rec
             metrics[snr_key]["per_utterance"] = per_utt_block
 
@@ -452,6 +528,14 @@ if __name__=="__main__":
                         help="Compute DNSMOS P.835 non-intrusive ovrl/sig/bak/p808 MOS "
                              "(speechmos.dnsmos, ONNX). Complements --eval_squim for Vibravox "
                              "speech_noisy T1 reporting alignment.")
+    parser.add_argument("--eval_per", default=False, action="store_true",
+                        help="Compute Phoneme Error Rate via HF wav2vec2 phonemizer "
+                             "(default: Cnam-LMSSC/phonemizer_headset_microphone). Applies the "
+                             "same phonemizer to enhanced output and clean_acs reference per "
+                             "T4 (Mimi WASPAA 2025) / T1 (Vibravox §VI) protocol.")
+    parser.add_argument("--per_model_id", type=str,
+                        default="Cnam-LMSSC/phonemizer_headset_microphone",
+                        help="HF model id for --eval_per phonemizer.")
     parser.add_argument("--stt_language", type=str, default=None,
                         help="STT language (korean, french, english, etc.). "
                              "Auto-detected from dataset if not specified.")

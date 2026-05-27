@@ -199,6 +199,8 @@ def prepare_evaluation_runtime(
     conf.test_subset = str(getattr(args, "test_subset", "") or "")
     conf.eval_squim = bool(getattr(args, "eval_squim", False))
     conf.eval_dnsmos = bool(getattr(args, "eval_dnsmos", False))
+    conf.eval_per = bool(getattr(args, "eval_per", False))
+    conf.per_model_id = str(getattr(args, "per_model_id", "") or "Cnam-LMSSC/phonemizer_headset_microphone")
 
     stt_language = resolve_stt_language(
         args.dataset,
@@ -319,6 +321,8 @@ def build_evaluation_output(metrics: Any, args: Any, runtime: RuntimeBundle) -> 
         "test_subset": str(getattr(args, "test_subset", "") or ""),
         "eval_squim": bool(getattr(args, "eval_squim", False)),
         "eval_dnsmos": bool(getattr(args, "eval_dnsmos", False)),
+        "eval_per": bool(getattr(args, "eval_per", False)),
+        "per_model_id": str(getattr(args, "per_model_id", "") or ""),
     }
     return {
         "metadata": metadata,
