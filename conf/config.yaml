@@ -42,7 +42,6 @@ test_noise:
   deterministic: true
 
 batch_size: 8
-grad_accum_steps: 1  # effective batch = batch_size * grad_accum_steps (1 = standard single-step update)
 epochs: 150
 
 eval_every: 150  # compute test metrics every so epochs

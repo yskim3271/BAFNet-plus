@@ -80,7 +80,6 @@ class Solver(object):
         self.log_dir = args.log_dir
         self.num_prints = args.num_prints
         self.num_workers = args.num_workers
-        self.grad_accum_steps = max(1, int(getattr(args, 'grad_accum_steps', 1)))
         self.args = args
 
         # Initialize or resume (checkpoint loading)
@@ -263,9 +262,6 @@ class Solver(object):
         steps_done = 0
 
         for i, data in enumerate(logprog):
-            # Gradient-accumulation window (effective batch = batch_size * grad_accum_steps)
-            at_window_start = (i % self.grad_accum_steps == 0)
-            at_window_end = ((i + 1) % self.grad_accum_steps == 0) or (i == len(data_loader) - 1)
 
             bcs, noisy_acs, clean_acs = data
             model_input = get_model_input(
@@ -305,21 +301,14 @@ class Solver(object):
                 else:
                     loss_disc_g = 0
 
-                loss_disc = (loss_disc_r + loss_disc_g) / self.grad_accum_steps
+                loss_disc = loss_disc_r + loss_disc_g
 
-                if at_window_start:
-                    self.optim_disc.zero_grad()
+                self.optim_disc.zero_grad()
                 loss_disc.backward()
-                if at_window_end:
-                    self.optim_disc.step()
+                self.optim_disc.step()
 
-                logprog.append(**{"Disc_Loss": format(loss_disc.item() * self.grad_accum_steps, "4.5f")})
+                logprog.append(**{"Disc_Loss": format(loss_disc.item(), "4.5f")})
 
-                # Freeze the discriminator while computing the generator's metric loss so the
-                # generator backward does not pollute discriminator grads across the accumulation
-                # window (equivalent to the original behavior when grad_accum_steps=1).
-                for _p in self.discriminator.parameters():
-                    _p.requires_grad_(False)
                 disc_score_gen = self.discriminator(clean_mag.unsqueeze(1), clean_mag_hat_recon.unsqueeze(1))
                 loss_metric = F.mse_loss(disc_score_gen.flatten(), one_labels)
                 loss_metric_val = loss_metric.item()
@@ -347,20 +336,16 @@ class Solver(object):
                 loss_gen = loss_gen + self.kd_weight * kd_dict["total"]
                 kd_total_val = kd_dict["total"].item()
 
-            # Generator optimizer step (gradient-accumulation aware)
-            if at_window_start:
-                self.optim.zero_grad()
-            (loss_gen / self.grad_accum_steps).backward()
+            # Generator optimizer step
+            self.optim.zero_grad()
+            loss_gen.backward()
 
-            # Restore discriminator grads for the next discriminator update
+            max_grad_norm = getattr(self.args, 'max_grad_norm', 5.0)
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=max_grad_norm)
             if use_discriminator and hasattr(self.discriminator, 'parameters'):
-                for _p in self.discriminator.parameters():
-                    _p.requires_grad_(True)
+                torch.nn.utils.clip_grad_norm_(self.discriminator.parameters(), max_norm=max_grad_norm)
 
-            if at_window_end:
-                max_grad_norm = getattr(self.args, 'max_grad_norm', 5.0)
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=max_grad_norm)
-                self.optim.step()
+            self.optim.step()
 
             # Logging
             loss_dict_scalar = {
