@@ -395,8 +395,7 @@ def evaluate(
                     utt_ids.append(utt_id[0])
 
         pesq, csig, cbak, covl, segSNR, stoi = np.mean(results, axis=0)
-        # Vibravox-native single-cell test (Phase 2): key is "native"; multi-SNR otherwise.
-        snr_key = "native" if str(snr) == "native" else f'{snr}dB'
+        snr_key = f'{snr}dB'
         metrics[snr_key] = {
             "pesq": pesq,
             "stoi": stoi,

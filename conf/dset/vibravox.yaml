@@ -1,46 +1,34 @@
 dataset: Vibravox
 
 # ----------------------------------------------------------------------------
-# Vibravox-native noise mixing (5 unified noise items vs TAPS recipe)
-# 1. Noise source : Cnam-LMSSC `speechless_noisy` (BCS-recorded ambient)
-# 2. Mixing fn   : simple_add_mix (no SNR rescaling)
-# 3. SNR sample  : not applicable (naturalistic from BCS attenuation)
-# 4. dB FS norm  : disabled (raw float32)
-# 5. RIR conv    : reverb_proportion=0.0 (already 0 in TAPS recipe)
+# Vibravox recipe — augmentation unified with conf/dset/taps.yaml.
+#
+# The augmentation pipeline is identical to TAPS: default snr_random mixing with
+# DNS `noise_fullband_16k` at controlled SNR + dB-FS normalization (target
+# -25 dBFS, floating +-10, from conf/config.yaml train/valid/test_noise). The
+# only differences from TAPS are the speech corpus (Vibravox throat+headset,
+# loaded by dataset name in train.py) and `speech_subset`. Keeping the
+# augmentation identical lets the TAPS trends be reproduced on an independent
+# French throat-microphone corpus with no method-side variable.
+# See docs/wiki/concepts/vibravox-literature.md §5.
 # ----------------------------------------------------------------------------
-mix_strategy: vibravox_native
-noise_hf_dataset: yskim3271/vibravox_16k
-noise_subset_train: speechless_noisy
-noise_subset_valid: speechless_noisy
-noise_sensor: throat_microphone
-skip_db_fs_normalize: true
 
-# Speech subset selector — null uses yskim3271/vibravox_16k default config
-# (already published as speech_clean-equivalent: throat + acoustic + text + speaker_id + sentence_id).
-# Multi-config (speechless_noisy / speech_noisy) is used by train noise loader and Phase 2 test only.
+# Speech: Vibravox speech_clean (default config: 20,981 train / 2,523 dev / 3,064 test)
 speech_subset: null
+test_augment_numb: 2
 
-# Vibravox-native single-cell test (Phase 2, option (a))
-test_bypass_mixing: true
-test_subset: speech_noisy
-
-test_augment_numb: 1
-
-# ----------------------------------------------------------------------------
-# Phase 0 audio-time matching (Option β) — apply at command line:
-#   epochs=60 warmup_epochs=12 valid_start_epoch=40
-# Ratio Vibravox/TAPS = 2.436x at backbone default RF (segment=32k, stride=16k).
-# 60 ep × 46.79 h/ep = 2,807 h ≈ TAPS 150 ep × 19.20 h = 2,881 h (97.5% match).
-# Phase 0 raw output (epochs=62 / warmup=12 / valid_start=41) rounded to 60/12/40 for clarity.
-# Source: scripts/analyze_dataset_length.py (run 2026-05-02 with --time-block-kernel 3 5 7 11)
-# ----------------------------------------------------------------------------
-
-# Legacy snr_random fallback (unused under vibravox_native, retained for parity)
+# Noise / RIR — DNS noise_fullband_16k, identical manifests to conf/dset/taps.yaml
 noise_dir: /home/yskim/workspace/dataset/datasets_fullband/noise_fullband_16k
-noise_train: dataset/vibravox/noise_train.txt
-noise_valid: dataset/vibravox/noise_dev.txt
-noise_test: dataset/vibravox/noise_test.txt
+noise_train: dataset/taps/noise_train.txt
+noise_valid: dataset/taps/noise_dev.txt
+noise_test: dataset/taps/noise_test.txt
 rir_dir: /home/yskim/workspace/dataset/datasets_fullband/impulse_responses_16k
-rir_train: dataset/vibravox/rir_train.txt
-rir_valid: dataset/vibravox/rir_dev.txt
-rir_test: dataset/vibravox/rir_test.txt
+rir_train: dataset/taps/rir_train.txt
+rir_valid: dataset/taps/rir_dev.txt
+rir_test: dataset/taps/rir_test.txt
+
+# ----------------------------------------------------------------------------
+# Audio-time matching to TAPS — apply at command line:
+#   epochs=60 warmup_epochs=12 valid_start_epoch=40
+# (60 ep x 46.79 h/ep = 2,807 h ~= TAPS 150 ep x 19.20 h = 2,881 h, 97.5% match)
+# ----------------------------------------------------------------------------

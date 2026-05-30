@@ -8,7 +8,7 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Dict, Tuple, Union
 
 import torch
 from datasets import concatenate_datasets, load_dataset
@@ -65,25 +65,13 @@ def resolve_stt_language(
     return language
 
 
-def load_test_dataset(dataset: str, test_augment_numb: int, *, hf_id: str | None = None,
-                      config: str | None = None):
-    """Load and repeat the requested public test split.
-
-    ``hf_id`` and ``config`` override the default ``DATASET_SPLITS`` lookup —
-    used by Vibravox-native single-cell test (Phase 2) to point at a different
-    multi-config subset (e.g., ``yskim3271/vibravox_16k``,
-    ``config="speech_noisy"``).
-    """
-    if hf_id is None:
-        dataset_key = dataset.lower()
-        if dataset_key not in DATASET_SPLITS:
-            raise ValueError(f"Unknown dataset: {dataset}")
-        hf_id = DATASET_SPLITS[dataset_key]
-
-    if config is not None:
-        testset = load_dataset(hf_id, name=config, split="test")
-    else:
-        testset = load_dataset(hf_id, split="test")
+def load_test_dataset(dataset: str, test_augment_numb: int):
+    """Load and repeat the requested public test split."""
+    dataset_key = dataset.lower()
+    if dataset_key not in DATASET_SPLITS:
+        raise ValueError(f"Unknown dataset: {dataset}")
+    hf_id = DATASET_SPLITS[dataset_key]
+    testset = load_dataset(hf_id, split="test")
     return concatenate_datasets([testset] * test_augment_numb)
 
 
@@ -96,52 +84,12 @@ def get_eval_stft_args(conf: Any) -> Dict[str, Any]:
 
 
 def build_eval_loaders(args: Any, bcs_only: bool) -> Dict[str, DataLoader]:
-    """Build evaluation loaders.
+    """Build multi-SNR evaluation loaders.
 
-    Two modes:
-    - **multi-SNR (default)**: one loader per ``args.snr_step`` value, deterministic
-      noise/RIR mixing via ``Noise_Augmented_Dataset(snr_range=[snr,snr],
-      deterministic=True)``. Loader keys are ``"-20"``, ``"0"``, etc.
-    - **single-cell vibravox-native** (``args.test_bypass_mixing=True``): one
-      loader at key ``"native"`` consumes the paired real-recorded
-      ``speech_noisy`` subset; mixing is bypassed in
-      :class:`Noise_Augmented_Dataset` (Phase 2).
+    One loader per ``args.snr_step`` value, deterministic noise/RIR mixing via
+    ``Noise_Augmented_Dataset(snr_range=[snr,snr], deterministic=True)``. Loader
+    keys are ``"-20"``, ``"0"``, etc.
     """
-    test_bypass_mixing = bool(getattr(args, "test_bypass_mixing", False))
-
-    if test_bypass_mixing:
-        testset = load_test_dataset(
-            args.dataset,
-            args.test_augment_numb,
-            hf_id=getattr(args, "test_hf_dataset", None),
-            config=getattr(args, "test_subset", None),
-        )
-        dataset = Noise_Augmented_Dataset(
-            datapair_list=testset,
-            noise_list=[],
-            rir_list=[],
-            snr_range=[0, 0],
-            reverb_proportion=0.0,
-            target_dB_FS=args.target_dB_FS,
-            target_dB_FS_floating_value=args.target_dB_FS_floating_value,
-            silence_length=args.silence_length,
-            deterministic=True,
-            sampling_rate=16000,
-            with_id=True,
-            with_text=True,
-            bcs_only=bcs_only,
-            mix_strategy="vibravox_native",
-            bypass_mixing=True,
-        )
-        return {
-            "native": DataLoader(
-                dataset=dataset,
-                batch_size=1,
-                num_workers=args.num_workers,
-                pin_memory=True,
-            )
-        }
-
     testset = load_test_dataset(args.dataset, args.test_augment_numb)
 
     if bcs_only:
@@ -194,9 +142,6 @@ def prepare_evaluation_runtime(
         if save_per_utterance is None
         else save_per_utterance
     )
-    conf.test_bypass_mixing = bool(getattr(args, "test_bypass_mixing", False))
-    conf.test_hf_dataset = str(getattr(args, "test_hf_dataset", "") or "")
-    conf.test_subset = str(getattr(args, "test_subset", "") or "")
     conf.eval_squim = bool(getattr(args, "eval_squim", False))
     conf.eval_dnsmos = bool(getattr(args, "eval_dnsmos", False))
     conf.eval_per = bool(getattr(args, "eval_per", False))
@@ -289,12 +234,8 @@ def prepare_enhancement_runtime(
 
 def build_evaluation_output(metrics: Any, args: Any, runtime: RuntimeBundle) -> Dict[str, Any]:
     """Wrap aggregate evaluation metrics with reproducibility metadata."""
-    test_bypass_mixing = bool(getattr(args, "test_bypass_mixing", False))
     snr_step_raw = getattr(args, "snr_step", []) or []
-    if test_bypass_mixing:
-        snr_step: List[Any] = ["native"]
-    else:
-        snr_step = [int(snr) for snr in snr_step_raw]
+    snr_step = [int(snr) for snr in snr_step_raw]
 
     metadata = {
         "dataset": str(getattr(args, "dataset", "")),
@@ -316,9 +257,6 @@ def build_evaluation_output(metrics: Any, args: Any, runtime: RuntimeBundle) -> 
         "eval_stt": bool(getattr(args, "eval_stt", False)),
         "stt_language": runtime.stt_language,
         "save_per_utterance": bool(getattr(runtime.conf, "save_per_utterance", False)),
-        "test_bypass_mixing": test_bypass_mixing,
-        "test_hf_dataset": str(getattr(args, "test_hf_dataset", "") or ""),
-        "test_subset": str(getattr(args, "test_subset", "") or ""),
         "eval_squim": bool(getattr(args, "eval_squim", False)),
         "eval_dnsmos": bool(getattr(args, "eval_dnsmos", False)),
         "eval_per": bool(getattr(args, "eval_per", False)),
@@ -407,9 +345,7 @@ def add_runtime_common_args(
 def add_eval_augmentation_args(parser: argparse.ArgumentParser) -> None:
     """Add noise/RIR/SNR augmentation flags shared by multi-SNR eval CLIs.
 
-    All flags are optional at parse time so Vibravox-native single-cell mode
-    (``--test_bypass_mixing``) can omit noise/RIR/SNR entirely. Multi-SNR mode
-    enforces the required-flag check in
+    Required-flag enforcement happens in
     :func:`validate_eval_augmentation_args` after parsing.
     """
     parser.add_argument("--noise_dir", type=str, default=None,
@@ -432,38 +368,17 @@ def add_eval_augmentation_args(parser: argparse.ArgumentParser) -> None:
                         help="Target dB FS floating value. default is 0")
     parser.add_argument("--silence_length", type=float, default=0.2,
                         help="Silence length. default is 0.2")
-    parser.add_argument("--test_bypass_mixing", action="store_true",
-                        help="Vibravox-native single-cell test: load paired real-recorded "
-                             "speech_noisy directly, bypass synthetic noise mixing. "
-                             "Output JSON uses 'native' SNR key.")
-    parser.add_argument("--test_hf_dataset", type=str, default=None,
-                        help="HF dataset id for --test_bypass_mixing (e.g., yskim3271/vibravox_16k).")
-    parser.add_argument("--test_subset", type=str, default=None,
-                        help="HF config name for --test_bypass_mixing (e.g., speech_noisy).")
 
 
 def validate_eval_augmentation_args(args: argparse.Namespace) -> None:
-    """Enforce required flags depending on eval mode (multi-SNR vs vibravox-native).
+    """Enforce required multi-SNR flags.
 
-    Multi-SNR mode requires ``--noise_dir`` / ``--noise_test`` / ``--rir_dir`` /
-    ``--rir_test`` / ``--snr_step``. Vibravox-native (``--test_bypass_mixing``)
-    requires ``--test_hf_dataset`` / ``--test_subset``.
+    Requires ``--noise_dir`` / ``--noise_test`` / ``--rir_dir`` / ``--rir_test`` /
+    ``--snr_step``.
     """
-    if getattr(args, "test_bypass_mixing", False):
-        missing = [
-            name for name in ("test_hf_dataset", "test_subset")
-            if not getattr(args, name, None)
-        ]
-        if missing:
-            raise SystemExit(
-                f"--test_bypass_mixing requires the following flags: {missing}"
-            )
-        return
-
     multi_snr_required = ("noise_dir", "noise_test", "rir_dir", "rir_test", "snr_step")
     missing = [name for name in multi_snr_required if not getattr(args, name, None)]
     if missing:
         raise SystemExit(
-            f"Multi-SNR eval requires the following flags: {missing}. "
-            f"Use --test_bypass_mixing for Vibravox-native single-cell eval instead."
+            f"Multi-SNR eval requires the following flags: {missing}."
         )

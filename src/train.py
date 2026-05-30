@@ -123,10 +123,7 @@ def _resolve_segment_and_stride(args, logger):
 
 def _build_dataloaders(args, trainset, validset, testset, segment, stride, shift, bcs_only):
     """Build train / valid / per-SNR evaluation DataLoaders."""
-    mix_strategy = args.dset.get("mix_strategy", "snr_random")
-    is_vibravox_native = (mix_strategy == "vibravox_native")
-
-    if bcs_only or is_vibravox_native:
+    if bcs_only:
         noise_train_list = noise_valid_list = noise_test_list = []
         rir_train_list = rir_valid_list = rir_test_list = []
     else:
@@ -136,22 +133,6 @@ def _build_dataloaders(args, trainset, validset, testset, segment, stride, shift
         rir_train_list = parse_file_list(args.dset.rir_dir, args.dset.rir_train)
         rir_valid_list = parse_file_list(args.dset.rir_dir, args.dset.rir_valid)
         rir_test_list = parse_file_list(args.dset.rir_dir, args.dset.rir_test)
-
-    tr_noise_dataset = va_noise_dataset = None
-    if is_vibravox_native:
-        tr_noise_dataset = load_dataset(
-            args.dset.noise_hf_dataset,
-            name=args.dset.noise_subset_train,
-            split="train",
-        )
-        va_noise_dataset = load_dataset(
-            args.dset.noise_hf_dataset,
-            name=args.dset.noise_subset_valid,
-            split="dev",
-        )
-
-    noise_sensor = args.dset.get("noise_sensor", "throat_microphone")
-    skip_db_fs_normalize = bool(args.dset.get("skip_db_fs_normalize", False))
 
     tr_dataset = Noise_Augmented_Dataset(
         datapair_list=trainset,
@@ -168,10 +149,6 @@ def _build_dataloaders(args, trainset, validset, testset, segment, stride, shift
         shift=shift,
         bcs_only=bcs_only,
         bcs_gain_perturbation_db=getattr(args.train_noise, 'bcs_gain_perturbation_db', 0),
-        mix_strategy=mix_strategy,
-        noise_dataset=tr_noise_dataset,
-        noise_sensor=noise_sensor,
-        skip_db_fs_normalize=skip_db_fs_normalize,
     )
     tr_loader = DataLoader(
         dataset=tr_dataset, batch_size=args.batch_size, shuffle=True,
@@ -190,10 +167,6 @@ def _build_dataloaders(args, trainset, validset, testset, segment, stride, shift
         deterministic=args.valid_noise.deterministic,
         sampling_rate=args.sampling_rate,
         bcs_only=bcs_only,
-        mix_strategy=mix_strategy,
-        noise_dataset=va_noise_dataset,
-        noise_sensor=noise_sensor,
-        skip_db_fs_normalize=skip_db_fs_normalize,
     )
     va_loader = DataLoader(
         dataset=va_dataset, batch_size=1, shuffle=False,
@@ -474,8 +447,7 @@ def _main(args):
     logger = setup_logger("main")
 
     # Convert filesystem path entries to absolute paths. Other string entries
-    # (e.g., mix_strategy, noise_hf_dataset, speech_subset) are left untouched
-    # so vibravox_native dispatch and HF dataset ids stay valid.
+    # (e.g., speech_subset) are left untouched so HF dataset ids stay valid.
     for key, value in args.dset.items():
         if isinstance(value, str) and key in _DSET_PATH_KEYS:
             args.dset[key] = hydra.utils.to_absolute_path(value)

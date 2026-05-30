@@ -50,11 +50,6 @@ class Noise_Augmented_Dataset:
                  deterministic=False,
                  bcs_only=False,
                  bcs_gain_perturbation_db=0,
-                 mix_strategy="snr_random",
-                 noise_dataset=None,
-                 noise_sensor="throat_microphone",
-                 skip_db_fs_normalize=False,
-                 bypass_mixing=False,
                  ):
         # Initialize variables with constructor arguments
         self.datapair_list = datapair_list
@@ -74,18 +69,6 @@ class Noise_Augmented_Dataset:
         self.deterministic = deterministic
         self.bcs_only = bcs_only
         self.bcs_gain_perturbation_db = bcs_gain_perturbation_db
-        self.mix_strategy = mix_strategy
-        self.noise_dataset = noise_dataset
-        self.noise_sensor = noise_sensor
-        self.skip_db_fs_normalize = skip_db_fs_normalize
-        self.bypass_mixing = bypass_mixing
-        if mix_strategy not in ("snr_random", "vibravox_native"):
-            raise ValueError(f"Unsupported mix_strategy: {mix_strategy!r}")
-        if mix_strategy == "vibravox_native" and noise_dataset is None and not bypass_mixing:
-            raise ValueError(
-                "mix_strategy='vibravox_native' requires noise_dataset (HF Dataset) "
-                "unless bypass_mixing=True (test path)."
-            )
         assert self.with_id if self.with_text else True, "with_id must be True if with_text is True"
         
         # Parse the SNR range into a list of possible SNR values
@@ -199,24 +182,6 @@ class Noise_Augmented_Dataset:
         noisy = clean + noise
         return noisy
 
-    @staticmethod
-    def simple_add_mix(clean, noise):
-        """Vibravox-style: align noise length to clean, simple add (no SNR rescaling).
-
-        Mirrors jhauret/vibravox:utils.py:193-251
-        ``mix_speech_and_noise_without_rescaling`` — naturalistic SNR comes from
-        the BCS sensor recording itself.
-        """
-        target_length = clean.shape[-1]
-        noise_length = noise.shape[-1]
-        if noise_length >= target_length:
-            start = random.randint(0, noise_length - target_length)
-            noise = noise[..., start:start + target_length]
-        else:
-            repeats = math.ceil(target_length / noise_length)
-            noise = noise.repeat(repeats)[..., :target_length]
-        return clean + noise
-
     def __len__(self):
         # The length of the dataset is the number of bcs_set samples
         return len(self.bcs_set)
@@ -250,21 +215,6 @@ class Noise_Augmented_Dataset:
         # Keep a reference to the original clean acs
         clean_acs = acs.clone()
 
-        # Phase 2: bypass_mixing for Vibravox `speech_noisy` real-recorded test.
-        # noisy_acs == clean_acs (paired headset reference); BCS is real-noisy.
-        if self.bypass_mixing:
-            noisy_acs = acs.clone()
-            if self.bcs_gain_perturbation_db > 0:
-                bcs_offset_db = random.uniform(-self.bcs_gain_perturbation_db,
-                                               self.bcs_gain_perturbation_db)
-                bcs = bcs * (10 ** (bcs_offset_db / 20))
-            if self.with_text:
-                return bcs, noisy_acs, clean_acs, id, text
-            elif self.with_id:
-                return bcs, noisy_acs, clean_acs, id
-            else:
-                return bcs, noisy_acs, clean_acs
-
         # if bcs_only is True, do not add noise or reverb
         if self.bcs_only:
             dummy_acs = torch.zeros_like(acs)
@@ -275,23 +225,8 @@ class Noise_Augmented_Dataset:
             else:
                 return bcs, dummy_acs, clean_acs
 
-        # Phase 1: noise selection — random row from HF noise_dataset (vibravox_native)
-        # vs file-list deterministic/random (snr_random).
-        if self.mix_strategy == "vibravox_native":
-            noise_idx = random.randint(0, len(self.noise_dataset) - 1)
-            noise_arr = self.noise_dataset[noise_idx][f"audio.{self.noise_sensor}"]["array"]
-            noise = torch.tensor(noise_arr, dtype=torch.float32)
-            # Match length: random crop or repeat-pad to acs length (mirrors simple_add_mix)
-            target_length = acs.shape[-1]
-            if noise.shape[-1] >= target_length:
-                start = random.randint(0, noise.shape[-1] - target_length)
-                noise = noise[..., start:start + target_length]
-            else:
-                repeats = math.ceil(target_length / noise.shape[-1])
-                noise = noise.repeat(repeats)[..., :target_length]
-        else:
-            # Select noise for the length of acs
-            noise = self._select_noise(acs.shape[-1], index)
+        # Select noise for the length of acs
+        noise = self._select_noise(acs.shape[-1], index)
         # Verify lengths match
         assert noise.shape[-1] == acs.shape[-1], f"Length mismatch: {acs.shape[-1]} vs {noise.shape[-1]}"
 
@@ -325,36 +260,32 @@ class Noise_Augmented_Dataset:
             # Convert the numpy array back to a torch tensor
             acs = torch.tensor(acs, dtype=torch.float32)
 
-        if self.mix_strategy == "vibravox_native":
-            # Vibravox-native: simple add, no SNR rescaling, no dB FS normalization
-            noisy_acs = self.simple_add_mix(acs, noise)
-        else:
-            # Normalize amplitudes (set max abs amplitude to 1)
-            bcs, _ = norm_amplitude(bcs)
-            clean_acs, _ = norm_amplitude(clean_acs)
-            acs, _ = norm_amplitude(acs)
-            noise, _ = norm_amplitude(noise)
+        # Normalize amplitudes (set max abs amplitude to 1)
+        bcs, _ = norm_amplitude(bcs)
+        clean_acs, _ = norm_amplitude(clean_acs)
+        acs, _ = norm_amplitude(acs)
+        noise, _ = norm_amplitude(noise)
 
-            # Scale signals to the target dB FS
-            bcs, _, _ = tailor_dB_FS(bcs, self.target_dB_FS)
-            clean_acs, _, _ = tailor_dB_FS(clean_acs, self.target_dB_FS)
-            acs, _, _ = tailor_dB_FS(acs, self.target_dB_FS)
-            noise, _, _ = tailor_dB_FS(noise, self.target_dB_FS)
+        # Scale signals to the target dB FS
+        bcs, _, _ = tailor_dB_FS(bcs, self.target_dB_FS)
+        clean_acs, _, _ = tailor_dB_FS(clean_acs, self.target_dB_FS)
+        acs, _, _ = tailor_dB_FS(acs, self.target_dB_FS)
+        noise, _, _ = tailor_dB_FS(noise, self.target_dB_FS)
 
-            # Mix the (potentially reverberant) clean speech with noise at the chosen SNR
-            snr = self._random_select_from(self.snr_list)
-            noisy_acs = self.snr_mix(acs, noise, snr)
+        # Mix the (potentially reverberant) clean speech with noise at the chosen SNR
+        snr = self._random_select_from(self.snr_list)
+        noisy_acs = self.snr_mix(acs, noise, snr)
 
-            # Randomly adjust the overall level within a floating value range
-            noisy_target_dB_FS = random.randint(
-                int(self.target_dB_FS - self.target_dB_FS_floating_value),
-                int(self.target_dB_FS + self.target_dB_FS_floating_value)
-            )
+        # Randomly adjust the overall level within a floating value range
+        noisy_target_dB_FS = random.randint(
+            int(self.target_dB_FS - self.target_dB_FS_floating_value),
+            int(self.target_dB_FS + self.target_dB_FS_floating_value)
+        )
 
-            # Scale noisy and clean signals with the new target dB FS
-            noisy_acs, _, noisy_scalar = tailor_dB_FS(noisy_acs, noisy_target_dB_FS)
-            clean_acs *= noisy_scalar
-            bcs *= noisy_scalar
+        # Scale noisy and clean signals with the new target dB FS
+        noisy_acs, _, noisy_scalar = tailor_dB_FS(noisy_acs, noisy_target_dB_FS)
+        clean_acs *= noisy_scalar
+        bcs *= noisy_scalar
 
         # Apply independent BCS gain perturbation (simulates sensor coupling variation)
         if self.bcs_gain_perturbation_db > 0:
