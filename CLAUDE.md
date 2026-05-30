@@ -6,8 +6,6 @@
 ```bash
 # Install dependencies
 pip install -r requirements.txt
-# Or with dev dependencies
-pip install -e ".[dev]"
 
 # Train model
 CUDA_VISIBLE_DEVICES=0 python -m src.train +model=backbone_masking +dset=taps
@@ -31,7 +29,7 @@ python -m src.evaluate --model_config <cfg> --chkpt_dir <dir> --chkpt_file best.
 python results/track_experiment.py --update
 
 # Compute receptive field and latency
-python src/compute_rf.py --experiment prk_1117_1 --csv results/experiments.csv
+python src/receptive_field.py --experiment prk_1117_1 --csv results/experiments.csv
 
 # Streaming inference — PT wrapper / ORT host wrapper (post-2026-05-13 rebuild)
 # - PT streaming: BAFNetPlusStreaming.from_checkpoint('results/experiments/bafnetplus_50ms')
@@ -56,8 +54,7 @@ python -m src.analysis.eval_streaming --preset full \
 ### Linting and Testing
 ```bash
 # Run all tests
-make test
-# Or: pytest tests/ -v
+pytest tests/ -v
 
 # Run single test file
 pytest tests/test_models.py -v
@@ -66,12 +63,10 @@ pytest tests/test_models.py -v
 pytest tests/test_models.py::TestBackbone::test_backbone_forward -v
 
 # Format code
-make format
-# Or: black . && isort .
+black . && isort .
 
 # Lint code
-make lint
-# Or: flake8 . && mypy .
+flake8 . && mypy .
 ```
 
 ## Code Style Rules
@@ -121,6 +116,9 @@ def mag_pha_to_complex(mag: Tensor, pha: Tensor) -> Tensor:
 - `src/stft.py`: STFT/iSTFT utilities
 - `src/runtime_common.py`: Shared runtime helpers for evaluation/enhancement CLIs
 - `src/utils.py`: Utility functions
+- `src/losses.py`: Training loss functions and joblib-backed batch PESQ scorer
+- `src/checkpoint.py`: Dynamic model loading and checkpoint I/O utilities
+- `src/receptive_field.py`: Receptive field and algorithmic latency computation
 - `src/models/backbone.py`: Backbone model architecture (BatchNorm2d, CausalConv1d SCA)
 - `src/models/streaming/`: Streaming inference modules (post-2026-05-13 rebuild)
   - `layers/stateful_conv.py`: Stateful `CausalConv1d` / `AsymmetricConv2d` / `CausalConv2d` (S2)
@@ -153,9 +151,9 @@ def mag_pha_to_complex(mag: Tensor, pha: Tensor) -> Tensor:
 ## Repository Etiquette
 
 ### Before Committing
-1. **Format your code**: `make format`
-2. **Run linters**: `make lint`
-3. **Run tests**: `make test`
+1. **Format your code**: `black . && isort .`
+2. **Run linters**: `flake8 . && mypy .`
+3. **Run tests**: `pytest tests/ -v`
 4. **Check git status**: Ensure no unintended files are staged
 
 ### Commit Messages
@@ -257,7 +255,7 @@ BAFNet-plus/
 ### Modifying Training Loop
 1. Edit `src/solver.py` (Solver class)
 2. Update relevant tests in `tests/`
-3. Run: `make test`
+3. Run: `pytest tests/ -v`
 
 ### Adding New Loss Function
 1. Add implementation to `src/utils.py` or `src/solver.py`
@@ -266,15 +264,15 @@ BAFNet-plus/
 
 ### Computing Receptive Field and Latency
 
-The `src/compute_rf.py` tool calculates the receptive field size and algorithmic latency of Backbone models based on their hyperparameters.
+The `src/receptive_field.py` tool calculates the receptive field size and algorithmic latency of Backbone models based on their hyperparameters.
 
 **Usage:**
 ```bash
 # From experiment in CSV
-python src/compute_rf.py --experiment prk_1117_1 --csv results/experiments.csv
+python src/receptive_field.py --experiment prk_1117_1 --csv results/experiments.csv
 
 # With direct parameters
-python src/compute_rf.py --dense_depth 4 --num_tsblock 4 \
+python src/receptive_field.py --dense_depth 4 --num_tsblock 4 \
   --time_block_kernel 3 5 7 11 --causal True \
   --encoder_padding_ratio 0.5 0.5
 ```

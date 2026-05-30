@@ -193,7 +193,7 @@ Output (Enhanced Acoustic Signal)
 - **Masking**: Predicts magnitude/phase masks to apply to noisy spectrogram
 - **Mapping**: Directly predicts clean magnitude/phase spectrograms
 
-**Receptive Field (RF)** depends on kernel configurations. With default settings (num_tsblock=4, time_block_num=2, time_block_kernel=[3,5,7,11]), use `python src/compute_rf.py` to compute RF and algorithmic latency. See `src/models/backbone.py` for architecture details.
+**Receptive Field (RF)** depends on kernel configurations. With default settings (num_tsblock=4, time_block_num=2, time_block_kernel=[3,5,7,11]), use `python src/receptive_field.py` to compute RF and algorithmic latency. See `src/models/backbone.py` for architecture details.
 
 ## Training Details
 
