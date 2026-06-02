@@ -1,15 +1,22 @@
 dataset: Vibravox
 
 # ----------------------------------------------------------------------------
-# Vibravox recipe — augmentation unified with conf/dset/taps.yaml.
+# Vibravox recipe — same augmentation methodology as conf/dset/taps.yaml.
 #
-# The augmentation pipeline is identical to TAPS: default snr_random mixing with
-# DNS `noise_fullband_16k` at controlled SNR + dB-FS normalization (target
-# -25 dBFS, floating +-10, from conf/config.yaml train/valid/test_noise). The
-# only differences from TAPS are the speech corpus (Vibravox throat+headset,
-# loaded by dataset name in train.py) and `speech_subset`. Keeping the
-# augmentation identical lets the TAPS trends be reproduced on an independent
-# French throat-microphone corpus with no method-side variable.
+# snr_random mixing with DNS `noise_fullband_16k` at controlled SNR + dB-FS
+# normalization (target -25 dBFS, floating +-10, from conf/config.yaml
+# train/valid/test_noise) — identical to TAPS. Differences from TAPS: the speech
+# corpus (Vibravox throat+headset, loaded by dataset name in train.py),
+# `speech_subset`, and the Vibravox-specific noise manifests below.
+#
+# Noise manifests are Vibravox-specific because Vibravox dev/test are larger than
+# TAPS (dev 2,523 / test 3,064 vs 1,000 / 1,000). The deterministic valid/test
+# noise indexing needs one held-out noise file per sample, so the same
+# 63,810-file DNS pool is RE-PARTITIONED (seed 2039) into disjoint
+# train 55,159 / valid 2,523 / test 6,128 (= test x test_augment_numb) — the same
+# held-out-noise design as TAPS (noise_valid = dev, noise_test = test x 2,
+# train/valid/test disjoint), sized to Vibravox. Same pool/distribution, different
+# files. Regenerate: python scripts/gen_vibravox_noise_manifests.py
 # See docs/wiki/concepts/vibravox-literature.md §5.
 # ----------------------------------------------------------------------------
 
@@ -17,11 +24,12 @@ dataset: Vibravox
 speech_subset: null
 test_augment_numb: 2
 
-# Noise / RIR — DNS noise_fullband_16k, identical manifests to conf/dset/taps.yaml
+# Noise — DNS noise_fullband_16k pool, re-partitioned for Vibravox (see header).
 noise_dir: /home/yskim/workspace/dataset/datasets_fullband/noise_fullband_16k
-noise_train: dataset/taps/noise_train.txt
-noise_valid: dataset/taps/noise_dev.txt
-noise_test: dataset/taps/noise_test.txt
+noise_train: dataset/vibravox/noise_train.txt
+noise_valid: dataset/vibravox/noise_dev.txt
+noise_test: dataset/vibravox/noise_test.txt
+# RIR — unused (reverb_proportion=0 for train/valid/test); kept for loader API.
 rir_dir: /home/yskim/workspace/dataset/datasets_fullband/impulse_responses_16k
 rir_train: dataset/taps/rir_train.txt
 rir_valid: dataset/taps/rir_dev.txt
