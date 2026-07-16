@@ -15,8 +15,8 @@ deployed D3 and is verified, not re-exported):
                        s20-bafnetplus-functional-fp32-complex
   2. A1 clip          per-channel symmetric Clip on the 2 mapping TSBlock-3
                        freq_stage proj_first Conv nodes -- reuses
-                       insert_per_channel_clip from the cycle 20 script and the
-                       50 ms D3 per-channel calibration (margin 1.10)
+                       insert_per_channel_clip from the cycle 20 script and derives
+                       the 50 ms D3 thresholds from the bound D3 ONNX
   3. onnxsim          graph simplification with --skip-fuse-bn
   4. namespace        regen_streaming_config.py (Android side) rebuilds the
      bridge            Kotlin StreamingConfig sidecar from the export sidecar
@@ -24,8 +24,8 @@ deployed D3 and is verified, not re-exported):
      sidecar           qnn_config block, mirroring the deployed D3 sidecar
 
 The same FP32 graph serves both Mobile CPU (CPU EP) and Mobile DSP (QNN EP +
-HTP-FP16 sidecar). The 50 ms D3 per-channel calibration is reused for all tiers
-(c09 plan option A -- per-tier calibration is intentionally not run).
+HTP-FP16 sidecar). The 50 ms D3 per-channel Clip thresholds are reused for all
+tiers (c09 plan option A -- per-tier calibration is intentionally not run).
 
 The cycle 20 A1 script (export_bafnetplus_cycle20_a1_pchclip_clean.py) hardcodes
 the 50 ms base-export md5 and emits a 50 ms-D3-specific sidecar block, so it
@@ -49,6 +49,7 @@ from typing import Any, Dict, List
 
 import numpy as np
 import onnx
+from onnx import numpy_helper
 
 # A top-level `scripts` package installed in site-packages shadows this repo's
 # namespace `scripts/` dir, so `python -m scripts.<name>` / `from scripts...`
@@ -74,7 +75,6 @@ OUT_ROOT = REPO_ROOT / "results" / "onnx" / "c09_5tier_streaming"
 
 BASE_SCHEMA = "s20-bafnetplus-functional-fp32-complex"
 A1_MARGIN = 1.10
-A1_CALIB_JSON = ANDROID_ROOT / "results" / "parity" / "cycle18b17_proj_first_per_channel_calib_idx0.json"
 REGEN_SCRIPT = ANDROID_ROOT / "scripts" / "parity" / "regen_streaming_config.py"
 
 # Latency tier table -- meta.md "Latency tier 컨벤션 (LOCKED)".
@@ -90,15 +90,17 @@ TIERS: Dict[str, Dict[str, Any]] = {
 NEW_TIERS = ["12", "25", "75", "100"]  # 50 ms reuses the deployed D3
 
 # 50 ms deployed D3 anchors (cycle 30, recording-app assets) -- verified, not rebuilt.
+# The sidecar hash reflects the 2026-05-29 metadata-only target_soc correction
+# from SM8550 to the actual Galaxy S25 Ultra target, SM8750.
 D3_ONNX = ANDROID_ROOT / "bafnet-recording-app" / "src" / "main" / "assets" / "bafnetplus_50ms_fp32.onnx"
 D3_ONNX_MD5 = "cac4cf69c904b9fb5397bff328532f6c"
-D3_SIDECAR_MD5 = "6d2c0674bd19e84b3ff17c33b64b8d4d"
+D3_SIDECAR_MD5 = "7027e77de03652930c0edfef9f101313"
 
 # HTP-FP16 sidecar fields -- mirror the deployed D3 sidecar
-# (bafnet-recording-app/.../bafnetplus_50ms_fp32.onnx.json, md5 6d2c0674...).
+# (bafnet-recording-app/.../bafnetplus_50ms_fp32.onnx.json, md5 7027e77d...).
 HTP_FP16_BACKENDS = ["qnn_htp", "cpu", "nnapi"]
 HTP_FP16_QNN_CONFIG = {
-    "target_soc": "SM8550",
+    "target_soc": "SM8750",
     "htp_performance_mode": "burst",
     "context_cache_enabled": True,
     "vtcm_mb": 8,
@@ -111,6 +113,23 @@ HTP_FP16_QNN_CONFIG = {
 
 NUM_NON_STATE_OUTPUTS = 3  # complex graph: est_mag, phase_real, phase_imag
 EXPECTED_NUM_STATES = 190
+
+
+def _load_a1_calib_from_d3() -> Dict[str, np.ndarray]:
+    """Recover A1 calibration vectors from the bound D3 ONNX Clip thresholds."""
+    model = onnx.load(str(D3_ONNX))
+    initializers = {init.name: numpy_helper.to_array(init) for init in model.graph.initializer}
+    calib: Dict[str, np.ndarray] = {}
+    for target in TARGETS:
+        hi_name = f"{target['conv_node_name']}_pchclip_hi_cycle20"
+        hi = initializers.get(hi_name)
+        if hi is None:
+            raise KeyError(f"D3 clip initializer not found: {hi_name}")
+        vec = (hi.reshape(-1).astype(np.float32) / np.float32(A1_MARGIN)).astype(np.float32)
+        if vec.shape != (256,):
+            raise ValueError(f"{hi_name} recovered shape {vec.shape}, expected (256,)")
+        calib[target["key"]] = vec
+    return calib
 
 
 def _step1_base_export(tier: str, work: Path) -> Dict[str, Any]:
@@ -146,11 +165,11 @@ def _step1_base_export(tier: str, work: Path) -> Dict[str, Any]:
 
 
 def _step2_a1_clip(tier: str, base_onnx: Path, work: Path) -> Path:
-    """Step 2 -- insert the per-channel A1 Clip (50 ms D3 calibration reused)."""
-    calib = json.loads(A1_CALIB_JSON.read_text())
+    """Step 2 -- insert the per-channel A1 Clip (50 ms D3 thresholds reused)."""
+    calib = _load_a1_calib_from_d3()
     model = onnx.load(str(base_onnx))
     for t in TARGETS:
-        vec = np.array(calib[t["calib_key"]], dtype=np.float32)
+        vec = calib[t["key"]]
         insert_per_channel_clip(model, t, vec, A1_MARGIN)
     onnx.checker.check_model(model)
     clipped = work / "step2_clipped.onnx"
@@ -190,9 +209,10 @@ def _step3b_export_sidecar(
         "steps": "base export -> A1 per-channel clip -> onnxsim --skip-fuse-bn -> regen -> HTP-FP16 sidecar",
         "a1_clip": {
             "margin": A1_MARGIN,
-            "calib_json": A1_CALIB_JSON.name,
-            "calib_json_md5": md5sum(A1_CALIB_JSON),
-            "calib_source": "50 ms D3 (per-tier calibration not run -- c09 plan option A)",
+            "calib_source": "50 ms bound D3 ONNX Clip threshold initializers",
+            "calib_source_onnx": str(D3_ONNX.relative_to(REPO_ROOT.parent)),
+            "calib_source_onnx_md5": D3_ONNX_MD5,
+            "calib_recovery": f"hi_threshold / margin({A1_MARGIN})",
             "targets": [t["conv_node_name"] for t in TARGETS],
         },
         "produced_by": "scripts.export_bafnetplus_c09_5tier_htp_fp16",
@@ -339,8 +359,6 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    if not A1_CALIB_JSON.is_file():
-        parser.error(f"A1 calibration JSON not found: {A1_CALIB_JSON}")
     if not REGEN_SCRIPT.is_file():
         parser.error(f"regen_streaming_config.py not found: {REGEN_SCRIPT}")
     if not D3_ONNX.is_file():

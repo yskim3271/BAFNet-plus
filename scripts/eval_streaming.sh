@@ -62,6 +62,6 @@ python -m src.analysis.eval_streaming \
   --preset "${PRESET}" \
   --unified-ckpt-dir results/experiments/bafnetplus_50ms \
   --chkpt-file best.th \
-  --onnx-artifact results/onnx/bafnetplus_50ms_fp32.onnx \
+  --onnx-artifact results/onnx/bafnetplus_50ms_fp32_complex_cycle21_simplified.onnx \
   "${EXTRA_OUTPUTS[@]}" \
   "$@"

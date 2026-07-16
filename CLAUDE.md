@@ -35,15 +35,15 @@ python src/receptive_field.py --experiment prk_1117_1 --csv results/experiments.
 # - PT streaming: BAFNetPlusStreaming.from_checkpoint('results/experiments/bafnetplus_50ms')
 #   (src/models/streaming/bafnetplus_streaming.py — S6)
 # - FP32 ONNX export: export_bafnetplus_to_onnx_from_checkpoint(...)
-#   (src/models/streaming/onnx/export.py — S8; sidecar JSON schema
-#   's8-bafnetplus-functional-fp32', 190 states, T_export=14)
-# - ORT host wrapper: BAFNetPlusOrtStreaming.from_onnx('results/onnx/bafnetplus_50ms_fp32.onnx')
+#   (src/models/streaming/onnx/export.py — D3; sidecar JSON schema
+#   's20-bafnetplus-functional-fp32-complex', 190 states, T_export=14)
+# - ORT host wrapper: BAFNetPlusOrtStreaming.from_onnx('results/onnx/bafnetplus_50ms_fp32_complex_cycle21_simplified.onnx')
 #   (src/models/streaming/onnx/ort_wrapper.py — S9; same public API as PT wrapper)
 
 # Full-utterance 3-path eval harness (S10):
 python -m src.analysis.eval_streaming --preset full \
   --unified-ckpt-dir results/experiments/bafnetplus_50ms \
-  --onnx-artifact results/onnx/bafnetplus_50ms_fp32.onnx \
+  --onnx-artifact results/onnx/bafnetplus_50ms_fp32_complex_cycle21_simplified.onnx \
   --output-json results/eval_streaming/run.json \
   --output-markdown results/eval_streaming/run.md
 # Or via the canonical shell wrapper:

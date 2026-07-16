@@ -177,16 +177,13 @@ class LayerNorm1d(nn.Module):
         return LayerNormFunction.apply(x, self.weight, self.bias, self.eps)
 
 class GroupPrimeKernelFFN(nn.Module):
-    def __init__(self, in_channel: int = 64, kernel_list: List[int] = [3, 11, 23, 31], causal: bool = False,
-                 fold_residual_scale: bool = False, post_norm: bool = False):
+    def __init__(self, in_channel: int = 64, kernel_list: List[int] = [3, 11, 23, 31], causal: bool = False):
         super().__init__()
         self.in_channel = in_channel
         self.expand_ratio = len(kernel_list)
         self.mid_channel = self.in_channel * self.expand_ratio
         self.kernel_list = kernel_list
         self.causal = causal
-        self.fold_residual_scale = fold_residual_scale
-        self.post_norm = post_norm
 
         if causal:
             conv_fn = CausalConv1d
@@ -198,10 +195,7 @@ class GroupPrimeKernelFFN(nn.Module):
         self.proj_last = nn.Sequential(
             nn.Conv1d(self.mid_channel, self.in_channel, kernel_size=1))
         self.norm = LayerNorm1d(self.in_channel)
-        if not fold_residual_scale:
-            self.scale = nn.Parameter(torch.zeros((1, self.in_channel, 1)), requires_grad=True)
-        if post_norm:
-            self.post_norm_layer = LayerNorm1d(self.in_channel)
+        self.scale = nn.Parameter(torch.zeros((1, self.in_channel, 1)), requires_grad=True)
 
         for kernel_size in self.kernel_list:
             setattr(self, f"attn_{kernel_size}", nn.Sequential(
@@ -220,23 +214,15 @@ class GroupPrimeKernelFFN(nn.Module):
             x_chunks[i] = getattr(self, f"attn_{self.kernel_list[i]}")(x_chunks[i]) * getattr(self, f"conv_{self.kernel_list[i]}")(x_chunks[i])
 
         x = torch.cat(x_chunks, dim=1)
-        if self.fold_residual_scale:
-            x = self.proj_last(x) + shortcut
-        else:
-            x = self.proj_last(x) * self.scale + shortcut
-        if self.post_norm:
-            x = self.post_norm_layer(x)
+        x = self.proj_last(x) * self.scale + shortcut
         return x
 
 class ChannelAttentionBlock(nn.Module):
     def __init__(self, in_channels: int = 64, dw_kernel_size: int = 3,
-                 causal: bool = False, sca_kernel_size: int = 11,
-                 fold_residual_scale: bool = False, post_norm: bool = False):
+                 causal: bool = False, sca_kernel_size: int = 11):
         super().__init__()
 
         dw_channel = in_channels * 2
-        self.fold_residual_scale = fold_residual_scale
-        self.post_norm = post_norm
 
         if causal:
             conv_fn = CausalConv1d
@@ -281,10 +267,7 @@ class ChannelAttentionBlock(nn.Module):
             )
         self.pwconv2 = nn.Conv1d(in_channels=dw_channel // 2, out_channels=in_channels, kernel_size=1, padding=0, stride=1,
                                groups=1, bias=True)
-        if not fold_residual_scale:
-            self.beta = nn.Parameter(torch.zeros((1, in_channels, 1)), requires_grad=True)
-        if post_norm:
-            self.post_norm_layer = LayerNorm1d(in_channels)
+        self.beta = nn.Parameter(torch.zeros((1, in_channels, 1)), requires_grad=True)
 
     def forward(self, x):
         skip = x
@@ -294,12 +277,7 @@ class ChannelAttentionBlock(nn.Module):
         x = self.sg(x)
         x = x * self.sca(x)
         x = self.pwconv2(x)
-        if self.fold_residual_scale:
-            x = skip + x
-        else:
-            x = skip + x * self.beta
-        if self.post_norm:
-            x = self.post_norm_layer(x)
+        x = skip + x * self.beta
         return x
 
 class TSBlock(nn.Module):
@@ -313,8 +291,6 @@ class TSBlock(nn.Module):
         freq_block_kernel: List[int] = [3, 11, 23, 31],
         causal: bool = False,
         sca_kernel_size: int = 11,
-        fold_residual_scale: bool = False,
-        post_norm: bool = False,
     ):
         super().__init__()
         self.dense_channel = dense_channel
@@ -327,12 +303,8 @@ class TSBlock(nn.Module):
             time_stage.append(
                 nn.Sequential(
                     ChannelAttentionBlock(in_channels=dense_channel, dw_kernel_size=time_dw_kernel_size,
-                                            causal=causal, sca_kernel_size=sca_kernel_size,
-                                            fold_residual_scale=fold_residual_scale,
-                                            post_norm=post_norm),
-                    GroupPrimeKernelFFN(in_channel=dense_channel, kernel_list=time_block_kernel, causal=causal,
-                                        fold_residual_scale=fold_residual_scale,
-                                        post_norm=post_norm),
+                                            causal=causal, sca_kernel_size=sca_kernel_size),
+                    GroupPrimeKernelFFN(in_channel=dense_channel, kernel_list=time_block_kernel, causal=causal),
                 )
             )
 
@@ -340,12 +312,8 @@ class TSBlock(nn.Module):
         for _ in range(freq_block_num):
             freq_stage.append(
                 nn.Sequential(
-                    ChannelAttentionBlock(in_channels=dense_channel, dw_kernel_size=3, causal=False,
-                                            fold_residual_scale=fold_residual_scale,
-                                            post_norm=post_norm),
-                    GroupPrimeKernelFFN(in_channel=dense_channel, kernel_list=freq_block_kernel, causal=False,
-                                        fold_residual_scale=fold_residual_scale,
-                                        post_norm=post_norm),
+                    ChannelAttentionBlock(in_channels=dense_channel, dw_kernel_size=3, causal=False),
+                    GroupPrimeKernelFFN(in_channel=dense_channel, kernel_list=freq_block_kernel, causal=False),
                 )
             )
 
@@ -367,18 +335,14 @@ class TSBlock(nn.Module):
         return x
 
 class LearnableSigmoid2d(nn.Module):
-    def __init__(self, in_features, beta=1, hard_sigmoid: bool = False):
+    def __init__(self, in_features, beta=1):
         super().__init__()
         self.beta = beta
-        self.hard_sigmoid = hard_sigmoid
         self.slope = nn.Parameter(torch.ones(in_features, 1))
         self.slope.requires_grad = True
 
     def forward(self, x):
-        z = self.slope * x
-        if self.hard_sigmoid:
-            return self.beta * F.hardsigmoid(z)
-        return self.beta * torch.sigmoid(z)
+        return self.beta * torch.sigmoid(self.slope * x)
 
 class DenseDilatedBlock(nn.Module):
     """
@@ -480,8 +444,7 @@ class MaskDecoder(nn.Module):
                  out_channel=1,
                  depth=4,
                  causal=False,
-                 padding_ratio=(0.5, 0.5),
-                 hard_sigmoid: bool = False):
+                 padding_ratio=(0.5, 0.5)):
         super().__init__()
         self.dense_block = DenseDilatedBlock(dense_channel, depth=depth, causal=causal, padding_ratio=padding_ratio)
         self.mask_conv = nn.Sequential(
@@ -491,7 +454,7 @@ class MaskDecoder(nn.Module):
             nn.PReLU(out_channel),
             nn.Conv2d(out_channel, out_channel, (1, 1))
         )
-        self.lsigmoid = LearnableSigmoid2d(n_fft//2+1, beta=sigmoid_beta, hard_sigmoid=hard_sigmoid)
+        self.lsigmoid = LearnableSigmoid2d(n_fft//2+1, beta=sigmoid_beta)
 
     def forward(self, x):
         x = self.dense_block(x)
@@ -579,9 +542,6 @@ class Backbone(nn.Module):
                  decoder_padding_ratio=(0.5, 0.5),
                  sca_kernel_size=11,
                  infer_type='masking',
-                 fold_residual_scale: bool = False,
-                 hard_sigmoid: bool = False,
-                 post_norm: bool = False,
                  # Deprecated aliases (for old checkpoint configs)
                  fft_len=None,
                  hop_len=None,
@@ -618,22 +578,17 @@ class Backbone(nn.Module):
 
         self.encoder_padding_ratio = encoder_padding_ratio
         self.decoder_padding_ratio = decoder_padding_ratio
-        self.fold_residual_scale = fold_residual_scale
-        self.hard_sigmoid = hard_sigmoid
-        self.post_norm = post_norm
 
         self.dense_encoder = DenseEncoder(dense_channel, in_channel=2, depth=dense_depth,
                                          causal=causal_ts_block, padding_ratio=encoder_padding_ratio)
         self.sequence_block = nn.Sequential(
             *[TSBlock(dense_channel, time_block_num, freq_block_num, time_dw_kernel_size,
                       time_block_kernel, freq_block_kernel, causal=causal_ts_block,
-                      sca_kernel_size=sca_kernel_size, fold_residual_scale=fold_residual_scale,
-                      post_norm=post_norm)
+                      sca_kernel_size=sca_kernel_size)
               for _ in range(num_tsblock)]
         )
         self.mask_decoder = MaskDecoder(dense_channel, n_fft, sigmoid_beta, out_channel=1,
-                                       depth=dense_depth, causal=causal_ts_block, padding_ratio=decoder_padding_ratio,
-                                       hard_sigmoid=hard_sigmoid)
+                                       depth=dense_depth, causal=causal_ts_block, padding_ratio=decoder_padding_ratio)
         self.phase_decoder = PhaseDecoder(dense_channel, out_channel=1, depth=dense_depth,
                                          causal=causal_ts_block, padding_ratio=decoder_padding_ratio)
 

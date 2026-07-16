@@ -61,9 +61,7 @@ Ported from LaCoSENet ``src/models/onnx_export/exportable_core.py`` +
 ``stateful_core.py`` (the reshape-based path; the reshape-free variant
 ``stateful_core_rf.py`` is a separate NPU concern not ported here per the FP32
 launch prompt). Adjusted for BAFNet+ module paths (``src.models.backbone`` /
-``src.models.streaming.*``) and BAFNet+'s ``ChannelAttentionBlock`` /
-``GroupPrimeKernelFFN`` ``fold_residual_scale`` / ``post_norm`` branches (which
-LaCoSENet's variant pre-dated).
+``src.models.streaming.*``).
 
 Frozen I/O contract (the contract S8/S9/S11 re-bind to)
 -------------------------------------------------------
@@ -914,10 +912,9 @@ class ExportableBackboneCore(nn.Module):
     def _forward_cab(self, x: Tensor, cab: Any, state_iter: StateIterator) -> Tensor:
         """Mirror of :meth:`src.models.backbone.ChannelAttentionBlock.forward` with state routing.
 
-        Handles both legacy (``beta`` residual scale) and ``fold_residual_scale``
-        / ``post_norm`` branches. ``cab.dwconv`` is ``FunctionalStatefulConv1d``
-        when causal (the time stage); ``cab.sca`` is ``nn.Sequential`` for both
-        causal (``StatefulCausalConv1d`` -> ``Functional``) and non-causal
+        ``cab.dwconv`` is ``FunctionalStatefulConv1d`` when causal (the time
+        stage); ``cab.sca`` is ``nn.Sequential`` for both causal
+        (``StatefulCausalConv1d`` -> ``Functional``) and non-causal
         (``AdaptiveAvgPool1d``) variants.
         """
         skip = x
@@ -941,12 +938,7 @@ class ExportableBackboneCore(nn.Module):
             x = x * cab.sca(x)
 
         x = cab.pwconv2(x)
-        if getattr(cab, "fold_residual_scale", False):
-            x = skip + x
-        else:
-            x = skip + x * cab.beta
-        if getattr(cab, "post_norm", False):
-            x = cab.post_norm_layer(x)
+        x = skip + x * cab.beta
         return cast(Tensor, x)
 
     def _forward_gpkffn(self, x: Tensor, gpkffn: Any, state_iter: StateIterator) -> Tensor:
@@ -983,12 +975,7 @@ class ExportableBackboneCore(nn.Module):
             x_chunks[i] = attn_out * conv_out
 
         x = torch.cat(x_chunks, dim=1)
-        if getattr(gpkffn, "fold_residual_scale", False):
-            x = gpkffn.proj_last(x) + shortcut
-        else:
-            x = gpkffn.proj_last(x) * gpkffn.scale + shortcut
-        if getattr(gpkffn, "post_norm", False):
-            x = gpkffn.post_norm_layer(x)
+        x = gpkffn.proj_last(x) * gpkffn.scale + shortcut
         return cast(Tensor, x)
 
     def _forward_mask_decoder(self, x: Tensor, state_iter: StateIterator) -> Tensor:
@@ -1227,12 +1214,7 @@ class ExportableBackboneCore(nn.Module):
         captures.append(x)  # SCA multiply output
 
         x = cab.pwconv2(x)
-        if getattr(cab, "fold_residual_scale", False):
-            x = skip + x
-        else:
-            x = skip + x * cab.beta
-        if getattr(cab, "post_norm", False):
-            x = cab.post_norm_layer(x)
+        x = skip + x * cab.beta
         return cast(Tensor, x)
 
     def _forward_gpkffn_with_debug(
@@ -1279,13 +1261,8 @@ class ExportableBackboneCore(nn.Module):
             captures.append(x_chunks[i])  # GPKFFN attn*conv per kernel
 
         x = torch.cat(x_chunks, dim=1)
-        if getattr(gpkffn, "fold_residual_scale", False):
-            x = gpkffn.proj_last(x) + shortcut
-        else:
-            x = gpkffn.proj_last(x) * gpkffn.scale + shortcut
+        x = gpkffn.proj_last(x) * gpkffn.scale + shortcut
         captures.append(x)  # GPKFFN proj_last output
-        if getattr(gpkffn, "post_norm", False):
-            x = gpkffn.post_norm_layer(x)
         return cast(Tensor, x)
 
     def __repr__(self) -> str:

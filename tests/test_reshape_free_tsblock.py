@@ -10,25 +10,21 @@ collapsed once the default-path was removed.
 Covered cases:
 
 1. ``test_tsblock_unit_parity`` — ``ReshapeFreeTSBlock`` vs canonical
-   :class:`src.models.backbone.TSBlock` with the **canonical** algebra flags
-   (``fold_residual_scale=False, post_norm=False``). FP32 ≤ 1e-5.
-2. ``test_tsblock_unit_parity_algebra_variants`` — same module pair,
-   parametrised over the four ``(fold_residual_scale, post_norm)`` combinations.
-3. ``test_rf_state_layout`` — ``ExportableBackboneCore`` (RF as default) state
+   :class:`src.models.backbone.TSBlock`. FP32 ≤ 1e-5.
+2. ``test_rf_state_layout`` — ``ExportableBackboneCore`` (RF as default) state
    count + per-state shape signature: 4 encoder DS_DDB (4D) + 40 TSBlock 4D
    ``[B, C, padding, F_enc]`` + 8 decoder DS_DDB (4D) for the test config
    (num_tsblock=2).
-4. ``test_layernorm4dchannel_matches_layernorm1d`` — building-block unit test.
-5. ``test_functional_stateful_conv2d_time_axis_matches_1d`` — building-block
+3. ``test_layernorm4dchannel_matches_layernorm1d`` — building-block unit test.
+4. ``test_functional_stateful_conv2d_time_axis_matches_1d`` — building-block
    unit test (4D time-axis stateful conv ≡ per-F 1D stateful conv).
-6. ``test_simple_gate_4d_matches_3d`` — building-block unit test.
+5. ``test_simple_gate_4d_matches_3d`` — building-block unit test.
 """
 
 from __future__ import annotations
 
 import zlib
 
-import pytest
 import torch
 
 from src.models.backbone import Backbone, TSBlock
@@ -49,7 +45,7 @@ def _seed(name: str) -> None:
     torch.manual_seed(zlib.crc32(name.encode()))
 
 
-def _make_canonical_tsblock(*, fold_residual_scale: bool = False, post_norm: bool = False) -> TSBlock:
+def _make_canonical_tsblock() -> TSBlock:
     """Build a BAFNet+ canonical TSBlock (dense=64, kernels [3,5,7,9] / [3,11,23,31])."""
     return TSBlock(
         dense_channel=64,
@@ -60,8 +56,6 @@ def _make_canonical_tsblock(*, fold_residual_scale: bool = False, post_norm: boo
         freq_block_kernel=[3, 11, 23, 31],
         causal=True,
         sca_kernel_size=11,
-        fold_residual_scale=fold_residual_scale,
-        post_norm=post_norm,
     ).eval()
 
 
@@ -95,7 +89,7 @@ def _make_canonical_backbone(*, num_tsblock: int = 2, infer_type: str = "masking
 
 
 def test_tsblock_unit_parity():
-    """Canonical TSBlock (fold_residual_scale=False, post_norm=False) parity ≤ 1e-5."""
+    """Canonical TSBlock parity ≤ 1e-5."""
     _seed("rf-unit-canonical")
     tsblock = _make_canonical_tsblock()
     rf = convert_tsblock_to_reshape_free(tsblock).eval()
@@ -109,33 +103,8 @@ def test_tsblock_unit_parity():
     diff = (y_ref - y_rf).abs().max().item()
     assert diff <= ATOL_FP32, f"canonical TSBlock parity broken: max|Δ|={diff:.3e}"
 
-
 # ---------------------------------------------------------------------------
-# (2) Single-block unit parity — 4 algebra-flag combinations
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("fold_residual_scale", [False, True])
-@pytest.mark.parametrize("post_norm", [False, True])
-def test_tsblock_unit_parity_algebra_variants(fold_residual_scale, post_norm):
-    """All four (fold_residual_scale, post_norm) combinations match within 1e-5."""
-    _seed(f"rf-unit-{fold_residual_scale}-{post_norm}")
-    tsblock = _make_canonical_tsblock(fold_residual_scale=fold_residual_scale, post_norm=post_norm)
-    rf = convert_tsblock_to_reshape_free(tsblock).eval()
-
-    x = torch.randn(1, 64, 14, 100)
-    with torch.no_grad():
-        y_ref = tsblock(x)
-        y_rf = rf(x)
-    diff = (y_ref - y_rf).abs().max().item()
-    assert diff <= ATOL_FP32, (
-        f"fold_residual_scale={fold_residual_scale} post_norm={post_norm}: "
-        f"max|Δ|={diff:.3e}"
-    )
-
-
-# ---------------------------------------------------------------------------
-# (3) RF state layout audit
+# (2) RF state layout audit
 # ---------------------------------------------------------------------------
 
 

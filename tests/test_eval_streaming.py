@@ -45,8 +45,8 @@ _REAL_CKPT_DIR = _REPO_ROOT / "results" / "experiments" / "bafnetplus_50ms"
 _REAL_CKPT_FILE = _REAL_CKPT_DIR / "best.th"
 _BM_MAP_CFG = _REPO_ROOT / "results" / "experiments" / "bm_map_50ms" / ".hydra" / "config.yaml"
 _BM_MASK_CFG = _REPO_ROOT / "results" / "experiments" / "bm_mask_50ms" / ".hydra" / "config.yaml"
-_REAL_ONNX = _REPO_ROOT / "results" / "onnx" / "bafnetplus_50ms_fp32.onnx"
-_REAL_SIDECAR = _REPO_ROOT / "results" / "onnx" / "bafnetplus_50ms_fp32.onnx.json"
+_REAL_ONNX = _REPO_ROOT / "results" / "onnx" / "bafnetplus_50ms_fp32_complex_cycle21_simplified.onnx"
+_REAL_SIDECAR = _REPO_ROOT / "results" / "onnx" / "bafnetplus_50ms_fp32_complex_cycle21_simplified.onnx.json"
 
 _TAPS_HF_CACHE = (
     Path.home() / ".cache" / "huggingface" / "datasets" / "yskim3271___throat_and_acoustic_pairing_speech_dataset"

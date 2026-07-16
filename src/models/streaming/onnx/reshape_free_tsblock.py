@@ -77,7 +77,7 @@ class ReshapeFreeChannelAttentionBlock(nn.Module):
     """4D analog of :class:`src.models.backbone.ChannelAttentionBlock`.
 
     Same submodule attribute names (``norm`` / ``pwconv1`` / ``dwconv`` / ``sg``
-    / ``sca`` / ``pwconv2`` / optional ``beta`` / ``post_norm_layer``) so the
+    / ``sca`` / ``pwconv2`` / ``beta``) so the
     state-name DFS walk by :class:`StateIterator` produces identical names to
     the default-path CAB. The ``axis`` argument controls which dimension the
     depthwise conv operates over:
@@ -101,10 +101,6 @@ class ReshapeFreeChannelAttentionBlock(nn.Module):
         axis: ``'time'`` (causal, stateful) or ``'freq'`` (non-causal, stateless).
         sca_kernel_size: SCA depthwise kernel size for the time-axis variant
             (11 in the deployed config). Ignored for ``axis='freq'``.
-        fold_residual_scale: If False (default), keeps the learnable
-            ``beta [1, C, 1, 1]`` residual scale (same algebra as ``LayerNorm1d``
-            CAB with the freshly-broadcast 4D shape).
-        post_norm: If True, applies a trailing :class:`LayerNorm4dChannel`.
     """
 
     def __init__(
@@ -113,8 +109,6 @@ class ReshapeFreeChannelAttentionBlock(nn.Module):
         dw_kernel_size: int = 3,
         axis: str = "time",
         sca_kernel_size: int = 11,
-        fold_residual_scale: bool = False,
-        post_norm: bool = False,
     ) -> None:
         super().__init__()
         if axis not in ("time", "freq"):
@@ -123,8 +117,6 @@ class ReshapeFreeChannelAttentionBlock(nn.Module):
         self.axis = axis
         self.dw_kernel_size = int(dw_kernel_size)
         self.sca_kernel_size = int(sca_kernel_size)
-        self.fold_residual_scale = bool(fold_residual_scale)
-        self.post_norm = bool(post_norm)
 
         dw_channel = in_channels * 2
 
@@ -183,10 +175,7 @@ class ReshapeFreeChannelAttentionBlock(nn.Module):
             )
 
         self.pwconv2 = nn.Conv2d(sca_channels, in_channels, kernel_size=1, bias=True)
-        if not self.fold_residual_scale:
-            self.register_parameter("beta", nn.Parameter(torch.zeros(1, in_channels, 1, 1)))
-        if self.post_norm:
-            self.post_norm_layer = LayerNorm4dChannel(in_channels)
+        self.register_parameter("beta", nn.Parameter(torch.zeros(1, in_channels, 1, 1)))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward through the reshape-free CAB.
@@ -225,12 +214,7 @@ class ReshapeFreeChannelAttentionBlock(nn.Module):
         x = x * sca_out
 
         x = self.pwconv2(x)
-        if self.fold_residual_scale:
-            x = skip + x
-        else:
-            x = skip + x * self.beta
-        if self.post_norm:
-            x = self.post_norm_layer(x)
+        x = skip + x * self.beta
         return x
 
 
@@ -240,9 +224,9 @@ class ReshapeFreeGroupPrimeKernelFFN(nn.Module):
     Same submodule attribute names — ``norm`` / ``proj_first`` (single 1×1
     Conv2d wrapped in a ``Sequential`` of length 1, mirroring the original
     BAFNet+ ``nn.Sequential(nn.Conv1d(C, mid_C, 1))``) / ``proj_last`` (same
-    pattern) / optional ``scale [1, C, 1, 1]`` / ``post_norm_layer`` / per-
-    kernel ``attn_{k}`` (``Sequential(depthwise, pointwise)``) and ``conv_{k}``
-    (single depthwise). The depthwise / conv leaves are
+    pattern) / ``scale [1, C, 1, 1]`` / per-kernel ``attn_{k}``
+    (``Sequential(depthwise, pointwise)``) and ``conv_{k}`` (single depthwise).
+    The depthwise / conv leaves are
     :class:`FunctionalStatefulConv2dTimeAxis` for ``axis='time'``, stateless
     ``nn.Conv2d(kernel=(1, k))`` for ``axis='freq'``.
 
@@ -251,9 +235,6 @@ class ReshapeFreeGroupPrimeKernelFFN(nn.Module):
         kernel_list: Sorted-by-construction list of prime kernels (e.g.
             ``[3, 5, 7, 9]`` for time, ``[3, 11, 23, 31]`` for freq).
         axis: ``'time'`` or ``'freq'``.
-        fold_residual_scale: If False (default), keeps the learnable
-            ``scale [1, C, 1, 1]`` residual scale.
-        post_norm: If True, applies a trailing :class:`LayerNorm4dChannel`.
     """
 
     def __init__(
@@ -261,8 +242,6 @@ class ReshapeFreeGroupPrimeKernelFFN(nn.Module):
         in_channel: int,
         kernel_list: List[int],
         axis: str = "time",
-        fold_residual_scale: bool = False,
-        post_norm: bool = False,
     ) -> None:
         super().__init__()
         if axis not in ("time", "freq"):
@@ -270,8 +249,6 @@ class ReshapeFreeGroupPrimeKernelFFN(nn.Module):
         self.in_channel = int(in_channel)
         self.kernel_list = list(kernel_list)
         self.axis = axis
-        self.fold_residual_scale = bool(fold_residual_scale)
-        self.post_norm = bool(post_norm)
 
         self.expand_ratio = len(self.kernel_list)
         self.mid_channel = self.in_channel * self.expand_ratio
@@ -285,10 +262,7 @@ class ReshapeFreeGroupPrimeKernelFFN(nn.Module):
             nn.Conv2d(self.mid_channel, self.in_channel, kernel_size=1, bias=True),
         )
         self.norm = LayerNorm4dChannel(self.in_channel)
-        if not self.fold_residual_scale:
-            self.register_parameter("scale", nn.Parameter(torch.zeros(1, self.in_channel, 1, 1)))
-        if self.post_norm:
-            self.post_norm_layer = LayerNorm4dChannel(self.in_channel)
+        self.register_parameter("scale", nn.Parameter(torch.zeros(1, self.in_channel, 1, 1)))
 
         for ks in self.kernel_list:
             if axis == "time":
@@ -376,12 +350,7 @@ class ReshapeFreeGroupPrimeKernelFFN(nn.Module):
             chunks[i] = attn_out * conv_out
 
         x = torch.cat(chunks, dim=1)
-        if self.fold_residual_scale:
-            x = self.proj_last(x) + shortcut
-        else:
-            x = self.proj_last(x) * self.scale + shortcut
-        if self.post_norm:
-            x = self.post_norm_layer(x)
+        x = self.proj_last(x) * self.scale + shortcut
         return x
 
 
@@ -426,8 +395,6 @@ class ReshapeFreeTSBlock(nn.Module):
         time_block_kernel: Optional[List[int]] = None,
         freq_block_kernel: Optional[List[int]] = None,
         sca_kernel_size: int = 11,
-        fold_residual_scale: bool = False,
-        post_norm: bool = False,
     ) -> None:
         super().__init__()
         if time_block_kernel is None:
@@ -441,8 +408,6 @@ class ReshapeFreeTSBlock(nn.Module):
         self.time_block_kernel = list(time_block_kernel)
         self.freq_block_kernel = list(freq_block_kernel)
         self.sca_kernel_size = int(sca_kernel_size)
-        self.fold_residual_scale = bool(fold_residual_scale)
-        self.post_norm = bool(post_norm)
 
         time_stage: List[nn.Module] = []
         for _ in range(time_block_num):
@@ -453,15 +418,11 @@ class ReshapeFreeTSBlock(nn.Module):
                         dw_kernel_size=time_dw_kernel_size,
                         axis="time",
                         sca_kernel_size=sca_kernel_size,
-                        fold_residual_scale=fold_residual_scale,
-                        post_norm=post_norm,
                     ),
                     ReshapeFreeGroupPrimeKernelFFN(
                         in_channel=dense_channel,
                         kernel_list=time_block_kernel,
                         axis="time",
-                        fold_residual_scale=fold_residual_scale,
-                        post_norm=post_norm,
                     ),
                 )
             )
@@ -474,15 +435,11 @@ class ReshapeFreeTSBlock(nn.Module):
                         dw_kernel_size=3,
                         axis="freq",
                         sca_kernel_size=sca_kernel_size,  # unused for freq
-                        fold_residual_scale=fold_residual_scale,
-                        post_norm=post_norm,
                     ),
                     ReshapeFreeGroupPrimeKernelFFN(
                         in_channel=dense_channel,
                         kernel_list=freq_block_kernel,
                         axis="freq",
-                        fold_residual_scale=fold_residual_scale,
-                        post_norm=post_norm,
                     ),
                 )
             )
@@ -567,8 +524,6 @@ def _convert_cab(
     *,
     axis: str,
     sca_kernel_size: int,
-    fold_residual_scale: bool,
-    post_norm: bool,
 ) -> ReshapeFreeChannelAttentionBlock:
     """Build a reshape-free CAB from a trained :class:`ChannelAttentionBlock`."""
     in_channels = int(src_cab.norm.weight.shape[0])
@@ -586,8 +541,6 @@ def _convert_cab(
         dw_kernel_size=dw_kernel_size,
         axis=axis,
         sca_kernel_size=sca_kernel_size,
-        fold_residual_scale=fold_residual_scale,
-        post_norm=post_norm,
     )
 
     _copy_layernorm1d(src_cab.norm, dst.norm)
@@ -631,10 +584,7 @@ def _convert_cab(
         _copy_pwconv1d_to_2d(sca_pw_src, sca_pw_dst)
 
     _copy_pwconv1d_to_2d(src_cab.pwconv2, dst.pwconv2)
-    if not fold_residual_scale:
-        dst.beta.data = src_cab.beta.data.unsqueeze(-1).clone()
-    if post_norm:
-        _copy_layernorm1d(src_cab.post_norm_layer, dst.post_norm_layer)
+    dst.beta.data = src_cab.beta.data.unsqueeze(-1).clone()
     return dst
 
 
@@ -642,8 +592,6 @@ def _convert_gpkffn(
     src_ffn: GroupPrimeKernelFFN,
     *,
     axis: str,
-    fold_residual_scale: bool,
-    post_norm: bool,
 ) -> ReshapeFreeGroupPrimeKernelFFN:
     """Build a reshape-free GPKFFN from a trained :class:`GroupPrimeKernelFFN`."""
     in_channel = int(src_ffn.in_channel)
@@ -653,8 +601,6 @@ def _convert_gpkffn(
         in_channel=in_channel,
         kernel_list=kernel_list,
         axis=axis,
-        fold_residual_scale=fold_residual_scale,
-        post_norm=post_norm,
     )
 
     _copy_layernorm1d(src_ffn.norm, dst.norm)
@@ -668,10 +614,7 @@ def _convert_gpkffn(
     _copy_pwconv1d_to_2d(src_proj_first, dst.proj_first[0])
     _copy_pwconv1d_to_2d(src_proj_last, dst.proj_last[0])
 
-    if not fold_residual_scale:
-        dst.scale.data = src_ffn.scale.data.unsqueeze(-1).clone()
-    if post_norm:
-        _copy_layernorm1d(src_ffn.post_norm_layer, dst.post_norm_layer)
+    dst.scale.data = src_ffn.scale.data.unsqueeze(-1).clone()
 
     for ks in kernel_list:
         src_attn = getattr(src_ffn, f"attn_{ks}")
@@ -722,9 +665,8 @@ def convert_tsblock_to_reshape_free(tsblock: TSBlock) -> ReshapeFreeTSBlock:
 
     The source :class:`TSBlock` is **not** mutated. The destination has the same
     submodule structure (same attribute paths), the same trained weights
-    (reshaped via ``unsqueeze`` to 4D — no value change), and the same
-    ``fold_residual_scale`` / ``post_norm`` algebraic flags inferred from the
-    presence of the corresponding submodule.
+    (reshaped via ``unsqueeze`` to 4D — no value change), and the same canonical
+    residual-scale algebra.
 
     Args:
         tsblock: Original :class:`TSBlock` (causal=True for the canonical
@@ -738,12 +680,9 @@ def convert_tsblock_to_reshape_free(tsblock: TSBlock) -> ReshapeFreeTSBlock:
     if not isinstance(tsblock, TSBlock):
         raise TypeError(f"convert_tsblock_to_reshape_free expects a TSBlock, got {type(tsblock).__name__}")
 
-    # Discover algebraic flags from the first time-stage CAB.
     first_time = tsblock.time_stage[0]
     first_time_cab = first_time[0]
     first_time_ffn = first_time[1]
-    fold_residual_scale = not hasattr(first_time_cab, "beta")
-    post_norm = hasattr(first_time_cab, "post_norm_layer")
 
     dense_channel = int(tsblock.dense_channel)
     time_block_num = len(tsblock.time_stage)
@@ -773,8 +712,6 @@ def convert_tsblock_to_reshape_free(tsblock: TSBlock) -> ReshapeFreeTSBlock:
         time_block_kernel=time_block_kernel,
         freq_block_kernel=freq_block_kernel,
         sca_kernel_size=sca_kernel_size,
-        fold_residual_scale=fold_residual_scale,
-        post_norm=post_norm,
     )
 
     # Copy time-stage blocks.
@@ -790,14 +727,10 @@ def convert_tsblock_to_reshape_free(tsblock: TSBlock) -> ReshapeFreeTSBlock:
             src_cab,
             axis="time",
             sca_kernel_size=sca_kernel_size,
-            fold_residual_scale=fold_residual_scale,
-            post_norm=post_norm,
         )
         dst_block[1] = _convert_gpkffn(
             src_ffn,
             axis="time",
-            fold_residual_scale=fold_residual_scale,
-            post_norm=post_norm,
         )
 
     # Copy freq-stage blocks.
@@ -813,14 +746,10 @@ def convert_tsblock_to_reshape_free(tsblock: TSBlock) -> ReshapeFreeTSBlock:
             src_cab,
             axis="freq",
             sca_kernel_size=sca_kernel_size,  # unused for freq
-            fold_residual_scale=fold_residual_scale,
-            post_norm=post_norm,
         )
         dst_block[1] = _convert_gpkffn(
             src_ffn,
             axis="freq",
-            fold_residual_scale=fold_residual_scale,
-            post_norm=post_norm,
         )
 
     # beta_t / beta_f: (1, C, 1) → (1, C, 1, 1).

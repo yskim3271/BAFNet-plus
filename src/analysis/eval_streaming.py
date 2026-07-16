@@ -53,8 +53,8 @@ Presets
     S9 ``run_gate_triple`` aggregate convention. Output: JSON + Markdown
     table by default.
 
-Both presets default to the existing exported real-ckpt ONNX at
-``results/onnx/bafnetplus_50ms_fp32.onnx``; if absent, the harness
+Both presets default to the bound D3 real-ckpt ONNX at
+``results/onnx/bafnetplus_50ms_fp32_complex_cycle21_simplified.onnx``; if absent, the harness
 re-exports on the fly via :meth:`BAFNetPlusOrtStreaming.from_checkpoint`
 (cached to ``results/onnx/``).
 
@@ -119,7 +119,7 @@ _DEFAULT_CHUNK_SIZE = 8
 # CLI defaults.
 _DEFAULT_UNIFIED_CKPT_DIR = "results/experiments/bafnetplus_50ms"
 _DEFAULT_CHKPT_FILE = "best.th"
-_DEFAULT_ONNX_ARTIFACT = "results/onnx/bafnetplus_50ms_fp32.onnx"
+_DEFAULT_ONNX_ARTIFACT = "results/onnx/bafnetplus_50ms_fp32_complex_cycle21_simplified.onnx"
 _DEFAULT_ONNX_OUTPUT_DIR = "results/onnx"
 _DEFAULT_TAPS_INDICES_FULL: List[int] = [0, 1, 2, 3, 4]
 _DEFAULT_TAPS_INDICES_SMOKE: List[int] = [0]
@@ -744,7 +744,7 @@ def run_eval_streaming(
             "trunk_precision": ort_streaming.trunk_precision,
         }
     else:
-        onnx_schema_value = "s8-bafnetplus-functional-fp32"
+        onnx_schema_value = ort_streaming.streaming_config.get("schema_version")
     run_metadata: Dict[str, Any] = {
         "schema_version": EVAL_STREAMING_SCHEMA_VERSION,
         "unified_ckpt_dir": str(unified_ckpt_dir),
@@ -804,7 +804,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--onnx-artifact",
         default=None,
         help=(
-            "Path to the S8-exported FP32 ONNX. Default: "
+            "Path to the bound D3 FP32 ONNX. Default: "
             f"{_DEFAULT_ONNX_ARTIFACT} if it exists (with sidecar JSON), "
             "otherwise re-export on the fly into --output-dir."
         ),
