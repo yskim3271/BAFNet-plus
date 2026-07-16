@@ -478,7 +478,7 @@ Cycle 의사결정용 host parity 는 **1 utt (TAPS idx=0)** 로 진행한다. �
 "S1 validation list" 는 wiki promotion / deployable verification / 논문 측정
 단계에서만 사용한다 (3-tier 운영).
 
-| Tier | 용도 | utt 수 | `--taps-indices` | 소요 시간 (INT8 QDQ 기준) |
+| Tier | 용도 | utt 수 | `--taps-indices` | 소요 시간 (FP32 host parity 기준) |
 |---|---|:---:|---|---:|
 | 1 | Cycle gating (의사결정) | **1** | `0` | 약 5 분 |
 | 2 | Wiki promotion (결과 기록) | 5 | `0 1 2 3 4` | 약 25 분 |

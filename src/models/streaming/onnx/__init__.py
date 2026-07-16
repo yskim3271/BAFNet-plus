@@ -16,8 +16,8 @@ S4 added the exportable single-Backbone path:
 
 A ``conv_transpose_wrapper`` (DepthToSpace + Pad + Conv2d decomposition of
 ``nn.ConvTranspose2d``) was intentionally **not** ported: the LaCoSENet version
-is an INT8/QDQ + NNAPI helper, and the FP32-only rebuild uses
-``torch.onnx.export(opset_version=17, dynamo=False)`` which exports the
+targets a different deployment contract, while this FP32-only rebuild uses
+``torch.onnx.export(opset_version=17, dynamo=False)`` to export the
 ``(1,3)`` / stride ``(1,2)`` ``ConvTranspose2d`` in ``MaskDecoder`` /
 ``PhaseDecoder`` natively as a single ``ConvTranspose`` op (verified: ORT FP32
 vs PyTorch max abs diff ~1e-6 on torch 2.9.1 / onnxruntime 1.18.1).
@@ -46,8 +46,6 @@ from src.models.streaming.onnx.backbone_core import (
 )
 from src.models.streaming.onnx.bafnetplus_core import (
     BAFNetPlusCore,
-    BAFNetPlusHeadCore,
-    BAFNetPlusTrunkCore,
     ExportableBAFNetPlusCore,
     audit_alpha_time_lookahead,
     audit_calibration_is_causal,
@@ -58,18 +56,13 @@ from src.models.streaming.onnx.export import (
     export_backbone_core_to_onnx,
     export_backbone_to_onnx_from_checkpoint,
     export_bafnetplus_core_to_onnx,
-    export_bafnetplus_head_to_onnx,
-    export_bafnetplus_split_to_onnx_from_checkpoint,
     export_bafnetplus_to_onnx_from_checkpoint,
-    export_bafnetplus_trunk_to_onnx,
     load_backbone_from_checkpoint,
     load_bafnetplus_from_checkpoint,
     run_bafnetplus_core_streaming,
-    run_bafnetplus_split_streaming,
     run_core_streaming,
     verify_backbone_core_multistep,
     verify_bafnetplus_core_multistep,
-    verify_bafnetplus_split_multistep,
 )
 from src.models.streaming.onnx.functional_stateful import (
     FunctionalStatefulCausalConv2d,
@@ -77,10 +70,7 @@ from src.models.streaming.onnx.functional_stateful import (
     FunctionalStatefulConv2d,
     convert_to_functional,
 )
-from src.models.streaming.onnx.ort_wrapper import (
-    BAFNetPlusOrtSplitStreaming,
-    BAFNetPlusOrtStreaming,
-)
+from src.models.streaming.onnx.ort_wrapper import BAFNetPlusOrtStreaming
 from src.models.streaming.onnx.state_registry import (
     StateInfo,
     StateRegistry,
@@ -120,13 +110,4 @@ __all__ = [
     "verify_bafnetplus_core_multistep",
     # S9 ORT host wrapper.
     "BAFNetPlusOrtStreaming",
-    # S21 split core (trunk + head graph splitting for B2 deployable).
-    "BAFNetPlusTrunkCore",
-    "BAFNetPlusHeadCore",
-    "export_bafnetplus_trunk_to_onnx",
-    "export_bafnetplus_head_to_onnx",
-    "export_bafnetplus_split_to_onnx_from_checkpoint",
-    "run_bafnetplus_split_streaming",
-    "verify_bafnetplus_split_multistep",
-    "BAFNetPlusOrtSplitStreaming",
 ]

@@ -624,7 +624,6 @@ def run_eval_streaming(
     unified_ckpt_dir: str = _DEFAULT_UNIFIED_CKPT_DIR,
     chkpt_file: str = _DEFAULT_CHKPT_FILE,
     onnx_artifact: Optional[str] = None,
-    split_combined_sidecar: Optional[str] = None,
     output_dir: Optional[str] = None,
     taps_indices: Optional[List[int]] = None,
     pesq_tol: float = PESQ_TOL_TRIPLE_DEFAULT,
@@ -681,7 +680,6 @@ def run_eval_streaming(
         chunk_size=chunk_size,
         device=device,
         onnx_artifact=onnx_artifact,
-        split_combined_sidecar=split_combined_sidecar,
         output_dir=output_dir,
         verbose=verbose,
     )
@@ -731,20 +729,7 @@ def run_eval_streaming(
     ckpt_path = Path(unified_ckpt_dir) / chkpt_file
     ckpt_md5 = hashlib.md5(ckpt_path.read_bytes()).hexdigest() if ckpt_path.exists() else None
     effective_shift = int(shift_correction_samples) if shift_correction_samples is not None else _DEFAULT_N_FFT // 2
-    # ``onnx_schema_version`` is informational. For the split path we record the
-    # combined sidecar path + per-graph schemas so downstream checks (e.g. the
-    # S11/S21 host parity report) can attribute drift.
-    is_split = split_combined_sidecar is not None
-    if is_split:
-        # ``ort_streaming.onnx_path`` is the trunk path under the S10
-        # compatibility alias — see :class:`BAFNetPlusOrtSplitStreaming`.
-        onnx_schema_value: Any = {
-            "trunk": ort_streaming.trunk_schema_version,
-            "head": ort_streaming.head_schema_version,
-            "trunk_precision": ort_streaming.trunk_precision,
-        }
-    else:
-        onnx_schema_value = ort_streaming.streaming_config.get("schema_version")
+    onnx_schema_value = ort_streaming.streaming_config.get("schema_version")
     run_metadata: Dict[str, Any] = {
         "schema_version": EVAL_STREAMING_SCHEMA_VERSION,
         "unified_ckpt_dir": str(unified_ckpt_dir),
@@ -753,7 +738,6 @@ def run_eval_streaming(
         "onnx_path": str(ort_streaming.onnx_path),
         "onnx_sidecar_path": str(ort_streaming.sidecar_path),
         "onnx_schema_version": onnx_schema_value,
-        "split_combined_sidecar": str(split_combined_sidecar) if is_split else None,
         "taps_indices": list(taps_indices),
         "pesq_tol": float(pesq_tol),
         "cross_streaming_tol": float(cross_streaming_tol),

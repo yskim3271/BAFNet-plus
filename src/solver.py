@@ -26,8 +26,6 @@ class Solver(object):
         args,
         logger,
         device=None,
-        teacher=None,
-        kd_loss=None,
     ):
         # Dataloaders and samplers
         self.tr_loader = data['tr_loader']      # Training DataLoader
@@ -40,15 +38,6 @@ class Solver(object):
         self.optim_disc = optim_disc
         self.scheduler = scheduler
         self.scheduler_disc = scheduler_disc
-
-        # QAT-mode extras (cycle 17): teacher = frozen FP32 D1 base, kd_loss = KDLoss
-        # instance with hooks already registered. When ``discriminator is None``
-        # the GAN path is fully skipped; when ``kd_loss is not None`` its terms
-        # are added to ``loss_gen``.
-        self.teacher = teacher
-        self.kd_loss = kd_loss
-        self.kd_weight = float(getattr(args, "kd_weight", 1.0))
-        self.fit_steps = getattr(args, "fit_steps", None)
 
         # loss weights
         self.loss = args.loss
@@ -258,8 +247,6 @@ class Solver(object):
 
         logprog = LogProgress(self.logger, data_loader, updates=self.num_prints, name=name)
         use_discriminator = self.discriminator is not None
-        use_kd = self.kd_loss is not None and self.teacher is not None
-        steps_done = 0
 
         for i, data in enumerate(logprog):
 
@@ -273,11 +260,6 @@ class Solver(object):
             clean_pha = clean_pha.to(self.device)
             clean_com = clean_com.to(self.device)
             one_labels = torch.ones(clean_mag.shape[0]).to(self.device)
-
-            if use_kd:
-                self.kd_loss.clear()
-                with torch.no_grad():
-                    teacher_mag, teacher_pha, teacher_com = self.teacher(model_input)
 
             clean_mag_hat, clean_pha_hat, clean_com_hat = self.model(model_input)
 
@@ -327,15 +309,6 @@ class Solver(object):
                     loss_magnitude * self.loss.magnitude + \
                     loss_phase * self.loss.phase
 
-            kd_total_val = 0.0
-            if use_kd:
-                kd_dict = self.kd_loss(
-                    student_out=(clean_mag_hat, clean_pha_hat, clean_com_hat),
-                    teacher_out=(teacher_mag, teacher_pha, teacher_com),
-                )
-                loss_gen = loss_gen + self.kd_weight * kd_dict["total"]
-                kd_total_val = kd_dict["total"].item()
-
             # Generator optimizer step
             self.optim.zero_grad()
             loss_gen.backward()
@@ -354,7 +327,6 @@ class Solver(object):
                 "Complex_Loss": loss_complex.item(),
                 "Consistency_Loss": loss_consistency.item(),
                 "Metric_Loss": loss_metric_val,
-                "KD_Loss": kd_total_val,
                 "Gen_Loss": loss_gen.item(),
             }
 
@@ -365,18 +337,13 @@ class Solver(object):
                         self.writer.add_scalar(f"Train/{k}", v, epoch * len(data_loader) + i)
 
             total_loss += loss_gen.item()
-            steps_done += 1
-            if self.fit_steps is not None and steps_done >= int(self.fit_steps):
-                self.logger.info(f"[fit_steps] Stopping epoch after {steps_done} batches (smoke mode)")
-                break
 
         if self.scheduler is not None:
             self.scheduler.step()
         if self.scheduler_disc is not None:
             self.scheduler_disc.step()
 
-        denom = steps_done if steps_done > 0 else len(data_loader)
-        return total_loss / denom
+        return total_loss / len(data_loader)
 
     def _run_validation(self, epoch):
         """Validate model by computing average PESQ on validation set."""

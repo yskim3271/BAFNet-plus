@@ -54,8 +54,8 @@ and returns ``(est_mag, est_pha, est_com)`` — the same triple ``Backbone.forwa
 returns. ``phase_output_mode="complex"`` instead emits ``(est_mag, x_r, x_i)``
 where ``x_r``/``x_i`` are the raw ``phase_conv_r``/``phase_conv_i`` outputs;
 the host then does ``est_pha = atan2(x_i+1e-8, x_r+1e-8)`` and recovers
-``est_com``. The complex mode is an INT8-precision hedge (``atan2`` is hard to
-quantise); FP32 has no precision difference, so default to atan2.
+``est_com``. Complex mode is the current D3/c09 deployment contract because it
+keeps ``atan2`` in the host FP32 path while the unified graph runs on HTP-FP16.
 
 Ported from LaCoSENet ``src/models/onnx_export/exportable_core.py`` +
 ``stateful_core.py`` (the reshape-based path; the reshape-free variant

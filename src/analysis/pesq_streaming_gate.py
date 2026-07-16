@@ -720,7 +720,6 @@ def build_triple_paths(
     verify_weight_equality: bool = True,
     output_dir: Optional[str] = None,
     onnx_artifact: Optional[str] = None,
-    split_combined_sidecar: Optional[str] = None,
     verbose: bool = False,
 ) -> Tuple[BAFNetPlus, BAFNetPlusStreaming, "BAFNetPlusOrtStreaming"]:
     """Extend :func:`build_paired_paths` with an ORT-streaming wrapper.
@@ -777,20 +776,7 @@ def build_triple_paths(
         verify_weight_equality=verify_weight_equality,
     )
 
-    if split_combined_sidecar is not None:
-        # S21 B2 split path. The split wrapper exposes the same public API
-        # (process_audio / process_samples / process_spectrogram) and shadows
-        # ``onnx_path`` / ``sidecar_path`` to the trunk's paths so the rest of
-        # this harness reads cleanly. Mutually exclusive with ``onnx_artifact``
-        # at the caller level — checked by the parity script.
-        if onnx_artifact is not None:
-            raise ValueError("split_combined_sidecar and onnx_artifact are mutually exclusive")
-        from src.models.streaming.onnx.ort_wrapper import BAFNetPlusOrtSplitStreaming
-
-        ort_streaming = BAFNetPlusOrtSplitStreaming.from_combined_sidecar(
-            split_combined_sidecar, device=device
-        )
-    elif onnx_artifact is not None:
+    if onnx_artifact is not None:
         ort_streaming = BAFNetPlusOrtStreaming.from_onnx(onnx_artifact, device=device)
     else:
         ort_streaming = BAFNetPlusOrtStreaming.from_checkpoint(
