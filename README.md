@@ -11,13 +11,84 @@ A PyTorch-based speech enhancement framework designed for semi-real-time process
 - **Hydra Configuration**: Modular, reproducible experiment management
 - **Mapping & Masking**: Two inference approaches for speech enhancement
 
+## Pre-Trained Checkpoints & Audio Samples
+
+Pre-trained PyTorch checkpoints, sanitized self-contained Hydra configurations, and the deployable 50 ms FP32 streaming ONNX artifact are hosted on HuggingFace Hub, accompanied by an interactive audio sample and spectrogram comparison page:
+
+- **HuggingFace Hub Checkpoints & ONNX**: [yskim3271/BAFNet-plus](https://huggingface.co/yskim3271/BAFNet-plus)
+- **Audio Samples & Spectrogram Demo**: [https://yskim3271.github.io/BAFNet-plus/](https://yskim3271.github.io/BAFNet-plus/)
+
+### Released Model Artifacts
+
+| Artifact Path | Corpus | $T_{\text{alg}}$ | Chunk Size | Notes |
+|---|---|---:|---:|---|
+| `checkpoints/bafnetplus_12ms/` (`best.th`, `config.yaml`) | TAPS | 12.5 ms | 2 frames | GPU real-time tier ($\rho=0.975$) |
+| `checkpoints/bafnetplus_25ms/` (`best.th`, `config.yaml`) | TAPS | 25 ms | 4 frames | Low-latency GPU tier ($\rho=0.95$) |
+| `checkpoints/bafnetplus_50ms/` (`best.th`, `config.yaml`) | TAPS | 50 ms | 8 frames | **Default operating point** ($\rho=0.90$, mobile DSP RTF 0.80) |
+| `checkpoints/bafnetplus_75ms/` (`best.th`, `config.yaml`) | TAPS | 75 ms | 12 frames | Real-time across GPU, mobile DSP, and server CPU ($\rho=0.84$) |
+| `checkpoints/bafnetplus_100ms/` (`best.th`, `config.yaml`) | TAPS | 100 ms | 16 frames | Highest low-SNR PESQ tier ($\rho=0.78$) |
+| `checkpoints/vbx_bafnetplus_50ms/` (`best.th`, `config.yaml`) | Vibravox | 50 ms | 8 frames | Cross-corpus French validation ($\rho=0.90$) |
+| `onnx/bafnetplus_50ms_fp32.onnx` (+ `.onnx.json`) | TAPS | 50 ms | 8 frames | 190-state FP32 streaming ONNX graph + sidecar JSON |
+
+Every released `config.yaml` embeds `model.param.args_mapping` and `model.param.args_masking` directly, so checkpoints load standalone without separate branch pre-training files.
+
+### Download & Inference Quickstart
+
+```bash
+pip install huggingface_hub omegaconf
+```
+
+```python
+from pathlib import Path
+import torch
+from huggingface_hub import snapshot_download
+from omegaconf import OmegaConf
+
+from src.checkpoint import ConfigDict, load_checkpoint, load_model
+from src.stft import mag_pha_istft, mag_pha_stft
+from src.utils import get_stft_args_from_config
+
+repo_dir = Path(snapshot_download("yskim3271/BAFNet-plus"))
+ckpt_dir = repo_dir / "checkpoints" / "bafnetplus_50ms"
+
+cfg = OmegaConf.load(ckpt_dir / "config.yaml")
+params = OmegaConf.to_container(cfg.model.param, resolve=True)
+params["args_mapping"] = ConfigDict(params["args_mapping"])
+params["args_masking"] = ConfigDict(params["args_masking"])
+
+model = load_model(cfg.model.model_lib, cfg.model.model_class, params, device="cpu")
+model = load_checkpoint(model, str(ckpt_dir), "best.th", device="cpu")
+model.eval()
+
+stft_args = get_stft_args_from_config(cfg.model)
+stft_args["compress_factor"] = float(cfg.compress_factor)
+
+# Paired 16 kHz waveforms [1, T]
+bcs = torch.randn(1, 16000)
+noisy_acs = torch.randn(1, 16000)
+with torch.inference_mode():
+    _, _, bcs_com = mag_pha_stft(bcs, **stft_args)
+    _, _, acs_com = mag_pha_stft(noisy_acs, **stft_args)
+    est_mag, est_pha, _ = model((bcs_com, acs_com))
+    enhanced = mag_pha_istft(est_mag, est_pha, **stft_args)
+```
+
+For chunked ONNX Runtime streaming inference (`800` samples / `50 ms` per step at `16 kHz`):
+
+```python
+from src.models.streaming.onnx.ort_wrapper import BAFNetPlusOrtStreaming
+
+streamer = BAFNetPlusOrtStreaming.from_onnx(str(repo_dir / "onnx" / "bafnetplus_50ms_fp32.onnx"))
+enhanced_stream = streamer.process_audio(bcs.squeeze(0), noisy_acs.squeeze(0))
+```
+
 ## Quick Start
 
 ### Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/BAFNet-plus.git
+git clone https://github.com/yskim3271/BAFNet-plus.git
 cd BAFNet-plus
 
 # Install PyTorch (choose your CUDA version from pytorch.org)
