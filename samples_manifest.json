@@ -1,0 +1,1367 @@
+{
+  "schema_version": "bafnetplus-audio-samples-v1",
+  "paper": {
+    "title": "Low-Latency Body- and Air-Conducted Speech Enhancement via Automatic Level Balancing and Reliability-Guided Fusion",
+    "authors": "Yunsik Kim, Youngseok Kim, and Yoonyoung Chung",
+    "affiliation": "Pohang University of Science and Technology (POSTECH)",
+    "venue": "IEEE/ACM Transactions on Audio, Speech, and Language Processing (TASLP)",
+    "code_url": "https://github.com/yskim3271/BAFNet-plus",
+    "hf_url": "https://huggingface.co/yskim3271/BAFNet-plus"
+  },
+  "audio_processing": {
+    "sample_rate": 16000,
+    "normalization": {
+      "target_lufs": -23.0,
+      "fallback_rms_dbfs": -26.0,
+      "peak_ceiling_dbfs": -1.0
+    },
+    "spectrogram": {
+      "n_fft": 400,
+      "hop_length": 100,
+      "win_length": 400,
+      "compress_factor": 0.3,
+      "freq_range_hz": [
+        0,
+        8000
+      ],
+      "colormap": "inferno"
+    }
+  },
+  "sections": {
+    "section1": {
+      "id": "section1",
+      "title": "Section 1 \u2014 TAPS Multi-SNR Comparison",
+      "subtitle": "Multi-SNR paired TAPS evaluation (-20 / -10 / 0 / +10 dB) comparing BAFNet+ (50 ms default) against single-stream inputs and published multimodal baselines.",
+      "snrs": [
+        -20,
+        -10,
+        0,
+        10
+      ],
+      "systems": [
+        {
+          "id": "noisy_acs",
+          "label": "Noisy ACS",
+          "role": "input"
+        },
+        {
+          "id": "raw_bcs",
+          "label": "Raw BCS",
+          "role": "input"
+        },
+        {
+          "id": "attn_dccrn_ef",
+          "label": "Attn-DC-CRN EF",
+          "role": "baseline"
+        },
+        {
+          "id": "binet",
+          "label": "BiNet (Two-Tower)",
+          "role": "baseline"
+        },
+        {
+          "id": "bafnet_is25",
+          "label": "BAFNet (IS'25)",
+          "role": "baseline"
+        },
+        {
+          "id": "bafnetplus_50ms",
+          "label": "BAFNet+ (50 ms, ours)",
+          "role": "proposed"
+        },
+        {
+          "id": "clean_ref",
+          "label": "Clean Reference",
+          "role": "reference"
+        }
+      ],
+      "items": [
+        {
+          "id": "taps_snr-20_utt01",
+          "snr": -20,
+          "snr_label": "-20 dB",
+          "utterance_id": "utt01",
+          "utterance_label": "TAPS Test Utterance 01 (-20 dB)",
+          "duration_sec": null,
+          "sample_rate": 16000,
+          "clips": {
+            "noisy_acs": {
+              "system_id": "noisy_acs",
+              "label": "Noisy ACS",
+              "role": "input",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "raw_bcs": {
+              "system_id": "raw_bcs",
+              "label": "Raw BCS",
+              "role": "input",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "attn_dccrn_ef": {
+              "system_id": "attn_dccrn_ef",
+              "label": "Attn-DC-CRN EF",
+              "role": "baseline",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "binet": {
+              "system_id": "binet",
+              "label": "BiNet (Two-Tower)",
+              "role": "baseline",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "bafnet_is25": {
+              "system_id": "bafnet_is25",
+              "label": "BAFNet (IS'25)",
+              "role": "baseline",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "bafnetplus_50ms": {
+              "system_id": "bafnetplus_50ms",
+              "label": "BAFNet+ (50 ms, ours)",
+              "role": "proposed",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "clean_ref": {
+              "system_id": "clean_ref",
+              "label": "Clean Reference",
+              "role": "reference",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            }
+          }
+        },
+        {
+          "id": "taps_snr-10_utt01",
+          "snr": -10,
+          "snr_label": "-10 dB",
+          "utterance_id": "utt01",
+          "utterance_label": "TAPS Test Utterance 01 (-10 dB)",
+          "duration_sec": null,
+          "sample_rate": 16000,
+          "clips": {
+            "noisy_acs": {
+              "system_id": "noisy_acs",
+              "label": "Noisy ACS",
+              "role": "input",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "raw_bcs": {
+              "system_id": "raw_bcs",
+              "label": "Raw BCS",
+              "role": "input",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "attn_dccrn_ef": {
+              "system_id": "attn_dccrn_ef",
+              "label": "Attn-DC-CRN EF",
+              "role": "baseline",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "binet": {
+              "system_id": "binet",
+              "label": "BiNet (Two-Tower)",
+              "role": "baseline",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "bafnet_is25": {
+              "system_id": "bafnet_is25",
+              "label": "BAFNet (IS'25)",
+              "role": "baseline",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "bafnetplus_50ms": {
+              "system_id": "bafnetplus_50ms",
+              "label": "BAFNet+ (50 ms, ours)",
+              "role": "proposed",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "clean_ref": {
+              "system_id": "clean_ref",
+              "label": "Clean Reference",
+              "role": "reference",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            }
+          }
+        },
+        {
+          "id": "taps_snr+0_utt01",
+          "snr": 0,
+          "snr_label": "0 dB",
+          "utterance_id": "utt01",
+          "utterance_label": "TAPS Test Utterance 01 (0 dB)",
+          "duration_sec": null,
+          "sample_rate": 16000,
+          "clips": {
+            "noisy_acs": {
+              "system_id": "noisy_acs",
+              "label": "Noisy ACS",
+              "role": "input",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "raw_bcs": {
+              "system_id": "raw_bcs",
+              "label": "Raw BCS",
+              "role": "input",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "attn_dccrn_ef": {
+              "system_id": "attn_dccrn_ef",
+              "label": "Attn-DC-CRN EF",
+              "role": "baseline",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "binet": {
+              "system_id": "binet",
+              "label": "BiNet (Two-Tower)",
+              "role": "baseline",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "bafnet_is25": {
+              "system_id": "bafnet_is25",
+              "label": "BAFNet (IS'25)",
+              "role": "baseline",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "bafnetplus_50ms": {
+              "system_id": "bafnetplus_50ms",
+              "label": "BAFNet+ (50 ms, ours)",
+              "role": "proposed",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "clean_ref": {
+              "system_id": "clean_ref",
+              "label": "Clean Reference",
+              "role": "reference",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            }
+          }
+        },
+        {
+          "id": "taps_snr+10_utt01",
+          "snr": 10,
+          "snr_label": "+10 dB",
+          "utterance_id": "utt01",
+          "utterance_label": "TAPS Test Utterance 01 (+10 dB)",
+          "duration_sec": null,
+          "sample_rate": 16000,
+          "clips": {
+            "noisy_acs": {
+              "system_id": "noisy_acs",
+              "label": "Noisy ACS",
+              "role": "input",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "raw_bcs": {
+              "system_id": "raw_bcs",
+              "label": "Raw BCS",
+              "role": "input",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "attn_dccrn_ef": {
+              "system_id": "attn_dccrn_ef",
+              "label": "Attn-DC-CRN EF",
+              "role": "baseline",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "binet": {
+              "system_id": "binet",
+              "label": "BiNet (Two-Tower)",
+              "role": "baseline",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "bafnet_is25": {
+              "system_id": "bafnet_is25",
+              "label": "BAFNet (IS'25)",
+              "role": "baseline",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "bafnetplus_50ms": {
+              "system_id": "bafnetplus_50ms",
+              "label": "BAFNet+ (50 ms, ours)",
+              "role": "proposed",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "clean_ref": {
+              "system_id": "clean_ref",
+              "label": "Clean Reference",
+              "role": "reference",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            }
+          }
+        }
+      ]
+    },
+    "section2": {
+      "id": "section2",
+      "title": "Section 2 \u2014 Time-Varying Gain Drift (E1)",
+      "subtitle": "Controlled BCS-ACS time-varying level drift at -10 dB and 0 dB input SNR across Step, Ramp, and 0.5 Hz Sinusoid profiles comparing Full BAFNet+ against calibration controls.",
+      "snrs": [
+        -10,
+        0
+      ],
+      "conditions": [
+        {
+          "id": "step",
+          "label": "Step (-10 -> +10 dB)"
+        },
+        {
+          "id": "ramp",
+          "label": "Ramp (-10 -> +10 dB)"
+        },
+        {
+          "id": "sinusoid",
+          "label": "Sinusoid (0.5 Hz, \u00b110 dB)"
+        }
+      ],
+      "systems": [
+        {
+          "id": "full",
+          "label": "Full BAFNet+",
+          "role": "proposed"
+        },
+        {
+          "id": "no_cal",
+          "label": "No-Cal",
+          "role": "ablation"
+        },
+        {
+          "id": "common_gain_only",
+          "label": "Common-Gain-Only",
+          "role": "ablation"
+        },
+        {
+          "id": "nocal_input_agc",
+          "label": "No-Cal + Causal Input AGC",
+          "role": "control"
+        },
+        {
+          "id": "nocal_utt_norm",
+          "label": "No-Cal + Utterance Norm",
+          "role": "control"
+        }
+      ],
+      "items": [
+        {
+          "id": "e1_step_snr-10_utt01",
+          "condition_id": "step",
+          "condition_label": "Step (-10 -> +10 dB)",
+          "snr": -10,
+          "snr_label": "-10 dB",
+          "utterance_id": "utt01",
+          "utterance_label": "Step (-10 -> +10 dB) @ -10 dB",
+          "duration_sec": null,
+          "sample_rate": 16000,
+          "clips": {
+            "full": {
+              "system_id": "full",
+              "label": "Full BAFNet+",
+              "role": "proposed",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "no_cal": {
+              "system_id": "no_cal",
+              "label": "No-Cal",
+              "role": "ablation",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "common_gain_only": {
+              "system_id": "common_gain_only",
+              "label": "Common-Gain-Only",
+              "role": "ablation",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "nocal_input_agc": {
+              "system_id": "nocal_input_agc",
+              "label": "No-Cal + Causal Input AGC",
+              "role": "control",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "nocal_utt_norm": {
+              "system_id": "nocal_utt_norm",
+              "label": "No-Cal + Utterance Norm",
+              "role": "control",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            }
+          }
+        },
+        {
+          "id": "e1_step_snr+0_utt01",
+          "condition_id": "step",
+          "condition_label": "Step (-10 -> +10 dB)",
+          "snr": 0,
+          "snr_label": "0 dB",
+          "utterance_id": "utt01",
+          "utterance_label": "Step (-10 -> +10 dB) @ 0 dB",
+          "duration_sec": null,
+          "sample_rate": 16000,
+          "clips": {
+            "full": {
+              "system_id": "full",
+              "label": "Full BAFNet+",
+              "role": "proposed",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "no_cal": {
+              "system_id": "no_cal",
+              "label": "No-Cal",
+              "role": "ablation",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "common_gain_only": {
+              "system_id": "common_gain_only",
+              "label": "Common-Gain-Only",
+              "role": "ablation",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "nocal_input_agc": {
+              "system_id": "nocal_input_agc",
+              "label": "No-Cal + Causal Input AGC",
+              "role": "control",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "nocal_utt_norm": {
+              "system_id": "nocal_utt_norm",
+              "label": "No-Cal + Utterance Norm",
+              "role": "control",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            }
+          }
+        },
+        {
+          "id": "e1_ramp_snr-10_utt01",
+          "condition_id": "ramp",
+          "condition_label": "Ramp (-10 -> +10 dB)",
+          "snr": -10,
+          "snr_label": "-10 dB",
+          "utterance_id": "utt01",
+          "utterance_label": "Ramp (-10 -> +10 dB) @ -10 dB",
+          "duration_sec": null,
+          "sample_rate": 16000,
+          "clips": {
+            "full": {
+              "system_id": "full",
+              "label": "Full BAFNet+",
+              "role": "proposed",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "no_cal": {
+              "system_id": "no_cal",
+              "label": "No-Cal",
+              "role": "ablation",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "common_gain_only": {
+              "system_id": "common_gain_only",
+              "label": "Common-Gain-Only",
+              "role": "ablation",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "nocal_input_agc": {
+              "system_id": "nocal_input_agc",
+              "label": "No-Cal + Causal Input AGC",
+              "role": "control",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "nocal_utt_norm": {
+              "system_id": "nocal_utt_norm",
+              "label": "No-Cal + Utterance Norm",
+              "role": "control",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            }
+          }
+        },
+        {
+          "id": "e1_ramp_snr+0_utt01",
+          "condition_id": "ramp",
+          "condition_label": "Ramp (-10 -> +10 dB)",
+          "snr": 0,
+          "snr_label": "0 dB",
+          "utterance_id": "utt01",
+          "utterance_label": "Ramp (-10 -> +10 dB) @ 0 dB",
+          "duration_sec": null,
+          "sample_rate": 16000,
+          "clips": {
+            "full": {
+              "system_id": "full",
+              "label": "Full BAFNet+",
+              "role": "proposed",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "no_cal": {
+              "system_id": "no_cal",
+              "label": "No-Cal",
+              "role": "ablation",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "common_gain_only": {
+              "system_id": "common_gain_only",
+              "label": "Common-Gain-Only",
+              "role": "ablation",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "nocal_input_agc": {
+              "system_id": "nocal_input_agc",
+              "label": "No-Cal + Causal Input AGC",
+              "role": "control",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "nocal_utt_norm": {
+              "system_id": "nocal_utt_norm",
+              "label": "No-Cal + Utterance Norm",
+              "role": "control",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            }
+          }
+        },
+        {
+          "id": "e1_sinusoid_snr-10_utt01",
+          "condition_id": "sinusoid",
+          "condition_label": "Sinusoid (0.5 Hz, \u00b110 dB)",
+          "snr": -10,
+          "snr_label": "-10 dB",
+          "utterance_id": "utt01",
+          "utterance_label": "Sinusoid (0.5 Hz, \u00b110 dB) @ -10 dB",
+          "duration_sec": null,
+          "sample_rate": 16000,
+          "clips": {
+            "full": {
+              "system_id": "full",
+              "label": "Full BAFNet+",
+              "role": "proposed",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "no_cal": {
+              "system_id": "no_cal",
+              "label": "No-Cal",
+              "role": "ablation",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "common_gain_only": {
+              "system_id": "common_gain_only",
+              "label": "Common-Gain-Only",
+              "role": "ablation",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "nocal_input_agc": {
+              "system_id": "nocal_input_agc",
+              "label": "No-Cal + Causal Input AGC",
+              "role": "control",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "nocal_utt_norm": {
+              "system_id": "nocal_utt_norm",
+              "label": "No-Cal + Utterance Norm",
+              "role": "control",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            }
+          }
+        },
+        {
+          "id": "e1_sinusoid_snr+0_utt01",
+          "condition_id": "sinusoid",
+          "condition_label": "Sinusoid (0.5 Hz, \u00b110 dB)",
+          "snr": 0,
+          "snr_label": "0 dB",
+          "utterance_id": "utt01",
+          "utterance_label": "Sinusoid (0.5 Hz, \u00b110 dB) @ 0 dB",
+          "duration_sec": null,
+          "sample_rate": 16000,
+          "clips": {
+            "full": {
+              "system_id": "full",
+              "label": "Full BAFNet+",
+              "role": "proposed",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "no_cal": {
+              "system_id": "no_cal",
+              "label": "No-Cal",
+              "role": "ablation",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "common_gain_only": {
+              "system_id": "common_gain_only",
+              "label": "Common-Gain-Only",
+              "role": "ablation",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "nocal_input_agc": {
+              "system_id": "nocal_input_agc",
+              "label": "No-Cal + Causal Input AGC",
+              "role": "control",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            },
+            "nocal_utt_norm": {
+              "system_id": "nocal_utt_norm",
+              "label": "No-Cal + Utterance Norm",
+              "role": "control",
+              "status": "pending_gpu",
+              "audio_url": null,
+              "spectrogram_url": null,
+              "note": "Sample audio pending final batch rendering"
+            }
+          }
+        }
+      ]
+    },
+    "section3": {
+      "id": "section3",
+      "title": "Section 3 \u2014 Real-World Server-Room Wearable Demo (Anonymized)",
+      "subtitle": "Live server-room recordings comparing Raw ACS, Raw BCS, commercial Sony WF-1000XM4 earbud, and BAFNet+ running on-device at 50 ms latency (Galaxy S25 Ultra DSP + nRF5340 wearable). All clips are loudness-normalized to prevent ~30 dB raw stream level differences from biasing listening.",
+      "streams": [
+        {
+          "id": "acs",
+          "label": "Raw ACS",
+          "role": "input"
+        },
+        {
+          "id": "bcs",
+          "label": "Raw BCS",
+          "role": "input"
+        },
+        {
+          "id": "earphone",
+          "label": "Sony WF-1000XM4",
+          "role": "baseline"
+        },
+        {
+          "id": "enhanced",
+          "label": "BAFNet+ On-Device 50 ms DSP",
+          "role": "proposed"
+        }
+      ],
+      "items": [
+        {
+          "id": "demo_spk01_F_s01",
+          "speaker_id": "spk01_F",
+          "speaker_label": "Speaker F1",
+          "gender": "F",
+          "sentence_id": "s01",
+          "sentence_label": "Sentence 01",
+          "duration_sec": 6.556,
+          "sample_rate": 16000,
+          "clips": {
+            "acs": {
+              "system_id": "acs",
+              "label": "Raw ACS",
+              "role": "input",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk01_F_s01_acs.wav",
+              "spectrogram_url": "assets/section3/demo_spk01_F_s01_acs.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -13.08
+            },
+            "bcs": {
+              "system_id": "bcs",
+              "label": "Raw BCS",
+              "role": "input",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk01_F_s01_bcs.wav",
+              "spectrogram_url": "assets/section3/demo_spk01_F_s01_bcs.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -12.42
+            },
+            "earphone": {
+              "system_id": "earphone",
+              "label": "Sony WF-1000XM4",
+              "role": "baseline",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk01_F_s01_earphone.wav",
+              "spectrogram_url": "assets/section3/demo_spk01_F_s01_earphone.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -10.44
+            },
+            "enhanced": {
+              "system_id": "enhanced",
+              "label": "BAFNet+ On-Device 50 ms DSP",
+              "role": "proposed",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk01_F_s01_enhanced.wav",
+              "spectrogram_url": "assets/section3/demo_spk01_F_s01_enhanced.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -9.25
+            }
+          }
+        },
+        {
+          "id": "demo_spk01_F_s02",
+          "speaker_id": "spk01_F",
+          "speaker_label": "Speaker F1",
+          "gender": "F",
+          "sentence_id": "s02",
+          "sentence_label": "Sentence 02",
+          "duration_sec": 8.713,
+          "sample_rate": 16000,
+          "clips": {
+            "acs": {
+              "system_id": "acs",
+              "label": "Raw ACS",
+              "role": "input",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk01_F_s02_acs.wav",
+              "spectrogram_url": "assets/section3/demo_spk01_F_s02_acs.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -12.05
+            },
+            "bcs": {
+              "system_id": "bcs",
+              "label": "Raw BCS",
+              "role": "input",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk01_F_s02_bcs.wav",
+              "spectrogram_url": "assets/section3/demo_spk01_F_s02_bcs.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -11.08
+            },
+            "earphone": {
+              "system_id": "earphone",
+              "label": "Sony WF-1000XM4",
+              "role": "baseline",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk01_F_s02_earphone.wav",
+              "spectrogram_url": "assets/section3/demo_spk01_F_s02_earphone.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -10.4
+            },
+            "enhanced": {
+              "system_id": "enhanced",
+              "label": "BAFNet+ On-Device 50 ms DSP",
+              "role": "proposed",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk01_F_s02_enhanced.wav",
+              "spectrogram_url": "assets/section3/demo_spk01_F_s02_enhanced.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -7.09
+            }
+          }
+        },
+        {
+          "id": "demo_spk02_M_s01",
+          "speaker_id": "spk02_M",
+          "speaker_label": "Speaker M1",
+          "gender": "M",
+          "sentence_id": "s01",
+          "sentence_label": "Sentence 01",
+          "duration_sec": 6.855,
+          "sample_rate": 16000,
+          "clips": {
+            "acs": {
+              "system_id": "acs",
+              "label": "Raw ACS",
+              "role": "input",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk02_M_s01_acs.wav",
+              "spectrogram_url": "assets/section3/demo_spk02_M_s01_acs.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -10.82
+            },
+            "bcs": {
+              "system_id": "bcs",
+              "label": "Raw BCS",
+              "role": "input",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk02_M_s01_bcs.wav",
+              "spectrogram_url": "assets/section3/demo_spk02_M_s01_bcs.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -11.07
+            },
+            "earphone": {
+              "system_id": "earphone",
+              "label": "Sony WF-1000XM4",
+              "role": "baseline",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk02_M_s01_earphone.wav",
+              "spectrogram_url": "assets/section3/demo_spk02_M_s01_earphone.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -13.56
+            },
+            "enhanced": {
+              "system_id": "enhanced",
+              "label": "BAFNet+ On-Device 50 ms DSP",
+              "role": "proposed",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk02_M_s01_enhanced.wav",
+              "spectrogram_url": "assets/section3/demo_spk02_M_s01_enhanced.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -8.46
+            }
+          }
+        },
+        {
+          "id": "demo_spk02_M_s02",
+          "speaker_id": "spk02_M",
+          "speaker_label": "Speaker M1",
+          "gender": "M",
+          "sentence_id": "s02",
+          "sentence_label": "Sentence 02",
+          "duration_sec": 8.986,
+          "sample_rate": 16000,
+          "clips": {
+            "acs": {
+              "system_id": "acs",
+              "label": "Raw ACS",
+              "role": "input",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk02_M_s02_acs.wav",
+              "spectrogram_url": "assets/section3/demo_spk02_M_s02_acs.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -9.57
+            },
+            "bcs": {
+              "system_id": "bcs",
+              "label": "Raw BCS",
+              "role": "input",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk02_M_s02_bcs.wav",
+              "spectrogram_url": "assets/section3/demo_spk02_M_s02_bcs.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -6.44
+            },
+            "earphone": {
+              "system_id": "earphone",
+              "label": "Sony WF-1000XM4",
+              "role": "baseline",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk02_M_s02_earphone.wav",
+              "spectrogram_url": "assets/section3/demo_spk02_M_s02_earphone.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -12.66
+            },
+            "enhanced": {
+              "system_id": "enhanced",
+              "label": "BAFNet+ On-Device 50 ms DSP",
+              "role": "proposed",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk02_M_s02_enhanced.wav",
+              "spectrogram_url": "assets/section3/demo_spk02_M_s02_enhanced.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -6.93
+            }
+          }
+        },
+        {
+          "id": "demo_spk03_M_s01",
+          "speaker_id": "spk03_M",
+          "speaker_label": "Speaker M2",
+          "gender": "M",
+          "sentence_id": "s01",
+          "sentence_label": "Sentence 01",
+          "duration_sec": 7.2,
+          "sample_rate": 16000,
+          "clips": {
+            "acs": {
+              "system_id": "acs",
+              "label": "Raw ACS",
+              "role": "input",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk03_M_s01_acs.wav",
+              "spectrogram_url": "assets/section3/demo_spk03_M_s01_acs.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -9.82
+            },
+            "bcs": {
+              "system_id": "bcs",
+              "label": "Raw BCS",
+              "role": "input",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk03_M_s01_bcs.wav",
+              "spectrogram_url": "assets/section3/demo_spk03_M_s01_bcs.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -9.65
+            },
+            "earphone": {
+              "system_id": "earphone",
+              "label": "Sony WF-1000XM4",
+              "role": "baseline",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk03_M_s01_earphone.wav",
+              "spectrogram_url": "assets/section3/demo_spk03_M_s01_earphone.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -11.15
+            },
+            "enhanced": {
+              "system_id": "enhanced",
+              "label": "BAFNet+ On-Device 50 ms DSP",
+              "role": "proposed",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk03_M_s01_enhanced.wav",
+              "spectrogram_url": "assets/section3/demo_spk03_M_s01_enhanced.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -5.49
+            }
+          }
+        },
+        {
+          "id": "demo_spk03_M_s02",
+          "speaker_id": "spk03_M",
+          "speaker_label": "Speaker M2",
+          "gender": "M",
+          "sentence_id": "s02",
+          "sentence_label": "Sentence 02",
+          "duration_sec": 9.696,
+          "sample_rate": 16000,
+          "clips": {
+            "acs": {
+              "system_id": "acs",
+              "label": "Raw ACS",
+              "role": "input",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk03_M_s02_acs.wav",
+              "spectrogram_url": "assets/section3/demo_spk03_M_s02_acs.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -8.34
+            },
+            "bcs": {
+              "system_id": "bcs",
+              "label": "Raw BCS",
+              "role": "input",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk03_M_s02_bcs.wav",
+              "spectrogram_url": "assets/section3/demo_spk03_M_s02_bcs.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -11.88
+            },
+            "earphone": {
+              "system_id": "earphone",
+              "label": "Sony WF-1000XM4",
+              "role": "baseline",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk03_M_s02_earphone.wav",
+              "spectrogram_url": "assets/section3/demo_spk03_M_s02_earphone.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -10.54
+            },
+            "enhanced": {
+              "system_id": "enhanced",
+              "label": "BAFNet+ On-Device 50 ms DSP",
+              "role": "proposed",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk03_M_s02_enhanced.wav",
+              "spectrogram_url": "assets/section3/demo_spk03_M_s02_enhanced.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -7.67
+            }
+          }
+        },
+        {
+          "id": "demo_spk04_F_s01",
+          "speaker_id": "spk04_F",
+          "speaker_label": "Speaker F2",
+          "gender": "F",
+          "sentence_id": "s01",
+          "sentence_label": "Sentence 01",
+          "duration_sec": 7.169,
+          "sample_rate": 16000,
+          "clips": {
+            "acs": {
+              "system_id": "acs",
+              "label": "Raw ACS",
+              "role": "input",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk04_F_s01_acs.wav",
+              "spectrogram_url": "assets/section3/demo_spk04_F_s01_acs.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -12.81
+            },
+            "bcs": {
+              "system_id": "bcs",
+              "label": "Raw BCS",
+              "role": "input",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk04_F_s01_bcs.wav",
+              "spectrogram_url": "assets/section3/demo_spk04_F_s01_bcs.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -13.98
+            },
+            "earphone": {
+              "system_id": "earphone",
+              "label": "Sony WF-1000XM4",
+              "role": "baseline",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk04_F_s01_earphone.wav",
+              "spectrogram_url": "assets/section3/demo_spk04_F_s01_earphone.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -10.46
+            },
+            "enhanced": {
+              "system_id": "enhanced",
+              "label": "BAFNet+ On-Device 50 ms DSP",
+              "role": "proposed",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk04_F_s01_enhanced.wav",
+              "spectrogram_url": "assets/section3/demo_spk04_F_s01_enhanced.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -8.89
+            }
+          }
+        },
+        {
+          "id": "demo_spk04_F_s02",
+          "speaker_id": "spk04_F",
+          "speaker_label": "Speaker F2",
+          "gender": "F",
+          "sentence_id": "s02",
+          "sentence_label": "Sentence 02",
+          "duration_sec": 8.674,
+          "sample_rate": 16000,
+          "clips": {
+            "acs": {
+              "system_id": "acs",
+              "label": "Raw ACS",
+              "role": "input",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk04_F_s02_acs.wav",
+              "spectrogram_url": "assets/section3/demo_spk04_F_s02_acs.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -7.51
+            },
+            "bcs": {
+              "system_id": "bcs",
+              "label": "Raw BCS",
+              "role": "input",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk04_F_s02_bcs.wav",
+              "spectrogram_url": "assets/section3/demo_spk04_F_s02_bcs.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -13.74
+            },
+            "earphone": {
+              "system_id": "earphone",
+              "label": "Sony WF-1000XM4",
+              "role": "baseline",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk04_F_s02_earphone.wav",
+              "spectrogram_url": "assets/section3/demo_spk04_F_s02_earphone.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -10.96
+            },
+            "enhanced": {
+              "system_id": "enhanced",
+              "label": "BAFNet+ On-Device 50 ms DSP",
+              "role": "proposed",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk04_F_s02_enhanced.wav",
+              "spectrogram_url": "assets/section3/demo_spk04_F_s02_enhanced.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -6.88
+            }
+          }
+        },
+        {
+          "id": "demo_spk05_M_s01",
+          "speaker_id": "spk05_M",
+          "speaker_label": "Speaker M3",
+          "gender": "M",
+          "sentence_id": "s01",
+          "sentence_label": "Sentence 01",
+          "duration_sec": 6.578,
+          "sample_rate": 16000,
+          "clips": {
+            "acs": {
+              "system_id": "acs",
+              "label": "Raw ACS",
+              "role": "input",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk05_M_s01_acs.wav",
+              "spectrogram_url": "assets/section3/demo_spk05_M_s01_acs.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -8.93
+            },
+            "bcs": {
+              "system_id": "bcs",
+              "label": "Raw BCS",
+              "role": "input",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk05_M_s01_bcs.wav",
+              "spectrogram_url": "assets/section3/demo_spk05_M_s01_bcs.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -10.04
+            },
+            "earphone": {
+              "system_id": "earphone",
+              "label": "Sony WF-1000XM4",
+              "role": "baseline",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk05_M_s01_earphone.wav",
+              "spectrogram_url": "assets/section3/demo_spk05_M_s01_earphone.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -11.84
+            },
+            "enhanced": {
+              "system_id": "enhanced",
+              "label": "BAFNet+ On-Device 50 ms DSP",
+              "role": "proposed",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk05_M_s01_enhanced.wav",
+              "spectrogram_url": "assets/section3/demo_spk05_M_s01_enhanced.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -4.77
+            }
+          }
+        },
+        {
+          "id": "demo_spk05_M_s02",
+          "speaker_id": "spk05_M",
+          "speaker_label": "Speaker M3",
+          "gender": "M",
+          "sentence_id": "s02",
+          "sentence_label": "Sentence 02",
+          "duration_sec": 8.304,
+          "sample_rate": 16000,
+          "clips": {
+            "acs": {
+              "system_id": "acs",
+              "label": "Raw ACS",
+              "role": "input",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk05_M_s02_acs.wav",
+              "spectrogram_url": "assets/section3/demo_spk05_M_s02_acs.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -11.95
+            },
+            "bcs": {
+              "system_id": "bcs",
+              "label": "Raw BCS",
+              "role": "input",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk05_M_s02_bcs.wav",
+              "spectrogram_url": "assets/section3/demo_spk05_M_s02_bcs.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -10.95
+            },
+            "earphone": {
+              "system_id": "earphone",
+              "label": "Sony WF-1000XM4",
+              "role": "baseline",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk05_M_s02_earphone.wav",
+              "spectrogram_url": "assets/section3/demo_spk05_M_s02_earphone.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -11.55
+            },
+            "enhanced": {
+              "system_id": "enhanced",
+              "label": "BAFNet+ On-Device 50 ms DSP",
+              "role": "proposed",
+              "status": "ready",
+              "audio_url": "assets/section3/demo_spk05_M_s02_enhanced.wav",
+              "spectrogram_url": "assets/section3/demo_spk05_M_s02_enhanced.png",
+              "normalization_method": "rms_dbfs_peak_capped",
+              "rms_dbfs": -26.0,
+              "peak_dbfs": -4.47
+            }
+          }
+        }
+      ]
+    }
+  }
+}
